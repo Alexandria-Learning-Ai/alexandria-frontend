@@ -1,14 +1,65 @@
 import { logger, consoleTransport, configLoggerType } from 'react-native-logs';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { API_BASE_URL } from '../config/api';
 
 // Determine if we're in development mode
 const isDevelopment = __DEV__ || Constants.expoConfig?.extra?.isDevelopment;
 
+// Custom transport for sending logs to your Alexandria API
+const alexandriaApiTransport = logger.createTransport((log) => {
+  // Only send important logs to API (warn, error, security)
+  if (log.level.severity >= 3) { // warn=3, error=4
+    sendLogToApi(log);
+  }
+});
+
+// Function to send logs to your Alexandria API
+const sendLogToApi = async (logData) => {
+  try {
+    // Don't send logs in development to avoid spam
+    if (isDevelopment) return;
+    
+    const logPayload = {
+      timestamp: new Date().toISOString(),
+      level: logData.level.text,
+      severity: logData.level.severity,
+      message: logData.msg,
+      platform: Platform.OS,
+      version: Constants.expoConfig?.version || 'unknown',
+      userId: Constants.expoConfig?.extra?.userId || 'anonymous',
+      deviceInfo: {
+        platform: Platform.OS,
+        version: Platform.Version,
+      }
+    };
+
+    // Send to your Alexandria API (non-blocking)
+    fetch(`${API_BASE_URL}/logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Log-Source': 'alexandria-mobile'
+      },
+      body: JSON.stringify(logPayload),
+    }).catch(err => {
+      // Silently fail - don't want logging to break the app
+      if (isDevelopment) {
+        console.warn('Failed to send log to API:', err);
+      }
+    });
+  } catch (error) {
+    // Silently fail in production
+    if (isDevelopment) {
+      console.warn('Log transport error:', error);
+    }
+  }
+};
+
 // Configure logger based on environment
 const defaultConfig = {
-  severity: isDevelopment ? 'debug' : 'error',
-  transport: isDevelopment ? [consoleTransport] : [],
+  severity: isDevelopment ? 'debug' : 'warn', // Changed: capture warn+ in production
+  transport: isDevelopment ? [consoleTransport] : [alexandriaApiTransport],
   transportOptions: {
     colors: {
       info: 'blueBright',
