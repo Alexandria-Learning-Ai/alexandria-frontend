@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Alexandria",
+    "slug": "alexandria",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mcfly99.alexandria",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.mcfly99.alexandria",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a4ff9d06-5ee5-417e-b658-7b1c431edb9f"
+      },
+      "apiBaseUrl": "https://api.alexandria-learning.com"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a4ff9d06-5ee5-417e-b658-7b1c431edb9f"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
