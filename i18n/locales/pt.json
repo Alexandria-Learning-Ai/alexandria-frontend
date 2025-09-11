@@ -1,0 +1,49 @@
+{
+  "common": {
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso",
+    "cancel": "Cancelar",
+    "ok": "OK",
+    "save": "Salvar",
+    "edit": "Editar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "continue": "Continuar"
+  },
+  "home": {
+    "welcome": "Bem-vindo à Alexandria 📚",
+    "greeting": {
+      "morning": "Bom dia",
+      "afternoon": "Boa tarde",
+      "evening": "Boa noite"
+    }
+  },
+  "profile": {
+    "title": "Seu Perfil",
+    "viewProfile": "Ver Perfil",
+    "editProfile": "Editar Perfil"
+  },
+  "menu": {
+    "viewProfile": "Ver Perfil",
+    "editProfile": "Editar Perfil",
+    "language": "Idioma",
+    "signOut": "Sair"
+  },
+  "languages": {
+    "english": "English",
+    "spanish": "Español", 
+    "french": "Français",
+    "german": "Deutsch",
+    "chinese": "中文",
+    "arabic": "العربية",
+    "portuguese": "Português",
+    "japanese": "日本語",
+    "korean": "한국어",
+    "italian": "Italiano"
+  },
+  "messages": {
+    "languageUpdated": "Idioma Atualizado",
+    "languageUpdatedDesc": "Sua preferência de idioma foi salva."
+  }
+}

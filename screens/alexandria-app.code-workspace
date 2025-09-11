@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../Alexandria/alexandria-api"
+		}
+	],
+	"settings": {}
+}

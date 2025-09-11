@@ -1,0 +1,68 @@
+{
+  "common": {
+    "loading": "جاري التحميل...",
+    "error": "خطأ",
+    "success": "نجح",
+    "cancel": "إلغاء",
+    "ok": "موافق",
+    "save": "حفظ",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "back": "رجوع",
+    "next": "التالي",
+    "continue": "متابعة",
+    "complete": "إكمال",
+    "yes": "نعم",
+    "no": "لا",
+    "close": "إغلاق"
+  },
+  "navigation": {
+    "home": "الرئيسية",
+    "upload": "رفع",
+    "quiz": "اختبار",
+    "results": "النتائج",
+    "history": "التاريخ",
+    "review": "مراجعة",
+    "progress": "التقدم",
+    "coach": "المدرب",
+    "profile": "الملف الشخصي",
+    "settings": "الإعدادات"
+  },
+  "home": {
+    "welcome": "مرحباً بك في الإسكندرية 📚",
+    "greeting": {
+      "morning": "صباح الخير",
+      "afternoon": "مساء الخير",
+      "evening": "مساء الخير"
+    }
+  },
+  "profile": {
+    "title": "ملفك الشخصي",
+    "setupProfile": "إعداد ملفك الشخصي",
+    "editProfile": "تعديل الملف الشخصي",
+    "viewProfile": "عرض الملف الشخصي"
+  },
+  "menu": {
+    "viewProfile": "عرض الملف الشخصي",
+    "editProfile": "تعديل الملف الشخصي",
+    "language": "اللغة",
+    "settings": "الإعدادات",
+    "signOut": "تسجيل الخروج"
+  },
+  "languages": {
+    "english": "English",
+    "spanish": "Español",
+    "french": "Français",
+    "german": "Deutsch",
+    "chinese": "中文",
+    "arabic": "العربية",
+    "portuguese": "Português",
+    "japanese": "日本語",
+    "korean": "한국어",
+    "italian": "Italiano"
+  },
+  "messages": {
+    "languageUpdated": "تم تحديث اللغة",
+    "languageUpdatedDesc": "تم حفظ تفضيل اللغة الخاص بك."
+  }
+}

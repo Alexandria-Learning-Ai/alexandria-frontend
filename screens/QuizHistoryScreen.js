@@ -1,0 +1,955 @@
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+    View,
+    Text,
+    FlatList,
+    StyleSheet,
+    TouchableOpacity,
+    StatusBar,
+    Alert,
+    RefreshControl,
+    ActivityIndicator,
+    Dimensions,
+    Animated,
+} from 'react-native';
+import * as Animatable from 'react-native-animatable';
+import { FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { auth } from '../firebaseConfig'; // Import auth
+import SafeBackButton from '../components/SafeBackButton';
+import { ListItemSkeleton } from '../components/SkeletonLoader';
+import { BookLoadingScreen } from '../components/BookLoadingAnimation';
+import logger from '../utils/logger';
+
+
+const { width: screenWidth } = Dimensions.get('window');
+
+export default function QuizHistoryScreen({ navigation }) {
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    
+    // Animation ref for smooth exit
+    const containerAnim = useRef(new Animated.Value(1)).current;
+
+    // Fetch quiz history from AsyncStorage
+    const fetchHistory = async (showLoader = true) => {
+        try {
+            if (showLoader) setLoading(true);
+            const user = auth.currentUser; // ✅ Get current user
+            if (!user) {
+                setHistory([]);
+                return;
+            }
+            
+            const storedHistory = await AsyncStorage.getItem(`quizHistory_${user.uid}`); // ✅ Use user-specific key
+            const quizHistory = storedHistory ? JSON.parse(storedHistory) : [];
+            
+            // Sort by completion date (most recent first)
+            const sortedHistory = quizHistory.sort((a, b) => {
+                const dateA = new Date(a.metadata?.completedAt || a.results?.completedAt || 0);
+                const dateB = new Date(b.metadata?.completedAt || b.results?.completedAt || 0);
+                return dateB - dateA;
+            });
+            
+            setHistory(sortedHistory);
+        } catch (error) {
+            logger.error('Error fetching quiz history:', error);
+            Alert.alert('Error', 'Failed to load quiz history');
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    // Load history when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            fetchHistory();
+            
+            // Smooth container animation on mount
+            Animated.spring(containerAnim, {
+                toValue: 1,
+                tension: 80,
+                friction: 10,
+                useNativeDriver: true,
+            }).start();
+        }, [])
+    );
+
+    // Pull to refresh
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchHistory(false);
+    };
+
+    // Delete quiz from history
+    const deleteQuiz = async (quizId) => {
+        try {
+            const user = auth.currentUser; // ✅ Get current user
+            if (!user) return;
+
+            const updatedHistory = history.filter(quiz => quiz.id !== quizId);
+            await AsyncStorage.setItem(`quizHistory_${user.uid}`, JSON.stringify(updatedHistory)); // ✅ Use user-specific key
+            setHistory(updatedHistory);
+        } catch (error) {
+            logger.error('Error deleting quiz:', error);
+            Alert.alert('Error', 'Failed to delete quiz');
+        }
+    };
+
+    // Confirm delete
+    const confirmDelete = (quiz) => {
+        Alert.alert(
+            'Delete Quiz',
+            `Are you sure you want to delete this quiz from ${new Date(quiz.metadata?.completedAt || quiz.results?.completedAt).toLocaleDateString()}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: () => deleteQuiz(quiz.id)
+                }
+            ]
+        );
+    };
+
+    // Clear all history
+    const clearAllHistory = () => {
+        Alert.alert(
+            'Clear All History',
+            'Are you sure you want to delete all quiz history? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                    text: 'Clear All', 
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const user = auth.currentUser; // ✅ Get current user
+                            if (!user) return;
+
+                            await AsyncStorage.removeItem(`quizHistory_${user.uid}`); // ✅ Use user-specific key
+                            setHistory([]);
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to clear history');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    // UPDATED: Retake quiz function
+    const retakeQuiz = (quiz) => {
+        logger.info('🔄 Retaking quiz:', quiz.id);
+        logger.info('📝 First question data:', quiz.questions[0]);
+        
+        // Properly map question data with correct field names
+        const quizData = quiz.questions.map(q => {
+            logger.info('Question mapping:', {
+                questionText: q.questionText || q.text,
+                options: q.options
+            });
+            
+            return {
+                question_number: q.questionNumber || 1,
+                question_text: q.questionText || q.text, // Handle both field names
+                type: q.type,
+                options: q.options || [], // Complete option data
+                correct_answer: q.correctAnswer,
+                keywords: q.keywords || [],
+                formula: q.formula || null,
+                solution_steps: q.solution_steps || [],
+            };
+        });
+
+        logger.info('🚀 Navigating with quiz data:', quizData[0]);
+
+        navigation.navigate('QuizScreen', {
+            quiz: quizData,
+            metadata: {
+                ...quiz.metadata,
+                mode: 'retake', // Specify retake mode
+                originalScore: quiz.results?.score,
+                originalPercentage: quiz.results?.percentage,
+                originalDate: quiz.metadata?.completedAt
+            }
+        });
+    };
+
+    // UPDATED: Review quiz function - now goes to ReviewScreen
+    const reviewQuiz = (quiz) => {
+        logger.info('👁️ Reviewing quiz:', quiz.id);
+        logger.info('📝 Quiz data for review:', quiz);
+        
+        // Navigate to dedicated ReviewScreen instead of QuizScreen
+        navigation.navigate('ReviewScreen', {
+            quiz: quiz, // Pass the complete quiz object
+            metadata: {
+                ...quiz.metadata,
+                mode: 'review',
+                originalScore: quiz.results?.score,
+                originalPercentage: quiz.results?.percentage,
+                originalDate: quiz.metadata?.completedAt
+            }
+        });
+    };
+
+    // Get performance color based on percentage
+    const getPerformanceColor = (percentage) => {
+        if (percentage >= 90) return '#D4AF37'; // Gold
+        if (percentage >= 80) return '#28a745'; // Green
+        if (percentage >= 70) return '#17a2b8'; // Blue
+        if (percentage >= 60) return '#ffc107'; // Yellow
+        return '#dc3545'; // Red
+    };
+
+    // Get performance icon
+    const getPerformanceIcon = (percentage) => {
+        if (percentage >= 90) return 'trophy';
+        if (percentage >= 80) return 'star';
+        if (percentage >= 70) return 'thumbs-up';
+        if (percentage >= 60) return 'check-circle';
+        return 'times-circle';
+    };
+
+    const currentThemeStyles = isDarkMode ? darkStyles : lightStyles;
+    const statusBarStyle = isDarkMode ? 'light-content' : 'dark-content';
+
+    const Header = () => (
+        <Animatable.View animation="fadeInDown" duration={800} style={styles.headerContainer}>
+            {/* Back Button */}
+            <SafeBackButton 
+                style={[styles.backButton, currentThemeStyles.backButton]}
+                color={currentThemeStyles.backButtonText.color}
+                size={20}
+                onPress={() => {
+                    Animated.timing(containerAnim, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        const NavigationHelper = require('../utils/NavigationHelper').default;
+                        NavigationHelper.safeGoBack(navigation);
+                    });
+                }}
+            />
+            
+            {/* Title Section */}
+            <Animatable.View animation="fadeIn" delay={300} style={styles.titleSection}>
+                <View style={[styles.titleIcon, currentThemeStyles.titleIcon]}>
+                    <FontAwesome5 name="history" size={32} color={currentThemeStyles.titleIconColor.color} />
+                </View>
+                <Text style={[styles.title, currentThemeStyles.title]}>Quiz History</Text>
+                <Text style={[styles.subtitle, currentThemeStyles.subtitle]}>
+                    Review your past quiz attempts
+                </Text>
+            </Animatable.View>
+
+            {/* Actions Row */}
+            {history.length > 0 && (
+                <Animatable.View animation="slideInUp" delay={600} style={styles.actionsRow}>
+                    <Text style={[styles.historyCount, currentThemeStyles.historyCount]}>
+                        {history.length} quiz{history.length !== 1 ? 'es' : ''} saved
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.clearButton, currentThemeStyles.clearButton]}
+                        onPress={clearAllHistory}
+                    >
+                        <FontAwesome5 name="trash" size={14} color={currentThemeStyles.clearButtonText.color} />
+                        <Text style={[styles.clearButtonText, currentThemeStyles.clearButtonText]}>
+                            Clear All
+                        </Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            )}
+        </Animatable.View>
+    );
+
+    const EmptyState = () => (
+        <Animatable.View animation="fadeIn" style={[styles.emptyContainer, currentThemeStyles.emptyContainer]}>
+            <FontAwesome5 name="history" size={64} color={currentThemeStyles.emptyIcon.color} />
+            <Text style={[styles.emptyTitle, currentThemeStyles.emptyTitle]}>
+                No Quiz History Yet
+            </Text>
+            <Text style={[styles.emptySubtitle, currentThemeStyles.emptySubtitle]}>
+                Complete some quizzes and save them to see your history here
+            </Text>
+            <TouchableOpacity
+                style={[styles.emptyButton, currentThemeStyles.emptyButton]}
+                onPress={() => navigation.navigate('Upload')}
+            >
+                <FontAwesome5 name="plus" size={16} color={currentThemeStyles.emptyButtonText.color} />
+                <Text style={[styles.emptyButtonText, currentThemeStyles.emptyButtonText]}>
+                    Take Your First Quiz
+                </Text>
+            </TouchableOpacity>
+        </Animatable.View>
+    );
+
+    const renderQuizItem = ({ item: quiz, index }) => {
+        const results = quiz.results || {};
+        const percentage = results.percentage || 0;
+        const score = results.score || 0;
+        const totalQuestions = results.totalQuestions || quiz.questions?.length || 0;
+        const completedDate = new Date(quiz.metadata?.completedAt || quiz.results?.completedAt);
+        const difficulty = quiz.metadata?.difficulty || 'medium';
+        
+        const performanceColor = getPerformanceColor(percentage);
+        const performanceIcon = getPerformanceIcon(percentage);
+
+        return (
+            <Animatable.View 
+                animation="slideInUp" 
+                delay={index * 100}
+                style={[styles.quizCard, currentThemeStyles.quizCard]}
+            >
+                {/* Quiz Header */}
+                <View style={styles.quizHeader}>
+                    <View style={styles.quizInfo}>
+                        <View style={[styles.performanceIcon, { backgroundColor: performanceColor }]}>
+                            <FontAwesome5 name={performanceIcon} size={16} color="#FFFFFF" />
+                        </View>
+                        <View style={styles.quizDetails}>
+                            <Text style={[styles.quizTitle, currentThemeStyles.quizTitle]}>
+                                {quiz.title || `Quiz - ${completedDate.toLocaleDateString()}`}
+                            </Text>
+                            <View style={styles.quizMeta}>
+                                <View style={styles.metaItem}>
+                                    <FontAwesome5 name="calendar" size={12} color={currentThemeStyles.metaText.color} />
+                                    <Text style={[styles.metaText, currentThemeStyles.metaText]}>
+                                        {completedDate.toLocaleDateString()}
+                                    </Text>
+                                </View>
+                                <View style={styles.metaItem}>
+                                    <FontAwesome5 name="clock" size={12} color={currentThemeStyles.metaText.color} />
+                                    <Text style={[styles.metaText, currentThemeStyles.metaText]}>
+                                        {completedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </Text>
+                                </View>
+                                <View style={styles.metaItem}>
+                                    <FontAwesome5 name="chart-line" size={12} color={currentThemeStyles.metaText.color} />
+                                    <Text style={[styles.metaText, currentThemeStyles.metaText]}>
+                                        {difficulty}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                    
+                    {/* Delete Button */}
+                    <TouchableOpacity
+                        style={[styles.deleteButton, currentThemeStyles.deleteButton]}
+                        onPress={() => confirmDelete(quiz)}
+                    >
+                        <FontAwesome5 name="trash" size={14} color={currentThemeStyles.deleteButtonText.color} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Score Section */}
+                <View style={styles.scoreSection}>
+                    <View style={styles.scoreDisplay}>
+                        <Text style={[styles.scoreNumber, { color: performanceColor }]}>
+                            {percentage}%
+                        </Text>
+                        <Text style={[styles.scoreLabel, currentThemeStyles.scoreLabel]}>
+                            {score}/{totalQuestions} correct
+                        </Text>
+                    </View>
+                    
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <FontAwesome5 name="list" size={14} color={currentThemeStyles.statIcon.color} />
+                            <Text style={[styles.statText, currentThemeStyles.statText]}>
+                                {totalQuestions} questions
+                            </Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <FontAwesome5 name="check-circle" size={14} color="#28a745" />
+                            <Text style={[styles.statText, { color: '#28a745' }]}>
+                                {score} correct
+                            </Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <FontAwesome5 name="times-circle" size={14} color="#dc3545" />
+                            <Text style={[styles.statText, { color: '#dc3545' }]}>
+                                {totalQuestions - score} wrong
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* UPDATED: Action Buttons */}
+                <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                        style={[styles.actionButton, styles.retakeButton, currentThemeStyles.retakeButton]}
+                        onPress={() => retakeQuiz(quiz)}
+                    >
+                        <FontAwesome5 name="redo" size={14} color={currentThemeStyles.retakeButtonText.color} />
+                        <Text style={[styles.actionButtonText, currentThemeStyles.retakeButtonText]}>
+                            Retake
+                        </Text>
+                    </TouchableOpacity>
+                    
+                    {/* UPDATED: Review button now goes to ReviewScreen */}
+                    <TouchableOpacity
+                        style={[styles.actionButton, styles.reviewButton, currentThemeStyles.reviewButton]}
+                        onPress={() => reviewQuiz(quiz)}
+                    >
+                        <FontAwesome5 name="eye" size={14} color={currentThemeStyles.reviewButtonText.color} />
+                        <Text style={[styles.actionButtonText, currentThemeStyles.reviewButtonText]}>
+                            Review
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </Animatable.View>
+        );
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, currentThemeStyles.container]}>
+                <StatusBar barStyle={statusBarStyle} />
+                <Animated.View style={{
+                    flex: 1,
+                    opacity: containerAnim,
+                    transform: [{ scale: containerAnim }]
+                }}>
+                
+                {/* Header with back button */}
+                <View style={[styles.header, currentThemeStyles.header]}>
+                    <SafeBackButton 
+                        style={[styles.backButton, currentThemeStyles.backButton]}
+                        color={currentThemeStyles.backButtonText.color}
+                        size={20}
+                        onPress={() => {
+                            Animated.timing(containerAnim, {
+                                toValue: 0,
+                                duration: 200,
+                                useNativeDriver: true,
+                            }).start(() => {
+                                const NavigationHelper = require('../utils/NavigationHelper').default;
+                                NavigationHelper.safeGoBack(navigation);
+                            });
+                        }}
+                    />
+                    <Text style={[styles.headerTitle, currentThemeStyles.headerTitle]}>Quiz History</Text>
+                    <View style={styles.headerSpacer} />
+                </View>
+
+                {/* Loading Animation */}
+                <BookLoadingScreen 
+                  message="Loading quiz history..."
+                  animationSize={200}
+                />
+                </Animated.View>
+            </View>
+        );
+    }
+
+    return (
+        <View style={[styles.container, currentThemeStyles.container]}>
+            <StatusBar barStyle={statusBarStyle} />
+            <Animated.View style={{
+                flex: 1,
+                opacity: containerAnim,
+                transform: [{ scale: containerAnim }]
+            }}>
+            
+            <FlatList
+                data={history}
+                keyExtractor={(item) => item.id}
+                renderItem={renderQuizItem}
+                ListHeaderComponent={Header}
+                ListEmptyComponent={EmptyState}
+                contentContainerStyle={styles.listContainer}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[currentThemeStyles.refreshColor.color]}
+                        tintColor={currentThemeStyles.refreshColor.color}
+                    />
+                }
+            />
+            </Animated.View>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    centerContent: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    listContainer: {
+        paddingHorizontal: 20,
+        paddingTop: 60,
+        paddingBottom: 40,
+    },
+    
+    // Header Styles
+    headerContainer: {
+        marginBottom: 30,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    titleSection: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    titleIcon: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    title: {
+        fontSize: 32,
+        fontWeight: '800',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: -0.5,
+    },
+    subtitle: {
+        fontSize: 16,
+        textAlign: 'center',
+        lineHeight: 22,
+        paddingHorizontal: 20,
+    },
+    actionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 20,
+    },
+    historyCount: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    clearButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 6,
+        borderWidth: 1,
+    },
+    clearButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    
+    // Empty State Styles
+    emptyContainer: {
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+    emptyTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        marginTop: 20,
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    emptySubtitle: {
+        fontSize: 16,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 30,
+        opacity: 0.8,
+    },
+    emptyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        gap: 8,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    emptyButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    
+    // Quiz Card Styles
+    quizCard: {
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    quizHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 16,
+    },
+    quizInfo: {
+        flexDirection: 'row',
+        flex: 1,
+    },
+    performanceIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    quizDetails: {
+        flex: 1,
+    },
+    quizTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    quizMeta: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    metaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    metaText: {
+        fontSize: 12,
+        opacity: 0.8,
+    },
+    deleteButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 12,
+    },
+    
+    // Score Section Styles
+    scoreSection: {
+        marginBottom: 16,
+    },
+    scoreDisplay: {
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    scoreNumber: {
+        fontSize: 32,
+        fontWeight: '800',
+        marginBottom: 4,
+    },
+    scoreLabel: {
+        fontSize: 14,
+        opacity: 0.8,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    statText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    
+    // Action Buttons Styles
+    actionButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    actionButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        gap: 6,
+        borderWidth: 1,
+    },
+    actionButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    
+    // Loading Styles
+    loadingText: {
+        fontSize: 16,
+        marginTop: 12,
+        opacity: 0.8,
+    },
+});
+
+// Light Mode Styles
+const lightStyles = StyleSheet.create({
+    container: {
+        backgroundColor: '#F8F4E3',
+    },
+    backButton: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        shadowColor: '#1A2C5B',
+    },
+    backButtonText: {
+        color: '#1A2C5B',
+    },
+    titleIcon: {
+        backgroundColor: 'rgba(26, 44, 91, 0.1)',
+        shadowColor: '#1A2C5B',
+    },
+    titleIconColor: {
+        color: '#1A2C5B',
+    },
+    title: {
+        color: '#1A2C5B',
+    },
+    subtitle: {
+        color: '#4A5568',
+    },
+    historyCount: {
+        color: '#4A5568',
+    },
+    clearButton: {
+        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+        borderColor: '#dc3545',
+    },
+    clearButtonText: {
+        color: '#dc3545',
+    },
+    
+    // Empty State Light
+    emptyContainer: {
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        borderRadius: 20,
+    },
+    emptyIcon: {
+        color: '#1A2C5B',
+        opacity: 0.5,
+    },
+    emptyTitle: {
+        color: '#1A2C5B',
+    },
+    emptySubtitle: {
+        color: '#4A5568',
+    },
+    emptyButton: {
+        backgroundColor: '#1A2C5B',
+        shadowColor: '#1A2C5B',
+    },
+    emptyButtonText: {
+        color: '#FFFFFF',
+    },
+    
+    // Quiz Card Light
+    quizCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        shadowColor: '#1A2C5B',
+    },
+    quizTitle: {
+        color: '#1A2C5B',
+    },
+    metaText: {
+        color: '#4A5568',
+    },
+    deleteButton: {
+        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+    },
+    deleteButtonText: {
+        color: '#dc3545',
+    },
+    scoreLabel: {
+        color: '#4A5568',
+    },
+    statIcon: {
+        color: '#4A5568',
+    },
+    statText: {
+        color: '#4A5568',
+    },
+    
+    // Action Buttons Light
+    retakeButton: {
+        backgroundColor: 'rgba(26, 44, 91, 0.1)',
+        borderColor: '#1A2C5B',
+    },
+    retakeButtonText: {
+        color: '#1A2C5B',
+    },
+    reviewButton: {
+        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+        borderColor: '#D4AF37',
+    },
+    reviewButtonText: {
+        color: '#D4AF37',
+    },
+    
+    // Loading Light
+    loadingColor: {
+        color: '#1A2C5B',
+    },
+    loadingText: {
+        color: '#4A5568',
+    },
+    refreshColor: {
+        color: '#1A2C5B',
+    },
+});
+
+// Dark Mode Styles
+const darkStyles = StyleSheet.create({
+    container: {
+        backgroundColor: '#1A2C5B',
+    },
+    backButton: {
+        backgroundColor: 'rgba(44, 70, 125, 0.8)',
+        shadowColor: '#D4AF37',
+    },
+    backButtonText: {
+        color: '#F8F4E3',
+    },
+    titleIcon: {
+        backgroundColor: 'rgba(212, 175, 55, 0.2)',
+        shadowColor: '#D4AF37',
+    },
+    titleIconColor: {
+        color: '#D4AF37',
+    },
+    title: {
+        color: '#F8F4E3',
+    },
+    subtitle: {
+        color: '#CBD5E0',
+    },
+    historyCount: {
+        color: '#CBD5E0',
+    },
+    clearButton: {
+        backgroundColor: 'rgba(220, 53, 69, 0.2)',
+        borderColor: '#ff6b7a',
+    },
+    clearButtonText: {
+        color: '#ff6b7a',
+    },
+    
+    // Empty State Dark
+    emptyContainer: {
+        backgroundColor: 'rgba(44, 70, 125, 0.5)',
+        borderRadius: 20,
+    },
+    emptyIcon: {
+        color: '#F8F4E3',
+        opacity: 0.5,
+    },
+    emptyTitle: {
+        color: '#F8F4E3',
+    },
+    emptySubtitle: {
+        color: '#CBD5E0',
+    },
+    emptyButton: {
+        backgroundColor: '#D4AF37',
+        shadowColor: '#D4AF37',
+    },
+    emptyButtonText: {
+        color: '#1A2C5B',
+    },
+    
+    // Quiz Card Dark
+    quizCard: {
+        backgroundColor: 'rgba(44, 70, 125, 0.8)',
+        shadowColor: '#D4AF37',
+    },
+    quizTitle: {
+        color: '#F8F4E3',
+    },
+    metaText: {
+        color: '#CBD5E0',
+    },
+    deleteButton: {
+        backgroundColor: 'rgba(220, 53, 69, 0.2)',
+    },
+    deleteButtonText: {
+        color: '#ff6b7a',
+    },
+    scoreLabel: {
+        color: '#CBD5E0',
+    },
+    statIcon: {
+        color: '#CBD5E0',
+    },
+    statText: {
+        color: '#CBD5E0',
+    },
+    
+    // Action Buttons Dark
+    retakeButton: {
+        backgroundColor: 'rgba(248, 244, 227, 0.1)',
+        borderColor: '#F8F4E3',
+    },
+    retakeButtonText: {
+        color: '#F8F4E3',
+    },
+    reviewButton: {
+        backgroundColor: 'rgba(212, 175, 55, 0.2)',
+        borderColor: '#D4AF37',
+    },
+    reviewButtonText: {
+        color: '#D4AF37',
+    },
+    
+    // Loading Dark
+    loadingColor: {
+        color: '#D4AF37',
+    },
+    loadingText: {
+        color: '#CBD5E0',
+    },
+    refreshColor: {
+        color: '#D4AF37',
+    },
+    
+    // Skeleton loading styles
+    skeletonContainer: {
+        paddingHorizontal: 16,
+        paddingTop: 20,
+    },
+});

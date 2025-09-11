@@ -1,0 +1,207 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "cancel": "Annuler",
+    "ok": "OK",
+    "save": "Enregistrer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "back": "Retour",
+    "next": "Suivant",
+    "continue": "Continuer",
+    "complete": "Compléter",
+    "yes": "Oui",
+    "no": "Non",
+    "close": "Fermer"
+  },
+  "navigation": {
+    "home": "Accueil",
+    "upload": "Télécharger",
+    "quiz": "Quiz",
+    "results": "Résultats",
+    "history": "Historique",
+    "review": "Révision",
+    "progress": "Progrès",
+    "coach": "Coach",
+    "profile": "Profil",
+    "settings": "Paramètres"
+  },
+  "auth": {
+    "signIn": "Se Connecter",
+    "signUp": "S'Inscrire",
+    "signOut": "Se Déconnecter",
+    "email": "Email",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "fullName": "Nom complet",
+    "forgotPassword": "Mot de passe oublié?",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "createAccount": "Créer un compte",
+    "alreadyHaveAccount": "Vous avez déjà un compte?",
+    "dontHaveAccount": "Vous n'avez pas de compte?",
+    "welcomeBack": "Bon retour!",
+    "getStarted": "Commencer avec Alexandria"
+  },
+  "home": {
+    "welcome": "Bienvenue à Alexandria 📚",
+    "greeting": {
+      "morning": "Bonjour",
+      "afternoon": "Bon après-midi",
+      "evening": "Bonsoir"
+    },
+    "quickStats": {
+      "quizzes": "Quiz",
+      "avgScore": "Score Moy.",
+      "streak": "Série"
+    },
+    "defaultUser": "Étudiant",
+    "actions": {
+      "uploadStudyMaterial": "Télécharger du Matériel d'Étude",
+      "askAlexandria": "Demander à Alexandria",
+      "takeQuiz": "Faire un Quiz",
+      "takeNewQuiz": "Faire un Nouveau Quiz",
+      "askAlexandriaForQuiz": "Demander un Quiz à Alexandria",
+      "startLearning": "Commencer à Apprendre",
+      "uploadAndStartLearning": "Télécharger du matériel d'étude et commencer à apprendre",
+      "viewProgress": "Voir les Progrès"
+    },
+    "exam": {
+      "nextExam": "Prochain Examen",
+      "in": "dans",
+      "today": "Aujourd'hui",
+      "tomorrow": "Demain",
+      "viewExams": "Voir les Examens"
+    },
+    "analysis": {
+      "strengths": "Forces",
+      "weaknesses": "Zones à Améliorer"
+    },
+    "categories": {
+      "general": "Général"
+    }
+  },
+  "profile": {
+    "title": "Votre Profil",
+    "setupProfile": "Configurer Votre Profil",
+    "editProfile": "Modifier le Profil",
+    "viewProfile": "Voir le Profil",
+    "profileCompletion": "Complétude du Profil",
+    "basicInfo": "Informations de Base",
+    "educationLevel": "Niveau d'Éducation",
+    "currentCourses": "Cours Actuels",
+    "studyGoals": "Objectifs d'Étude",
+    "learningPreferences": "Préférences d'Apprentissage",
+    "personalizedRecommendations": "Recommandations Personnalisées",
+    "profileInfo": "Informations du Profil",
+    "fullName": "Nom Complet",
+    "program": "Programme",
+    "year": "Année/Niveau",
+    "semester": "Semestre Actuel",
+    "created": "Créé",
+    "lastUpdated": "Dernière Mise à Jour",
+    "syncStatus": "Statut de Synchronisation",
+    "synced": "Synchronisé",
+    "pending": "En Attente",
+    "complete": "complet",
+    "educationLevels": {
+      "highSchool": "Lycée",
+      "undergraduate": "Licence",
+      "masters": "Master",
+      "phd": "Doctorat",
+      "professional": "Professionnel"
+    },
+    "learningStyles": {
+      "multipleChoice": "Choix Multiple",
+      "essays": "Essais et Écriture",
+      "flashcards": "Cartes Mémoire",
+      "caseStudies": "Études de Cas",
+      "problemSolving": "Résolution de Problèmes",
+      "visual": "Apprentissage Visuel"
+    },
+    "painPoints": {
+      "memorization": "Mémorisation et Rétention",
+      "problemSolving": "Résolution de Problèmes Complexes",
+      "timeManagement": "Gestion du Temps",
+      "testAnxiety": "Anxiété aux Examens",
+      "motivation": "Rester Motivé",
+      "focus": "Maintenir la Concentration"
+    },
+    "steps": {
+      "step1": "Commençons",
+      "step2": "Niveau d'Éducation",
+      "step3": "Détails Académiques",
+      "step4": "Cours Actuels",
+      "step5": "Objectifs et Préférences d'Étude"
+    },
+    "validation": {
+      "nameRequired": "Veuillez entrer votre nom complet.",
+      "educationRequired": "Veuillez sélectionner votre niveau d'éducation.",
+      "academicDetailsRequired": "Veuillez remplir tous les détails académiques.",
+      "coursesRequired": "Veuillez ajouter au moins un cours.",
+      "goalsRequired": "Veuillez entrer vos objectifs d'étude."
+    }
+  },
+  "quiz": {
+    "startQuiz": "Commencer le Quiz",
+    "question": "Question",
+    "of": "de",
+    "nextQuestion": "Question Suivante",
+    "submitQuiz": "Soumettre le Quiz",
+    "timeRemaining": "Temps Restant",
+    "score": "Score",
+    "correct": "Correct",
+    "incorrect": "Incorrect",
+    "explanation": "Explication",
+    "reviewAnswers": "Réviser les Réponses",
+    "retakeQuiz": "Refaire le Quiz"
+  },
+  "upload": {
+    "title": "Créer un Quiz",
+    "selectFiles": "Sélectionner du Matériel d'Étude",
+    "dragDropFiles": "Glisser et déposer les fichiers ici",
+    "supportedFormats": "Formats supportés: PDF, DOCX, TXT, PNG, JPG",
+    "generateQuiz": "Générer un Quiz",
+    "processing": "Traitement de vos matériaux...",
+    "success": "Quiz créé avec succès!"
+  },
+  "coach": {
+    "title": "Votre Coach d'Étude",
+    "recommendations": "Recommandations",
+    "studyPlan": "Plan d'Étude",
+    "weaknessAnalysis": "Analyse des Faiblesses",
+    "motivation": "Motivation"
+  },
+  "menu": {
+    "viewProfile": "Voir le Profil",
+    "editProfile": "Modifier le Profil",
+    "language": "Langue",
+    "settings": "Paramètres",
+    "helpSupport": "Aide et Support",
+    "privacyPolicy": "Politique de Confidentialité",
+    "aboutAlexandria": "À Propos d'Alexandria",
+    "signOut": "Se Déconnecter"
+  },
+  "languages": {
+    "english": "English",
+    "spanish": "Español",
+    "french": "Français",
+    "german": "Deutsch",
+    "chinese": "中文",
+    "arabic": "العربية",
+    "portuguese": "Português",
+    "japanese": "日本語",
+    "korean": "한국어",
+    "italian": "Italiano"
+  },
+  "messages": {
+    "profileCompleted": "🎉 Bienvenue à Alexandria!",
+    "profileCompletedDesc": "Votre profil d'étude personnalisé est complet. Alexandria est maintenant prêt à créer des expériences d'apprentissage adaptées juste pour vous!",
+    "languageUpdated": "Langue Mise à Jour",
+    "languageUpdatedDesc": "Votre préférence de langue a été sauvegardée.",
+    "errorLoadingProfile": "Échec du chargement des informations de profil.",
+    "errorSavingProfile": "Échec de la sauvegarde de votre profil. Veuillez réessayer.",
+    "startLearning": "Commencer l'Apprentissage"
+  }
+}

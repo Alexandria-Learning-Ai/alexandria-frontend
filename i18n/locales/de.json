@@ -1,0 +1,142 @@
+{
+  "common": {
+    "loading": "Laden...",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "cancel": "Abbrechen",
+    "ok": "OK",
+    "save": "Speichern",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "continue": "Fortfahren",
+    "complete": "Fertigstellen",
+    "yes": "Ja",
+    "no": "Nein",
+    "close": "Schließen"
+  },
+  "navigation": {
+    "home": "Startseite",
+    "upload": "Hochladen",
+    "quiz": "Quiz",
+    "results": "Ergebnisse",
+    "history": "Verlauf",
+    "review": "Überprüfen",
+    "progress": "Fortschritt",
+    "coach": "Coach",
+    "profile": "Profil",
+    "settings": "Einstellungen"
+  },
+  "auth": {
+    "signIn": "Anmelden",
+    "signUp": "Registrieren",
+    "signOut": "Abmelden",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "fullName": "Vollständiger Name",
+    "forgotPassword": "Passwort vergessen?",
+    "resetPassword": "Passwort zurücksetzen",
+    "createAccount": "Konto erstellen",
+    "alreadyHaveAccount": "Haben Sie bereits ein Konto?",
+    "dontHaveAccount": "Noch kein Konto?",
+    "welcomeBack": "Willkommen zurück!",
+    "getStarted": "Mit Alexandria beginnen"
+  },
+  "home": {
+    "welcome": "Willkommen bei Alexandria 📚",
+    "greeting": {
+      "morning": "Guten Morgen",
+      "afternoon": "Guten Tag",
+      "evening": "Guten Abend"
+    },
+    "quickStats": {
+      "quizzes": "Quiz",
+      "avgScore": "Ø-Punkte",
+      "streak": "Serie"
+    },
+    "actions": {
+      "uploadStudyMaterial": "Lernmaterial hochladen",
+      "askAlexandria": "Alexandria fragen",
+      "takeQuiz": "Quiz machen",
+      "viewProgress": "Fortschritt anzeigen"
+    }
+  },
+  "profile": {
+    "title": "Ihr Profil",
+    "setupProfile": "Profil einrichten",
+    "editProfile": "Profil bearbeiten",
+    "viewProfile": "Profil anzeigen",
+    "profileCompletion": "Profil-Vollständigkeit",
+    "basicInfo": "Grundlegende Informationen",
+    "educationLevel": "Bildungsstand",
+    "currentCourses": "Aktuelle Kurse",
+    "studyGoals": "Lernziele",
+    "learningPreferences": "Lernpräferenzen",
+    "personalizedRecommendations": "Personalisierte Empfehlungen",
+    "profileInfo": "Profilinformationen",
+    "fullName": "Vollständiger Name",
+    "program": "Programm",
+    "year": "Jahr/Stufe",
+    "semester": "Aktuelles Semester",
+    "created": "Erstellt",
+    "lastUpdated": "Zuletzt aktualisiert",
+    "syncStatus": "Synchronisationsstatus",
+    "synced": "Synchronisiert",
+    "pending": "Ausstehend",
+    "complete": "vollständig",
+    "steps": {
+      "step1": "Lassen Sie uns anfangen",
+      "step2": "Bildungsstand",
+      "step3": "Akademische Details",
+      "step4": "Aktuelle Kurse",
+      "step5": "Lernziele & Präferenzen"
+    }
+  },
+  "quiz": {
+    "startQuiz": "Quiz starten",
+    "question": "Frage",
+    "of": "von",
+    "nextQuestion": "Nächste Frage",
+    "submitQuiz": "Quiz einreichen",
+    "timeRemaining": "Verbleibende Zeit",
+    "score": "Punktzahl",
+    "correct": "Richtig",
+    "incorrect": "Falsch",
+    "explanation": "Erklärung",
+    "reviewAnswers": "Antworten überprüfen",
+    "retakeQuiz": "Quiz wiederholen"
+  },
+  "menu": {
+    "viewProfile": "Profil anzeigen",
+    "editProfile": "Profil bearbeiten",
+    "language": "Sprache",
+    "settings": "Einstellungen",
+    "helpSupport": "Hilfe & Support",
+    "privacyPolicy": "Datenschutzrichtlinie",
+    "aboutAlexandria": "Über Alexandria",
+    "signOut": "Abmelden"
+  },
+  "languages": {
+    "english": "English",
+    "spanish": "Español",
+    "french": "Français",
+    "german": "Deutsch",
+    "chinese": "中文",
+    "arabic": "العربية",
+    "portuguese": "Português",
+    "japanese": "日本語",
+    "korean": "한국어",
+    "italian": "Italiano"
+  },
+  "messages": {
+    "profileCompleted": "🎉 Willkommen bei Alexandria!",
+    "profileCompletedDesc": "Ihr personalisiertes Lernprofil ist vollständig. Alexandria ist jetzt bereit, Lernerfahrungen zu erstellen, die speziell auf Sie zugeschnitten sind!",
+    "languageUpdated": "Sprache aktualisiert",
+    "languageUpdatedDesc": "Ihre Spracheinstellung wurde gespeichert.",
+    "errorLoadingProfile": "Fehler beim Laden der Profilinformationen.",
+    "errorSavingProfile": "Fehler beim Speichern Ihres Profils. Bitte versuchen Sie es erneut.",
+    "startLearning": "Mit dem Lernen beginnen"
+  }
+}

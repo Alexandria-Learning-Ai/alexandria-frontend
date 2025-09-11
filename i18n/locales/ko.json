@@ -1,0 +1,49 @@
+{
+  "common": {
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "cancel": "취소",
+    "ok": "확인",
+    "save": "저장",
+    "edit": "편집",
+    "back": "뒤로",
+    "next": "다음",
+    "continue": "계속"
+  },
+  "home": {
+    "welcome": "알렉산드리아에 오신 것을 환영합니다 📚",
+    "greeting": {
+      "morning": "좋은 아침입니다",
+      "afternoon": "좋은 오후입니다",
+      "evening": "좋은 저녁입니다"
+    }
+  },
+  "profile": {
+    "title": "귀하의 프로필",
+    "viewProfile": "프로필 보기",
+    "editProfile": "프로필 편집"
+  },
+  "menu": {
+    "viewProfile": "프로필 보기",
+    "editProfile": "프로필 편집",
+    "language": "언어",
+    "signOut": "로그아웃"
+  },
+  "languages": {
+    "english": "English",
+    "spanish": "Español",
+    "french": "Français",
+    "german": "Deutsch",
+    "chinese": "中文",
+    "arabic": "العربية",
+    "portuguese": "Português",
+    "japanese": "日本語",
+    "korean": "한국어",
+    "italian": "Italiano"
+  },
+  "messages": {
+    "languageUpdated": "언어가 업데이트되었습니다",
+    "languageUpdatedDesc": "언어 설정이 저장되었습니다."
+  }
+}
