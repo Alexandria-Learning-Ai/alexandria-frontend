@@ -9,11 +9,52 @@
 
 import ApiService from './ApiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '../firebaseConfig'; // ✅ Add auth import
 import logger from '../utils/logger';
 
 
 class PhDService {
   static BASE_URL = '/api/phd';
+
+  // ✅ NEW: Get user-specific auth token
+  static async getUserAuthToken() {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User must be authenticated to access PhD features');
+      }
+
+      const tokenKey = `authToken_${user.uid}`;
+      const token = await AsyncStorage.getItem(tokenKey);
+
+      if (!token) {
+        logger.warn('No auth token found for user:', user.uid);
+        return null;
+      }
+
+      return token;
+    } catch (error) {
+      logger.error('Error getting user auth token:', error);
+      throw error;
+    }
+  }
+
+  // ✅ NEW: Store user-specific auth token
+  static async setUserAuthToken(token) {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User must be authenticated to store auth token');
+      }
+
+      const tokenKey = `authToken_${user.uid}`;
+      await AsyncStorage.setItem(tokenKey, token);
+      logger.info('Auth token stored for user:', user.uid);
+    } catch (error) {
+      logger.error('Error storing user auth token:', error);
+      throw error;
+    }
+  }
 
   // ============================================================================
   // DASHBOARD & OVERVIEW
@@ -21,7 +62,7 @@ class PhDService {
 
   static async getDashboardStats() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(`${this.BASE_URL}/dashboard/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -40,7 +81,7 @@ class PhDService {
 
   static async getRecentActivity() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(`${this.BASE_URL}/dashboard/activity`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -53,7 +94,7 @@ class PhDService {
 
   static async getCognitiveProfileSummary() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(`${this.BASE_URL}/analytics/cognitive-profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -86,7 +127,7 @@ class PhDService {
 
   static async generatePhDQuestion(requestData) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/questions/generate`,
         requestData,
@@ -101,7 +142,7 @@ class PhDService {
 
   static async generateScenarioQuestion(researchField, specialization, complexity) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/questions/scenario-based`,
         {
@@ -120,7 +161,7 @@ class PhDService {
 
   static async generatePaperCritique(paperAbstract, researchField, focusAreas) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/questions/paper-critique`,
         {
@@ -143,7 +184,7 @@ class PhDService {
 
   static async uploadDocument(fileData, documentType, researchField) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       
       const formData = new FormData();
       formData.append('file', {
@@ -173,7 +214,7 @@ class PhDService {
 
   static async generateQuestionsFromDocument(documentId, questionCount, questionTypes) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/documents/${documentId}/generate-questions`,
         {
@@ -195,7 +236,7 @@ class PhDService {
 
   static async submitEssayResponse(essayData) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/responses/submit-essay`,
         essayData,
@@ -210,7 +251,7 @@ class PhDService {
 
   static async getDetailedFeedback(responseId) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(
         `${this.BASE_URL}/responses/${responseId}/detailed-feedback`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -228,7 +269,7 @@ class PhDService {
 
   static async getResearchSkillModules(researchField) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const params = researchField ? { research_field: researchField } : {};
       const response = await ApiService.get(
         `${this.BASE_URL}/skills/modules`,
@@ -246,7 +287,7 @@ class PhDService {
 
   static async practiceGrantWriting(fundingAgency, researchArea, budgetRange) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/skills/grant-writing/practice`,
         {
@@ -265,7 +306,7 @@ class PhDService {
 
   static async simulatePeerReview(manuscriptType, researchField) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/skills/peer-review/simulate`,
         {
@@ -287,7 +328,7 @@ class PhDService {
 
   static async getCognitiveProfile() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(
         `${this.BASE_URL}/analytics/cognitive-profile`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -301,7 +342,7 @@ class PhDService {
 
   static async detectCognitiveBiases() {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(
         `${this.BASE_URL}/analytics/bias-detection`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -315,7 +356,7 @@ class PhDService {
 
   static async generateKnowledgeMap(researchField) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(
         `${this.BASE_URL}/analytics/knowledge-map`,
         { 
@@ -336,7 +377,7 @@ class PhDService {
 
   static async createLabGroup(groupName, researchFocus) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/collaborate/create-group`,
         {
@@ -354,7 +395,7 @@ class PhDService {
 
   static async shareQuizWithGroup(groupId, quizId) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/collaborate/${groupId}/share-quiz`,
         { quiz_id: quizId },
@@ -373,7 +414,7 @@ class PhDService {
 
   static async connectAcademicService(serviceName, credentials) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.post(
         `${this.BASE_URL}/integrations/connect`,
         {
@@ -391,7 +432,7 @@ class PhDService {
 
   static async syncReferenceLibrary(service) {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await this.getUserAuthToken();
       const response = await ApiService.get(
         `${this.BASE_URL}/integrations/sync-library`,
         { 

@@ -10,6 +10,7 @@ import axios from 'axios';
 import * as Animatable from 'react-native-animatable';
 import { UserCoursesService } from '../services/UserCoursesService'; // ✅ NEW: Import UserCoursesService
 import { StudentProfileService } from '../services/StudentProfileService'; // ✅ NEW: Import for course validation
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Import hierarchical service
 import { API_BASE_URL } from '../config/api';
 import { useTranslation } from 'react-i18next';
 import SafeBackButton from '../components/SafeBackButton';
@@ -41,6 +42,15 @@ export default function AskAlexandriaScreen({ navigation, route }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [subjectValidation, setSubjectValidation] = useState(null);
   const [validatingSubject, setValidatingSubject] = useState(false);
+
+  // ✅ NEW: Hierarchical course selection state
+  const [hierarchicalMode, setHierarchicalMode] = useState(false);
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [selectedHierarchicalSubject, setSelectedHierarchicalSubject] = useState(null);
+  const [availableCourses, setAvailableCourses] = useState([]);
+  const [selectedHierarchicalCourse, setSelectedHierarchicalCourse] = useState(null);
+  const [courseSelectionMode, setCourseSelectionMode] = useState('profile'); // 'profile' or 'hierarchical'
+  const [hierarchicalCourseModalVisible, setHierarchicalCourseModalVisible] = useState(false);
   
   // UI state for freshness indicator
   const [uiState, setUiState] = useState({
@@ -53,7 +63,8 @@ export default function AskAlexandriaScreen({ navigation, route }) {
   // Load user courses and handle route params
   useEffect(() => {
     loadUserCourses();
-    
+    loadHierarchicalSubjects();
+
     // Smooth container animation on mount
     Animated.spring(containerAnim, {
       toValue: 1,
@@ -61,11 +72,24 @@ export default function AskAlexandriaScreen({ navigation, route }) {
       friction: 10,
       useNativeDriver: true,
     }).start();
-    
-    // Handle route params for suggested topics (from ProgressTracker recommendations)
+
+    // ✅ ENHANCED: Handle hierarchical route params
+    if (route?.params?.hierarchicalMode) {
+      setHierarchicalMode(true);
+      setCourseSelectionMode('hierarchical');
+    }
+
     if (route?.params?.suggestedTopic) {
       setTopic(route.params.suggestedTopic);
     }
+
+    if (route?.params?.subjectKey && route?.params?.courseKey) {
+      // Handle hierarchical navigation from ProgressTracker
+      setSelectedHierarchicalSubject(route.params.subjectKey);
+      setSelectedHierarchicalCourse(route.params.courseKey);
+      setTopic(route.params.suggestedTopic || route.params.courseKey);
+    }
+
     if (route?.params?.course) {
       setSelectedCourse(route.params.course);
     }
@@ -76,13 +100,52 @@ export default function AskAlexandriaScreen({ navigation, route }) {
     try {
       const courses = await UserCoursesService.getUserCourses();
       setUserCourses(courses);
-      
+
       if (courses.length > 0) {
         logger.info(`📚 Loaded ${courses.length} courses from user profile`);
       }
     } catch (error) {
       logger.error('❌ Error loading user courses:', error);
     }
+  };
+
+  // ✅ NEW: Load hierarchical subjects for enhanced course selection
+  const loadHierarchicalSubjects = () => {
+    try {
+      const subjects = Object.keys(HierarchicalSubjectService.SUBJECT_HIERARCHY);
+      setAvailableSubjects(subjects);
+      logger.info(`🎓 Loaded ${subjects.length} hierarchical subjects`);
+    } catch (error) {
+      logger.error('❌ Error loading hierarchical subjects:', error);
+    }
+  };
+
+  // ✅ NEW: Handle hierarchical subject selection
+  const handleHierarchicalSubjectSelect = (subjectName) => {
+    setSelectedHierarchicalSubject(subjectName);
+    setSelectedHierarchicalCourse(null); // Clear course selection
+
+    // Load available courses for this subject
+    const hierarchy = HierarchicalSubjectService.SUBJECT_HIERARCHY[subjectName];
+    if (hierarchy && hierarchy.courses) {
+      const courses = Object.keys(hierarchy.courses);
+      setAvailableCourses(courses);
+      logger.info(`📚 Loaded ${courses.length} courses for ${subjectName}`);
+    }
+  };
+
+  // ✅ NEW: Handle hierarchical course selection
+  const handleHierarchicalCourseSelect = (courseName) => {
+    setSelectedHierarchicalCourse(courseName);
+    setTopic(courseName); // Auto-fill the topic field
+
+    // Create a course object similar to profile courses for consistency
+    setSelectedCourse({
+      name: courseName,
+      code: `${selectedHierarchicalSubject}_${courseName}`.replace(/\s+/g, '_').toUpperCase(),
+      subject: selectedHierarchicalSubject,
+      source: 'hierarchical'
+    });
   };
 
   // Check if user has profile courses
@@ -218,9 +281,11 @@ export default function AskAlexandriaScreen({ navigation, route }) {
   };
 
   const handleGenerateQuiz = async () => {
-    // Simplified validation
-    if (!topic.trim()) {
-      Alert.alert('Missing Topic', 'Please enter a topic for your quiz.');
+    // Use subject as topic if topic is empty
+    const quizTopic = topic.trim() || subject.trim();
+
+    if (!quizTopic) {
+      Alert.alert('Missing Topic', 'Please enter a subject/topic for your quiz.');
       return;
     }
 
@@ -240,12 +305,12 @@ export default function AskAlexandriaScreen({ navigation, route }) {
       const user = auth.currentUser;
       
       // Get user's education level from onboarding (default to college if not available)
-      const userProfile = await StudentProfileService.getUserProfile(user?.uid);
+      const userProfile = await StudentProfileService.getProfile(user?.uid);
       const gradeLevel = userProfile?.educationLevel || 'college';
 
       // Prepare streamlined API request
       const requestData = {
-        topic: topic.trim(),
+        topic: quizTopic,
         course: selectedCourse.name,
         course_code: selectedCourse.code,
         quiz_type: quizTypes.includes('all') ? 'mix' : quizTypes.join(','),
@@ -303,19 +368,28 @@ export default function AskAlexandriaScreen({ navigation, route }) {
         logger.error('❌ Quiz data array is empty');
         logger.error('❌ Full response for debugging:', response.data);
         
-        throw new Error(`Unable to generate questions for "${topic}". Try using a more specific topic or check your internet connection.`);
+        throw new Error(`Unable to generate questions for "${quizTopic}". Try using a more specific topic or check your internet connection.`);
       }
 
-      // Enhanced metadata for progress tracking
+      // ✅ ENHANCED: Enhanced metadata for hierarchical progress tracking
       const enhancedMetadata = {
-          title: `${topic} Quiz`,
+          title: `${quizTopic} Quiz`,
           course: selectedCourse.name,
           course_code: selectedCourse.code,
           difficulty,
           numQuestions,
           source: 'AskAlexandria',
           category: selectedCourse.name,
-          quizTypes: quizTypes
+          subject: selectedHierarchicalSubject || selectedCourse.subject || quizTopic,
+          topic: quizTopic,
+          quizTypes: quizTypes,
+          // ✅ NEW: Hierarchical metadata
+          hierarchical: {
+            enabled: courseSelectionMode === 'hierarchical',
+            subject: selectedHierarchicalSubject,
+            course: selectedHierarchicalCourse,
+            source: selectedCourse.source || 'profile'
+          }
       };
 
       logger.info('🎮 Navigating to QuizScreen with metadata:', enhancedMetadata);
@@ -323,7 +397,7 @@ export default function AskAlexandriaScreen({ navigation, route }) {
       navigation.navigate('QuizScreen', {
           quiz: quizData,
           source: 'AskAlexandria',
-          subject: topic,
+          subject: quizTopic,
           metadata: enhancedMetadata
       });
 
@@ -383,9 +457,10 @@ export default function AskAlexandriaScreen({ navigation, route }) {
           value={subject}
           onChangeText={text => {
             setSubject(text);
+            setTopic(text); // Keep topic in sync with subject
             // ✅ NEW: Clear validation when user is typing
             if (subjectValidation) setSubjectValidation(null);
-            
+
             if (
               selectedSubject &&
               text !== selectedSubject.name &&
@@ -434,6 +509,7 @@ export default function AskAlexandriaScreen({ navigation, route }) {
             style={styles.clearSubjectInputButton}
             onPress={() => {
               setSubject('');
+              setTopic(''); // Clear topic as well
               setSelectedSubject(null);
             }}
             activeOpacity={0.7}
@@ -442,18 +518,72 @@ export default function AskAlexandriaScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
       </View>
-      {/* ✅ User Profile Courses */}
-      {hasProfileCourses && (
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>
-            <FontAwesome5 name="graduation-cap" size={14} color="#D4AF37" /> 📚 Select Your Course
-          </Text>
+      {/* ✅ ENHANCED: Course Selection Mode Toggle */}
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>
+          <FontAwesome5 name="graduation-cap" size={14} color="#D4AF37" /> 📚 Course Selection
+        </Text>
+
+        {/* Course Selection Mode Toggle */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              courseSelectionMode === 'profile' && styles.activeToggle
+            ]}
+            onPress={() => {
+              setCourseSelectionMode('profile');
+              setSelectedHierarchicalSubject(null);
+              setSelectedHierarchicalCourse(null);
+            }}
+            disabled={!hasProfileCourses}
+          >
+            <FontAwesome5
+              name="user-graduate"
+              size={14}
+              color={courseSelectionMode === 'profile' ? '#FFFFFF' : (hasProfileCourses ? '#D4AF37' : '#95A5A6')}
+            />
+            <Text style={[
+              styles.toggleText,
+              { color: courseSelectionMode === 'profile' ? '#FFFFFF' : (hasProfileCourses ? '#D4AF37' : '#95A5A6') }
+            ]}>
+              My Courses ({userCourses.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              courseSelectionMode === 'hierarchical' && styles.activeToggle
+            ]}
+            onPress={() => {
+              setCourseSelectionMode('hierarchical');
+              setSelectedSubject(null);
+            }}
+          >
+            <FontAwesome5
+              name="sitemap"
+              size={14}
+              color={courseSelectionMode === 'hierarchical' ? '#FFFFFF' : '#D4AF37'}
+            />
+            <Text style={[
+              styles.toggleText,
+              { color: courseSelectionMode === 'hierarchical' ? '#FFFFFF' : '#D4AF37' }
+            ]}>
+              All Subjects ({availableSubjects.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Profile Courses Selection */}
+        {courseSelectionMode === 'profile' && hasProfileCourses && (
           <CustomDropdown
             value={selectedSubject?.name || ""}
             onSelect={(value) => {
               const selectedCourse = userCourses.find(c => c.key === value);
               if (selectedCourse) {
                 setSubject(selectedCourse.name);
+                setTopic(selectedCourse.name); // Keep topic in sync
                 setSelectedSubject({
                   key: selectedCourse.key,
                   name: selectedCourse.name,
@@ -461,6 +591,14 @@ export default function AskAlexandriaScreen({ navigation, route }) {
                   icon: selectedCourse.icon,
                   color: selectedCourse.color,
                   source: 'user_profile'
+                });
+                // Also set selectedCourse for consistency
+                setSelectedCourse({
+                  name: selectedCourse.name,
+                  code: selectedCourse.code || selectedCourse.key,
+                  icon: selectedCourse.icon,
+                  color: selectedCourse.color,
+                  source: 'profile'
                 });
               }
             }}
@@ -475,8 +613,77 @@ export default function AskAlexandriaScreen({ navigation, route }) {
             setModalVisible={setCourseModalVisible}
             icon="graduation-cap"
           />
-        </View>
-      )}
+        )}
+
+        {/* Hierarchical Subject & Course Selection */}
+        {courseSelectionMode === 'hierarchical' && (
+          <>
+            {/* Subject Selection */}
+            <View style={styles.hierarchicalStep}>
+              <Text style={styles.stepLabel}>
+                <FontAwesome5 name="book" size={12} color="#D4AF37" /> Step 1: Choose Subject
+              </Text>
+              <CustomDropdown
+                value={selectedHierarchicalSubject || ""}
+                onSelect={handleHierarchicalSubjectSelect}
+                options={availableSubjects.map(subject => ({
+                  label: `🎓 ${subject}`,
+                  value: subject,
+                  icon: HierarchicalSubjectService.getSubjectIcon(subject),
+                  color: HierarchicalSubjectService.getSubjectColor(subject)
+                }))}
+                placeholder="Select a subject"
+                modalVisible={courseModalVisible}
+                setModalVisible={setCourseModalVisible}
+                icon="book"
+              />
+            </View>
+
+            {/* Course Selection */}
+            {selectedHierarchicalSubject && availableCourses.length > 0 && (
+              <View style={styles.hierarchicalStep}>
+                <Text style={styles.stepLabel}>
+                  <FontAwesome5 name="graduation-cap" size={12} color="#D4AF37" /> Step 2: Choose Course
+                </Text>
+                <CustomDropdown
+                  value={selectedHierarchicalCourse || ""}
+                  onSelect={handleHierarchicalCourseSelect}
+                  options={availableCourses.map(course => ({
+                    label: `📚 ${course}`,
+                    value: course,
+                    icon: 'book-open',
+                    color: HierarchicalSubjectService.getSubjectColor(selectedHierarchicalSubject)
+                  }))}
+                  placeholder={`Choose a course in ${selectedHierarchicalSubject}`}
+                  modalVisible={hierarchicalCourseModalVisible}
+                  setModalVisible={setHierarchicalCourseModalVisible}
+                  icon="graduation-cap"
+                />
+              </View>
+            )}
+
+            {/* Selection Summary */}
+            {selectedHierarchicalSubject && selectedHierarchicalCourse && (
+              <View style={styles.selectionSummary}>
+                <FontAwesome5 name="check-circle" size={16} color="#28a745" />
+                <Text style={styles.summaryText}>
+                  {selectedHierarchicalSubject} → {selectedHierarchicalCourse}
+                </Text>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* No Profile Courses Message */}
+        {courseSelectionMode === 'profile' && !hasProfileCourses && (
+          <View style={styles.noCoursesMessage}>
+            <FontAwesome5 name="info-circle" size={16} color="#F39C12" />
+            <Text style={styles.noCoursesText}>
+              No courses from your profile. Switch to "All Subjects" to explore courses.
+            </Text>
+          </View>
+        )}
+      </View>
 
     </View>
   );
@@ -1167,5 +1374,71 @@ const styles = StyleSheet.create({
     color: '#dc3545',
     fontWeight: '500',
     flex: 1,
+  },
+
+  // ✅ NEW: Hierarchical Course Selection Styles
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  activeToggle: {
+    backgroundColor: '#D4AF37',
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  hierarchicalStep: {
+    marginBottom: 16,
+  },
+  stepLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#CBD5E0',
+    marginBottom: 8,
+  },
+  selectionSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+    borderColor: 'rgba(40, 167, 69, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#28a745',
+    fontWeight: '600',
+  },
+  noCoursesMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    borderColor: 'rgba(243, 156, 18, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  noCoursesText: {
+    fontSize: 12,
+    color: '#F39C12',
+    flex: 1,
+    lineHeight: 16,
   },
 });

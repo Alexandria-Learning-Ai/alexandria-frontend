@@ -24,6 +24,8 @@ import { UserService } from '../utils/UserService';
 import { StudentProfileService } from '../services/StudentProfileService';
 import { ExamScheduleService } from '../utils/examScheduleService';
 import { NotificationManager } from '../utils/NotificationManager';
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Import hierarchical service
+import { SubjectProgressService } from '../services/SubjectProgressService'; // ✅ NEW: Import for hierarchical progress
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../contexts/LanguageContext';
 import FlashcardDashboard from '../components/FlashcardDashboard';
@@ -160,6 +162,16 @@ export default function HomeScreen({ navigation }) {
     const [daysLeft, setDaysLeft] = useState(0);
     const [currentQuote, setCurrentQuote] = useState(null);
     const [showFlashcardDashboard, setShowFlashcardDashboard] = useState(false);
+
+    // ✅ NEW: Hierarchical progress insights state
+    const [hierarchicalInsights, setHierarchicalInsights] = useState({
+        topSubject: null,
+        recentCourse: null,
+        improvingSubject: null,
+        needsAttentionSubject: null,
+        totalSubjects: 0,
+        totalCourses: 0
+    });
     
     // Profile menu states
     const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -219,6 +231,7 @@ export default function HomeScreen({ navigation }) {
         loadUserData();
         loadRecentStats();
         loadNextExam();
+        loadHierarchicalInsights(); // ✅ NEW: Load hierarchical insights
         
         setCurrentQuote(getRandomQuote());
         
@@ -664,6 +677,119 @@ export default function HomeScreen({ navigation }) {
         </Animatable.View>
     );
 
+    // ✅ NEW: Load hierarchical insights for dashboard
+    const loadHierarchicalInsights = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Get hierarchical progress data
+            const hierarchicalProgress = await SubjectProgressService.getHierarchicalProgress(user.uid);
+
+            if (Object.keys(hierarchicalProgress).length === 0) {
+                // No hierarchical data yet
+                setHierarchicalInsights({
+                    topSubject: null,
+                    recentCourse: null,
+                    improvingSubject: null,
+                    needsAttentionSubject: null,
+                    totalSubjects: 0,
+                    totalCourses: 0
+                });
+                return;
+            }
+
+            // Analyze the hierarchical data for insights
+            const subjects = Object.entries(hierarchicalProgress);
+            let totalCourses = 0;
+            let topSubject = null;
+            let topSubjectScore = 0;
+            let improvingSubject = null;
+            let maxImprovement = 0;
+            let needsAttentionSubject = null;
+            let lowestScore = 100;
+            let recentCourse = null;
+            let mostRecentTime = 0;
+
+            subjects.forEach(([subjectName, subjectData]) => {
+                const subjectScore = subjectData.averageScore || 0;
+                const courses = Object.keys(subjectData.courses || {});
+                totalCourses += courses.length;
+
+                // Find top-performing subject
+                if (subjectScore > topSubjectScore) {
+                    topSubjectScore = subjectScore;
+                    topSubject = {
+                        name: subjectName,
+                        score: subjectScore,
+                        courses: courses.length,
+                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
+                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
+                    };
+                }
+
+                // Find subject that needs attention (lowest score)
+                if (subjectScore > 0 && subjectScore < lowestScore) {
+                    lowestScore = subjectScore;
+                    needsAttentionSubject = {
+                        name: subjectName,
+                        score: subjectScore,
+                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
+                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
+                    };
+                }
+
+                // Find most recently studied course
+                Object.entries(subjectData.courses || {}).forEach(([courseName, courseData]) => {
+                    if (courseData.lastStudied) {
+                        const courseTime = new Date(courseData.lastStudied).getTime();
+                        if (courseTime > mostRecentTime) {
+                            mostRecentTime = courseTime;
+                            recentCourse = {
+                                name: courseName,
+                                subject: subjectName,
+                                score: courseData.averageScore || 0,
+                                lastStudied: courseData.lastStudied,
+                                color: HierarchicalSubjectService.getSubjectColor(subjectName)
+                            };
+                        }
+                    }
+                });
+
+                // Calculate improvement trend (simplified)
+                if (subjectData.improvementTrend && subjectData.improvementTrend > maxImprovement) {
+                    maxImprovement = subjectData.improvementTrend;
+                    improvingSubject = {
+                        name: subjectName,
+                        improvement: subjectData.improvementTrend,
+                        score: subjectScore,
+                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
+                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
+                    };
+                }
+            });
+
+            setHierarchicalInsights({
+                topSubject,
+                recentCourse,
+                improvingSubject,
+                needsAttentionSubject,
+                totalSubjects: subjects.length,
+                totalCourses
+            });
+
+            logger.info('📊 Hierarchical insights loaded:', {
+                totalSubjects: subjects.length,
+                totalCourses,
+                topSubject: topSubject?.name,
+                recentCourse: recentCourse?.name
+            });
+
+        } catch (error) {
+            logger.error('❌ Error loading hierarchical insights:', error);
+        }
+    };
+
     const ProgressWidget = () => {
         const [progressData, setProgressData] = useState({
             recentScores: [],
@@ -869,6 +995,149 @@ export default function HomeScreen({ navigation }) {
                     >
                         <Text style={[styles.quickProgressActionText, currentThemeStyles.quickProgressActionText]}>
                             View Detailed Analytics
+                        </Text>
+                        <FontAwesome5 name="arrow-right" size={14} color={currentThemeStyles.quickProgressActionText.color} />
+                    </TouchableOpacity>
+                </View>
+            </Animatable.View>
+        );
+    };
+
+    // ✅ NEW: Hierarchical Insights Widget Component
+    const HierarchicalInsightsWidget = () => {
+        const { totalSubjects, totalCourses, topSubject, recentCourse, needsAttentionSubject } = hierarchicalInsights;
+
+        // Don't show if no hierarchical data
+        if (totalSubjects === 0) {
+            return (
+                <Animatable.View animation="slideInUp" delay={750} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
+                    <View style={styles.progressHeader}>
+                        <FontAwesome5 name="sitemap" size={20} color={currentThemeStyles.progressIcon.color} />
+                        <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Course Insights</Text>
+                        <TouchableOpacity onPress={() => navigation.navigate('ProgressTracker')}>
+                            <FontAwesome5 name="external-link-alt" size={16} color={currentThemeStyles.progressIcon.color} />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.noProgressContainer}>
+                        <FontAwesome5 name="graduation-cap" size={32} color={currentThemeStyles.noProgressIcon.color} />
+                        <Text style={[styles.noProgressText, currentThemeStyles.noProgressText]}>
+                            Take hierarchical quizzes to see course-level insights!
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.startButton, currentThemeStyles.startButton]}
+                            onPress={() => navigation.navigate('AskAlexandria', { hierarchicalMode: true })}
+                        >
+                            <Text style={[styles.startButtonText, currentThemeStyles.startButtonText]}>Explore Subjects</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Animatable.View>
+            );
+        }
+
+        return (
+            <Animatable.View animation="slideInUp" delay={750} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
+                <View style={styles.progressHeader}>
+                    <FontAwesome5 name="sitemap" size={20} color={currentThemeStyles.progressIcon.color} />
+                    <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Course Insights</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate('ProgressTracker', { activeTab: 'courses' })}>
+                        <FontAwesome5 name="external-link-alt" size={16} color={currentThemeStyles.progressIcon.color} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.progressContent}>
+                    {/* Overview Stats */}
+                    <View style={styles.hierarchicalOverview}>
+                        <View style={styles.hierarchicalStat}>
+                            <Text style={[styles.hierarchicalStatNumber, currentThemeStyles.progressStatNumber]}>
+                                {totalSubjects}
+                            </Text>
+                            <Text style={[styles.hierarchicalStatLabel, currentThemeStyles.progressStatLabel]}>
+                                Subjects
+                            </Text>
+                        </View>
+                        <View style={styles.hierarchicalStat}>
+                            <Text style={[styles.hierarchicalStatNumber, currentThemeStyles.progressStatNumber]}>
+                                {totalCourses}
+                            </Text>
+                            <Text style={[styles.hierarchicalStatLabel, currentThemeStyles.progressStatLabel]}>
+                                Courses
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Top Subject */}
+                    {topSubject && (
+                        <View style={styles.hierarchicalInsight}>
+                            <View style={styles.insightHeader}>
+                                <View style={[styles.insightIcon, { backgroundColor: topSubject.color + '20' }]}>
+                                    <FontAwesome5 name={topSubject.icon} size={16} color={topSubject.color} />
+                                </View>
+                                <View style={styles.insightContent}>
+                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
+                                        🏆 Top Subject
+                                    </Text>
+                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
+                                        {topSubject.name}
+                                    </Text>
+                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
+                                        {topSubject.score}% • {topSubject.courses} courses
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Recent Course */}
+                    {recentCourse && (
+                        <View style={styles.hierarchicalInsight}>
+                            <View style={styles.insightHeader}>
+                                <View style={[styles.insightIcon, { backgroundColor: recentCourse.color + '20' }]}>
+                                    <FontAwesome5 name="clock" size={16} color={recentCourse.color} />
+                                </View>
+                                <View style={styles.insightContent}>
+                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
+                                        📚 Recent Course
+                                    </Text>
+                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
+                                        {recentCourse.name}
+                                    </Text>
+                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
+                                        in {recentCourse.subject} • {recentCourse.score}%
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Needs Attention */}
+                    {needsAttentionSubject && (
+                        <View style={styles.hierarchicalInsight}>
+                            <View style={styles.insightHeader}>
+                                <View style={[styles.insightIcon, { backgroundColor: needsAttentionSubject.color + '20' }]}>
+                                    <FontAwesome5 name="exclamation-triangle" size={16} color="#F39C12" />
+                                </View>
+                                <View style={styles.insightContent}>
+                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
+                                        ⚠️ Needs Practice
+                                    </Text>
+                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
+                                        {needsAttentionSubject.name}
+                                    </Text>
+                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
+                                        {needsAttentionSubject.score}% average
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Action Button */}
+                    <TouchableOpacity
+                        style={[styles.hierarchicalAction, currentThemeStyles.quickProgressAction]}
+                        onPress={() => navigation.navigate('AskAlexandria', { hierarchicalMode: true })}
+                    >
+                        <Text style={[styles.hierarchicalActionText, currentThemeStyles.quickProgressActionText]}>
+                            Study More Courses
                         </Text>
                         <FontAwesome5 name="arrow-right" size={14} color={currentThemeStyles.quickProgressActionText.color} />
                     </TouchableOpacity>
@@ -1143,6 +1412,7 @@ export default function HomeScreen({ navigation }) {
                 >
                     <Header />
                     <ProgressWidget />
+                    <HierarchicalInsightsWidget />
                     <MainActions />
                     <MotivationalQuote />
                     <ExamCountdownWidget />
@@ -1908,5 +2178,70 @@ const styles = StyleSheet.create({
     languageLabelSelected: {
         fontWeight: '700',
         color: '#28a745',
+    },
+
+    // ✅ NEW: Hierarchical Insights Widget Styles
+    hierarchicalOverview: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 16,
+    },
+    hierarchicalStat: {
+        alignItems: 'center',
+    },
+    hierarchicalStatNumber: {
+        fontSize: 20,
+        fontWeight: '800',
+        marginBottom: 4,
+    },
+    hierarchicalStatLabel: {
+        fontSize: 12,
+        opacity: 0.7,
+    },
+    hierarchicalInsight: {
+        marginBottom: 12,
+    },
+    insightHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    insightIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    insightContent: {
+        flex: 1,
+    },
+    insightTitle: {
+        fontSize: 12,
+        opacity: 0.8,
+        marginBottom: 2,
+    },
+    insightSubject: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    insightDetail: {
+        fontSize: 11,
+        opacity: 0.7,
+    },
+    hierarchicalAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 8,
+        marginTop: 8,
+        gap: 8,
+        borderWidth: 1,
+    },
+    hierarchicalActionText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
 });

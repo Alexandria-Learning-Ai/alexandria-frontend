@@ -39,6 +39,8 @@ import { SubjectProgressService } from '../services/SubjectProgressService';
 import IntelligentNotificationSystem from '../utils/IntelligentNotificationSystem';
 import { EnhancedExplanationService } from '../services/EnhancedExplanationService'; // 🚀 NEW
 import { FlashcardService } from '../services/FlashcardService'; // 🚀 NEW: Flashcard integration
+import AISubjectClassificationService from '../services/AISubjectClassificationService'; // ✅ NEW: AI subject classification
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Hierarchical subject classification
 import SafeBackButton from '../components/SafeBackButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import logger from '../utils/logger';
@@ -296,9 +298,19 @@ const ResultsScreen = ({ route, navigation }) => {
   // ✅ REMOVED: Individual explanation modal functions - now using unified AI Analysis section
 
   // ✅ UPDATED: Format quiz results for SubjectProgressService
-  const formatQuizResultsForSubjectProgress = () => {
+  const formatQuizResultsForSubjectProgress = async () => {
     logger.info('📊 Formatting quiz results for subject tracking...');
-    
+
+    // ✅ HIERARCHICAL: Use enhanced subject detection with course-level information
+    const hierarchicalResult = await determineCategoryHierarchical(metadata, [], questions);
+    logger.info(`🎯 Detected hierarchy:`, {
+      subject: hierarchicalResult.subject,
+      course: hierarchicalResult.course,
+      topic: hierarchicalResult.topic,
+      confidence: hierarchicalResult.confidence,
+      from_metadata: { subject: metadata?.subject, topic: metadata?.topic, category: metadata?.category }
+    });
+
     return {
       answers: questions.map((question, index) => ({
         question: question.text || question.questionText || '',
@@ -306,20 +318,31 @@ const ResultsScreen = ({ route, navigation }) => {
         correctAnswer: question.correctAnswer,
         isCorrect: question.isCorrect === true,
         options: question.options || [],
-        category: question.category || determineCategory(metadata, [], questions),
+        // ✅ HIERARCHICAL: Use enhanced category detection
+        category: question.category || determineQuestionCategory(question.text || question.questionText || ''),
+        subject: hierarchicalResult.subject,
+        course: hierarchicalResult.course, // ✅ NEW: Add course field
+        topic: hierarchicalResult.topic,   // ✅ NEW: Add topic field
         difficulty: question.difficulty || metadata.difficulty || 'medium',
         questionId: question.id,
         timeSpent: question.timeSpent || 30
       })),
       score: correctCount,
       totalQuestions: totalQuestions,
-      category: determineCategory(metadata, [], questions),
+      category: hierarchicalResult.subject,
+      subject: hierarchicalResult.subject,
+      course: hierarchicalResult.course,     // ✅ NEW: Add course field
+      topic: hierarchicalResult.topic,       // ✅ NEW: Add topic field
       difficulty: metadata.difficulty || 'medium',
       questions: questions,
       metadata: {
         completedAt: new Date().toISOString(),
         source: 'results_screen',
-        title: metadata.title || `${determineCategory(metadata, [], questions)} Quiz`
+        subject: hierarchicalResult.subject,
+        course: hierarchicalResult.course,   // ✅ NEW: Add course to metadata
+        topic: hierarchicalResult.topic || metadata?.topic || metadata?.subject,
+        title: metadata.title || `${hierarchicalResult.displayText} Quiz`,
+        confidence: hierarchicalResult.confidence
       }
     };
   };
@@ -335,8 +358,8 @@ const ResultsScreen = ({ route, navigation }) => {
 
       logger.info('📊 Quiz completed, analyzing results...');
       
-      // ✅ FIXED: Use properly formatted results
-      const formattedResults = formatQuizResultsForSubjectProgress();
+      // ✅ FIXED: Use properly formatted results (now async)
+      const formattedResults = await formatQuizResultsForSubjectProgress();
       
       logger.info('📊 Formatted results structure:', {
         answersCount: formattedResults.answers?.length || 0,
@@ -447,7 +470,7 @@ const ResultsScreen = ({ route, navigation }) => {
       }, metadata?.source || 'completed_quiz');
 
       // ✅ FIXED: Update subject progress when manually saving
-      const formattedResults = formatQuizResultsForSubjectProgress();
+      const formattedResults = await formatQuizResultsForSubjectProgress();
       await SubjectProgressService.updateSubjectProgress(user.uid, formattedResults);
 
       // Trigger smart analysis after saving
@@ -508,37 +531,202 @@ const ResultsScreen = ({ route, navigation }) => {
     }
   };
 
-  // Category determination
-  const determineCategory = (metadataParam, keywords, questionsParam) => {
+  // ✅ HIERARCHICAL: Enhanced subject classification with Course-level detection
+  const determineCategoryHierarchical = async (metadataParam, keywords, questionsParam) => {
     try {
-      if (metadataParam?.category) return metadataParam.category;
-      if (metadataParam?.subject) return metadataParam.subject;
+      logger.info('🎯 Using hierarchical subject classification...');
 
+      // Use the new hierarchical service
+      const hierarchy = HierarchicalSubjectService.classifyHierarchical(questionsParam, metadataParam);
+
+      // Return the primary subject for backward compatibility, but also store hierarchy
+      return {
+        subject: hierarchy.subject,
+        course: hierarchy.course,
+        topic: hierarchy.topic,
+        confidence: hierarchy.confidence,
+        displayText: hierarchy.course ? `${hierarchy.subject} - ${hierarchy.course}` : hierarchy.subject
+      };
+    } catch (error) {
+      logger.error('Error in hierarchical classification, using fallback:', error);
+      return await determineCategory(metadataParam, keywords, questionsParam);
+    }
+  };
+
+  // ✅ HYBRID: Intelligent subject classification with AI primary + keyword fallback (legacy)
+  const determineCategory = async (metadataParam, keywords, questionsParam) => {
+    try {
+      // 1. INSTANT: Check metadata fields first (90% of cases)
+      if (metadataParam?.subject && metadataParam.subject !== 'general' && metadataParam.subject !== 'General Knowledge') {
+        logger.info(`📊 Using metadata subject: ${metadataParam.subject}`);
+        return metadataParam.subject;
+      }
+      if (metadataParam?.topic && metadataParam.topic !== 'general' && metadataParam.topic !== 'General Knowledge') {
+        logger.info(`📊 Using metadata topic: ${metadataParam.topic}`);
+        return metadataParam.topic;
+      }
+      if (metadataParam?.category && metadataParam.category !== 'general' && metadataParam.category !== 'General Knowledge') {
+        logger.info(`📊 Using metadata category: ${metadataParam.category}`);
+        return metadataParam.category;
+      }
+
+      // 2. SMART: Use AI classification for unclear/custom content
+      if (Array.isArray(questionsParam) && questionsParam.length >= 2) {
+        logger.info('🤖 Using AI classification as primary method...');
+        try {
+          const aiSubject = await AISubjectClassificationService.classifyQuizSubject(questionsParam, metadataParam);
+          if (aiSubject && aiSubject !== 'General Knowledge') {
+            logger.info(`✅ AI classified subject as: ${aiSubject}`);
+            return aiSubject;
+          }
+        } catch (error) {
+          logger.warn('❌ AI classification failed, falling back to keyword analysis:', error);
+        }
+      }
+
+      // ✅ ENHANCED: Much more comprehensive keyword mapping
       const categoryMap = {
-        Math: ['mathematics', 'algebra', 'calculus', 'geometry', 'arithmetic', 'equation'],
-        Science: ['physics', 'chemistry', 'biology', 'anatomy', 'molecule', 'cell'],
-        History: ['historical', 'ancient', 'war', 'civilization', 'empire', 'revolution'],
-        Literature: ['literature', 'novel', 'poem', 'author', 'character', 'plot'],
-        Language: ['grammar', 'vocabulary', 'syntax', 'language', 'word', 'sentence'],
-        Geography: ['country', 'capital', 'continent', 'ocean', 'mountain', 'river'],
-        Programming: ['code', 'function', 'variable', 'algorithm', 'programming', 'software'],
+        Mathematics: [
+          'math', 'mathematics', 'algebra', 'calculus', 'geometry', 'arithmetic', 'equation',
+          'trigonometry', 'statistics', 'probability', 'derivative', 'integral', 'polynomial',
+          'logarithm', 'exponential', 'matrix', 'vector', 'limit', 'function', 'theorem',
+          'proof', 'sine', 'cosine', 'tangent', 'hyperbola', 'parabola', 'circle', 'triangle',
+          'square', 'rectangle', 'area', 'perimeter', 'volume', 'angle', 'degree', 'radian'
+        ],
+        Science: [
+          'physics', 'chemistry', 'biology', 'anatomy', 'molecule', 'cell', 'atom', 'electron',
+          'proton', 'neutron', 'nuclear', 'quantum', 'gravity', 'force', 'energy', 'momentum',
+          'acceleration', 'velocity', 'mass', 'density', 'pressure', 'temperature', 'heat',
+          'light', 'wave', 'frequency', 'amplitude', 'magnetic', 'electric', 'current', 'voltage',
+          'organism', 'ecosystem', 'evolution', 'genetics', 'dna', 'rna', 'protein', 'enzyme',
+          'photosynthesis', 'respiration', 'mitosis', 'meiosis', 'bacteria', 'virus'
+        ],
+        History: [
+          'history', 'historical', 'ancient', 'medieval', 'renaissance', 'revolution', 'war',
+          'civilization', 'empire', 'dynasty', 'monarch', 'democracy', 'republic', 'treaty',
+          'battle', 'conquest', 'independence', 'colonial', 'industrial', 'world war',
+          'civil war', 'constitution', 'amendment', 'president', 'congress', 'parliament'
+        ],
+        Literature: [
+          'literature', 'novel', 'poem', 'poetry', 'author', 'character', 'plot', 'theme',
+          'metaphor', 'symbolism', 'allegory', 'narrative', 'prose', 'verse', 'rhyme',
+          'meter', 'stanza', 'sonnet', 'haiku', 'drama', 'tragedy', 'comedy', 'shakespeare',
+          'dickens', 'twain', 'hemingway', 'fitzgerald', 'orwell', 'austen'
+        ],
+        English: [
+          'english', 'grammar', 'vocabulary', 'syntax', 'language', 'word', 'sentence',
+          'paragraph', 'essay', 'writing', 'reading', 'comprehension', 'verb', 'noun',
+          'adjective', 'adverb', 'pronoun', 'preposition', 'conjunction', 'clause',
+          'phrase', 'subject', 'predicate', 'tense', 'passive', 'active'
+        ],
+        Geography: [
+          'geography', 'country', 'capital', 'continent', 'ocean', 'mountain', 'river',
+          'climate', 'weather', 'precipitation', 'latitude', 'longitude', 'equator',
+          'hemisphere', 'timezone', 'population', 'urban', 'rural', 'city', 'state',
+          'province', 'territory', 'border', 'coastline', 'island', 'peninsula'
+        ],
+        Computer_Science: [
+          'programming', 'code', 'coding', 'function', 'variable', 'algorithm', 'software',
+          'hardware', 'computer', 'database', 'sql', 'python', 'java', 'javascript',
+          'html', 'css', 'array', 'loop', 'conditional', 'class', 'object', 'inheritance',
+          'recursion', 'sorting', 'searching', 'data structure', 'binary', 'network'
+        ],
+        Business: [
+          'business', 'marketing', 'finance', 'accounting', 'economics', 'management',
+          'entrepreneurship', 'strategy', 'profit', 'revenue', 'budget', 'investment',
+          'stock', 'market', 'supply', 'demand', 'inflation', 'gdp', 'recession',
+          'corporation', 'partnership', 'liability', 'asset', 'equity', 'debt'
+        ],
+        Art: [
+          'art', 'painting', 'sculpture', 'drawing', 'design', 'color', 'composition',
+          'perspective', 'renaissance', 'baroque', 'impressionism', 'modern', 'abstract',
+          'picasso', 'monet', 'da vinci', 'michelangelo', 'museum', 'gallery'
+        ],
+        Music: [
+          'music', 'musical', 'song', 'melody', 'rhythm', 'harmony', 'chord', 'scale',
+          'note', 'instrument', 'piano', 'guitar', 'violin', 'drums', 'orchestra',
+          'band', 'composer', 'musician', 'genre', 'classical', 'jazz', 'rock', 'pop'
+        ]
       };
 
+      // 3. RELIABLE BACKUP: Enhanced keyword analysis when AI isn't available
+      logger.info('🔄 Using enhanced keyword analysis as backup...');
+
+      // Check provided keywords first
       if (Array.isArray(keywords)) {
         for (const [category, categoryKeywords] of Object.entries(categoryMap)) {
           const matches = keywords.filter(keyword =>
             categoryKeywords.some(catKeyword => keyword?.toLowerCase().includes(catKeyword))
           ).length;
-          if (matches > 0) return category;
+          if (matches > 0) {
+            logger.info(`📊 Subject detected via provided keywords: ${category}`);
+            return category;
+          }
         }
       }
 
-      const mathTypes = questionsParam.filter(q => q?.type === 'math').length;
-      if (mathTypes > questionsParam.length * 0.5) return 'Mathematics';
+      // Analyze question content comprehensively
+      if (Array.isArray(questionsParam) && questionsParam.length > 0) {
+        const allQuestionText = questionsParam
+          .map(q => `${q.text || q.questionText || ''} ${(q.options || []).join(' ')}`)
+          .join(' ')
+          .toLowerCase();
 
+        // Score each category based on question content
+        const categoryScores = {};
+        for (const [category, categoryKeywords] of Object.entries(categoryMap)) {
+          let score = 0;
+          categoryKeywords.forEach(keyword => {
+            const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+            const matches = (allQuestionText.match(regex) || []).length;
+            score += matches * (keyword.length > 4 ? 2 : 1); // Longer keywords get more weight
+          });
+          categoryScores[category] = score;
+        }
+
+        // Find the category with highest score
+        const bestMatch = Object.entries(categoryScores)
+          .sort(([,a], [,b]) => b - a)[0];
+
+        if (bestMatch && bestMatch[1] > 0) {
+          logger.info(`📊 Subject detected via content analysis: ${bestMatch[0]} (score: ${bestMatch[1]})`);
+          return bestMatch[0];
+        }
+      }
+
+      // 4. FINAL FALLBACK: Simple type detection and default
+      const mathTypes = questionsParam.filter(q => q?.type === 'math').length;
+      if (mathTypes > questionsParam.length * 0.5) {
+        logger.info('📊 Subject detected via question types: Mathematics');
+        return 'Mathematics';
+      }
+
+      logger.info('📊 No specific subject detected, using General Knowledge');
       return 'General Knowledge';
     } catch (error) {
       logger.error('Error determining category:', error);
+      return 'General Knowledge';
+    }
+  };
+
+  // ✅ SYNC HELPER: Synchronous version for non-async contexts (uses cached/keyword only)
+  const determineCategorySync = (metadataParam, keywords, questionsParam) => {
+    try {
+      // Check metadata fields first
+      if (metadataParam?.subject && metadataParam.subject !== 'general' && metadataParam.subject !== 'General Knowledge') {
+        return metadataParam.subject;
+      }
+      if (metadataParam?.topic && metadataParam.topic !== 'general' && metadataParam.topic !== 'General Knowledge') {
+        return metadataParam.topic;
+      }
+      if (metadataParam?.category && metadataParam.category !== 'general' && metadataParam.category !== 'General Knowledge') {
+        return metadataParam.category;
+      }
+
+      // Use keyword analysis only (no AI for sync version)
+      return AISubjectClassificationService.fallbackClassification(questionsParam || [], metadataParam || {});
+    } catch (error) {
+      logger.error('Error in sync category determination:', error);
       return 'General Knowledge';
     }
   };
@@ -717,11 +905,75 @@ const ResultsScreen = ({ route, navigation }) => {
   const determineQuestionCategory = (questionText) => {
     const lowerText = questionText.toLowerCase();
 
-    if (lowerText.includes('climax') || lowerText.includes('dramática') || lowerText.includes('literature')) return 'Literature';
-    if (lowerText.includes('photosynthesis') || lowerText.includes('cell') || lowerText.includes('chemistry')) return 'Science';
-    if (lowerText.includes('equation') || lowerText.includes('calculate') || lowerText.includes('solve')) return 'Math';
-    if (lowerText.includes('war') || lowerText.includes('historical') || lowerText.includes('revolution')) return 'History';
-    if (lowerText.includes('capital') || lowerText.includes('country') || lowerText.includes('continent')) return 'Geography';
+    // ✅ ENHANCED: Use the same comprehensive keyword mapping as determineCategory
+    const categoryMap = {
+      Mathematics: [
+        'math', 'mathematics', 'algebra', 'calculus', 'geometry', 'arithmetic', 'equation',
+        'trigonometry', 'statistics', 'probability', 'derivative', 'integral', 'polynomial',
+        'logarithm', 'exponential', 'matrix', 'vector', 'limit', 'function', 'theorem',
+        'proof', 'sine', 'cosine', 'tangent', 'hyperbola', 'parabola', 'circle', 'triangle',
+        'square', 'rectangle', 'area', 'perimeter', 'volume', 'angle', 'degree', 'radian',
+        'calculate', 'solve', 'formula', 'sum', 'product', 'quotient', 'difference'
+      ],
+      Science: [
+        'physics', 'chemistry', 'biology', 'anatomy', 'molecule', 'cell', 'atom', 'electron',
+        'proton', 'neutron', 'nuclear', 'quantum', 'gravity', 'force', 'energy', 'momentum',
+        'acceleration', 'velocity', 'mass', 'density', 'pressure', 'temperature', 'heat',
+        'light', 'wave', 'frequency', 'amplitude', 'magnetic', 'electric', 'current', 'voltage',
+        'organism', 'ecosystem', 'evolution', 'genetics', 'dna', 'rna', 'protein', 'enzyme',
+        'photosynthesis', 'respiration', 'mitosis', 'meiosis', 'bacteria', 'virus'
+      ],
+      History: [
+        'history', 'historical', 'ancient', 'medieval', 'renaissance', 'revolution', 'war',
+        'civilization', 'empire', 'dynasty', 'monarch', 'democracy', 'republic', 'treaty',
+        'battle', 'conquest', 'independence', 'colonial', 'industrial', 'world war',
+        'civil war', 'constitution', 'amendment', 'president', 'congress', 'parliament'
+      ],
+      Literature: [
+        'literature', 'novel', 'poem', 'poetry', 'author', 'character', 'plot', 'theme',
+        'metaphor', 'symbolism', 'allegory', 'narrative', 'prose', 'verse', 'rhyme',
+        'meter', 'stanza', 'sonnet', 'haiku', 'drama', 'tragedy', 'comedy', 'shakespeare',
+        'dickens', 'twain', 'hemingway', 'fitzgerald', 'orwell', 'austen', 'climax', 'dramática'
+      ],
+      English: [
+        'english', 'grammar', 'vocabulary', 'syntax', 'language', 'word', 'sentence',
+        'paragraph', 'essay', 'writing', 'reading', 'comprehension', 'verb', 'noun',
+        'adjective', 'adverb', 'pronoun', 'preposition', 'conjunction', 'clause',
+        'phrase', 'subject', 'predicate', 'tense', 'passive', 'active'
+      ],
+      Geography: [
+        'geography', 'country', 'capital', 'continent', 'ocean', 'mountain', 'river',
+        'climate', 'weather', 'precipitation', 'latitude', 'longitude', 'equator',
+        'hemisphere', 'timezone', 'population', 'urban', 'rural', 'city', 'state',
+        'province', 'territory', 'border', 'coastline', 'island', 'peninsula'
+      ],
+      Computer_Science: [
+        'programming', 'code', 'coding', 'function', 'variable', 'algorithm', 'software',
+        'hardware', 'computer', 'database', 'sql', 'python', 'java', 'javascript',
+        'html', 'css', 'array', 'loop', 'conditional', 'class', 'object', 'inheritance',
+        'recursion', 'sorting', 'searching', 'data structure', 'binary', 'network'
+      ]
+    };
+
+    // Score each category based on keyword matches
+    const categoryScores = {};
+    for (const [category, keywords] of Object.entries(categoryMap)) {
+      let score = 0;
+      keywords.forEach(keyword => {
+        if (lowerText.includes(keyword)) {
+          score += keyword.length > 4 ? 2 : 1; // Longer keywords get more weight
+        }
+      });
+      categoryScores[category] = score;
+    }
+
+    // Find the category with highest score
+    const bestMatch = Object.entries(categoryScores)
+      .sort(([,a], [,b]) => b - a)[0];
+
+    if (bestMatch && bestMatch[1] > 0) {
+      return bestMatch[0];
+    }
 
     return 'General Knowledge';
   };
@@ -748,8 +1000,8 @@ const ResultsScreen = ({ route, navigation }) => {
     try {
       const shareableQuiz = {
         id: uuid.v4(),
-        title: metadata.title || `${determineCategory(metadata, [], questions)} Quiz`,
-        category: determineCategory(metadata, [], questions),
+        title: metadata.title || `${determineCategorySync(metadata, [], questions)} Quiz`,
+        category: determineCategorySync(metadata, [], questions),
         difficulty: metadata.difficulty || 'medium',
         questions: questions.map(q => ({
           id: q.id,
@@ -762,7 +1014,7 @@ const ResultsScreen = ({ route, navigation }) => {
           solution_steps: q.solution_steps || [],
         })),
         metadata: {
-          category: determineCategory(metadata, [], questions),
+          category: determineCategorySync(metadata, [], questions),
           difficulty: metadata.difficulty || 'medium',
           totalQuestions: questions.length,
           subject: metadata.subject,
@@ -815,7 +1067,7 @@ const ResultsScreen = ({ route, navigation }) => {
   };
 
   const generateShareableText = async (includeQuizLink = true) => {
-    const category = determineCategory(metadata, [], questions);
+    const category = determineCategorySync(metadata, [], questions);
     const date = new Date().toLocaleDateString();
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
@@ -897,7 +1149,7 @@ const ResultsScreen = ({ route, navigation }) => {
       const shareOptions = {
         title: 'Quiz Challenge! 🎯',
         message: shareText,
-        subject: `I scored ${percentage}% on this ${determineCategory(metadata, [], questions)} quiz! Can you beat me?`,
+        subject: `I scored ${percentage}% on this ${determineCategorySync(metadata, [], questions)} quiz! Can you beat me?`,
         url: '',
       };
       
@@ -941,7 +1193,7 @@ const ResultsScreen = ({ route, navigation }) => {
       }
 
       const deepLinks = generateDeepLink(shareableQuiz.id);
-      const category = determineCategory(metadata, [], questions);
+      const category = determineCategorySync(metadata, [], questions);
       
       let challengeText = `🎯 QUIZ CHALLENGE!\n\n`;
       challengeText += `I just completed a ${category} quiz and scored ${percentage}%!\n\n`;
@@ -1000,7 +1252,7 @@ const ResultsScreen = ({ route, navigation }) => {
           totalQuestions,
           score,
           percentage,
-          category: determineCategory(metadata, [], questions),
+          category: determineCategorySync(metadata, [], questions),
           completionTime: metadata?.completionTime || null
         },
         userAnswers,
@@ -1203,7 +1455,7 @@ const ResultsScreen = ({ route, navigation }) => {
           totalQuestions,
           percentage,
           questions,
-          category: determineCategory(metadata, [], questions),
+          category: determineCategorySync(metadata, [], questions),
           difficulty: metadata.difficulty || 'medium',
         }
       };
@@ -1717,7 +1969,14 @@ const AnalyticsSection = () => {
                 </Text>
               </View>
             </View>
-            
+
+            {/* ✅ NEW: Hierarchical Subject Classification Display */}
+            <HierarchicalSubjectDisplay
+              metadata={metadata}
+              questions={questions}
+              isDarkMode={isDarkMode}
+            />
+
             {/* Subject Progress Preview */}
             {userProfile.subject_accuracies && Object.keys(userProfile.subject_accuracies).length > 0 && (
               <View style={styles.subjectProgress}>
@@ -2130,7 +2389,7 @@ const AnalyticsSection = () => {
             <CoachMessage
               currentScore={score}
               totalQuestions={totalQuestions}
-              quizCategory={determineCategory(metadata, [], questions)}
+              quizCategory={determineCategorySync(metadata, [], questions)}
               isDarkMode={isDarkMode}
               style={{ marginHorizontal: 20, marginVertical: 10 }}
               onCoachTap={(coachMessage) => {
@@ -2162,6 +2421,123 @@ const AnalyticsSection = () => {
         />
       </View>
     </ErrorBoundary>
+  );
+};
+
+// ✅ NEW: Hierarchical Subject Classification Display Component
+const HierarchicalSubjectDisplay = ({ metadata, questions, isDarkMode }) => {
+  const [hierarchyInfo, setHierarchyInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const currentThemeStyles = isDarkMode ? darkStyles : lightStyles;
+
+  useEffect(() => {
+    const loadHierarchy = async () => {
+      try {
+        const hierarchy = HierarchicalSubjectService.classifyHierarchical(questions, metadata);
+        const displayInfo = HierarchicalSubjectService.getHierarchyDisplayInfo(hierarchy.subject, hierarchy.course);
+
+        setHierarchyInfo({
+          ...hierarchy,
+          ...displayInfo
+        });
+      } catch (error) {
+        logger.error('Error loading hierarchy info:', error);
+        setHierarchyInfo({
+          subject: 'General Knowledge',
+          course: null,
+          icon: 'book',
+          color: '#95A5A6'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHierarchy();
+  }, [metadata, questions]);
+
+  if (loading || !hierarchyInfo) {
+    return (
+      <View style={styles.hierarchyContainer}>
+        <ActivityIndicator size="small" color="#D4AF37" />
+        <Text style={[styles.hierarchyLoadingText, currentThemeStyles.text]}>
+          Analyzing subject area...
+        </Text>
+      </View>
+    );
+  }
+
+  const confidenceColor = hierarchyInfo.confidence > 0.8 ? '#28a745' :
+                           hierarchyInfo.confidence > 0.6 ? '#ffc107' : '#dc3545';
+
+  return (
+    <View style={[styles.hierarchyContainer, currentThemeStyles.hierarchyContainer]}>
+      <View style={styles.hierarchyHeader}>
+        <FontAwesome5
+          name={hierarchyInfo.icon}
+          size={20}
+          color={hierarchyInfo.color}
+          style={styles.hierarchyIcon}
+        />
+        <Text style={[styles.hierarchyTitle, currentThemeStyles.text]}>
+          Subject Classification
+        </Text>
+        <View style={[styles.confidenceBadge, { backgroundColor: confidenceColor }]}>
+          <Text style={styles.confidenceText}>
+            {Math.round(hierarchyInfo.confidence * 100)}%
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.hierarchyContent}>
+        {/* Main Subject */}
+        <View style={styles.hierarchyLevel}>
+          <Text style={[styles.hierarchyLabelText, currentThemeStyles.subtitle]}>Subject:</Text>
+          <Text style={[styles.hierarchyValueText, currentThemeStyles.text, { color: hierarchyInfo.color }]}>
+            {hierarchyInfo.subject}
+          </Text>
+        </View>
+
+        {/* Course Level */}
+        {hierarchyInfo.course && (
+          <View style={styles.hierarchyLevel}>
+            <Text style={[styles.hierarchyLabelText, currentThemeStyles.subtitle]}>Course:</Text>
+            <Text style={[styles.hierarchyValueText, currentThemeStyles.text]}>
+              {hierarchyInfo.course}
+            </Text>
+          </View>
+        )}
+
+        {/* Topic Level */}
+        {hierarchyInfo.topic && (
+          <View style={styles.hierarchyLevel}>
+            <Text style={[styles.hierarchyLabelText, currentThemeStyles.subtitle]}>Topic:</Text>
+            <Text style={[styles.hierarchyValueText, currentThemeStyles.text]}>
+              {hierarchyInfo.topic}
+            </Text>
+          </View>
+        )}
+
+        {/* Course Topics Preview */}
+        {hierarchyInfo.courseTopics && hierarchyInfo.courseTopics.length > 0 && (
+          <View style={styles.hierarchyTopicsContainer}>
+            <Text style={[styles.hierarchyTopicsLabel, currentThemeStyles.subtitle]}>
+              Related topics in {hierarchyInfo.course}:
+            </Text>
+            <View style={styles.topicsRow}>
+              {hierarchyInfo.courseTopics.slice(0, 3).map((topic, index) => (
+                <View key={index} style={[styles.topicTag, { borderColor: hierarchyInfo.color }]}>
+                  <Text style={[styles.topicTagText, currentThemeStyles.text]}>
+                    {topic}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
   );
 };
 
@@ -3241,6 +3617,81 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingLeft: 8,
   },
+
+  // ✅ NEW: Hierarchical Subject Display Styles
+  hierarchyContainer: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginVertical: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  hierarchyLoadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  hierarchyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hierarchyIcon: {
+    marginRight: 8,
+  },
+  hierarchyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  confidenceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  confidenceText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  hierarchyContent: {
+    gap: 8,
+  },
+  hierarchyLevel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  hierarchyLabelText: {
+    fontSize: 14,
+    fontWeight: '500',
+    width: 70,
+    opacity: 0.7,
+  },
+  hierarchyValueText: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  hierarchyTopicsContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  hierarchyTopicsLabel: {
+    fontSize: 13,
+    marginBottom: 8,
+    opacity: 0.8,
+  },
 });
 
 const newAnalyticsStyles = {
@@ -3543,6 +3994,9 @@ const darkStyles = StyleSheet.create({
   cancelButtonText: { color: '#E2E8F0' },
   submitButton: { backgroundColor: '#065F46' },
   submitButtonText: { color: '#FFFFFF' },
+
+  // ✅ NEW: Hierarchical Subject Display Dark Theme Styles
+  hierarchyContainer: { backgroundColor: '#2D3748', borderColor: 'rgba(212, 175, 55, 0.4)' },
 });
 
 export default ResultsScreen;

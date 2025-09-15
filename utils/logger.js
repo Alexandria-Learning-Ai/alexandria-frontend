@@ -7,12 +7,15 @@ import { API_BASE_URL } from '../config/api';
 const isDevelopment = __DEV__ || Constants.expoConfig?.extra?.isDevelopment;
 
 // Custom transport for sending logs to your Alexandria API
-const alexandriaApiTransport = logger.createTransport((log) => {
-  // Only send important logs to API (warn, error, security)
-  if (log.level.severity >= 3) { // warn=3, error=4
-    sendLogToApi(log);
+const alexandriaApiTransport = {
+  name: 'alexandriaApiTransport',
+  fn: (log) => {
+    // Only send important logs to API (warn, error, security)
+    if (log.level.severity >= 3) { // warn=3, error=4
+      sendLogToApi(log);
+    }
   }
-});
+};
 
 // Function to send logs to your Alexandria API
 const sendLogToApi = async (logData) => {

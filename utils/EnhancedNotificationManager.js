@@ -393,8 +393,9 @@ export class EnhancedNotificationManager {
   // Action handlers
   static async handleTakeQuizAction(data) {
     try {
-      // Store action for app to handle when opened
-      await AsyncStorage.setItem('pendingAction', JSON.stringify({
+      // Store action for app to handle when opened (user-specific)
+      const pendingActionKey = `pendingAction_${data.userId}`;
+      await AsyncStorage.setItem(pendingActionKey, JSON.stringify({
         type: 'TAKE_QUIZ',
         data,
         timestamp: Date.now()
@@ -432,7 +433,8 @@ export class EnhancedNotificationManager {
 
   static async handleViewProgressAction(data) {
     try {
-      await AsyncStorage.setItem('pendingAction', JSON.stringify({
+      const pendingActionKey = `pendingAction_${data.userId}`;
+      await AsyncStorage.setItem(pendingActionKey, JSON.stringify({
         type: 'VIEW_PROGRESS',
         data,
         timestamp: Date.now()
@@ -446,7 +448,8 @@ export class EnhancedNotificationManager {
 
   static async handleFocusSessionAction(data) {
     try {
-      await AsyncStorage.setItem('pendingAction', JSON.stringify({
+      const pendingActionKey = `pendingAction_${data.userId}`;
+      await AsyncStorage.setItem(pendingActionKey, JSON.stringify({
         type: 'FOCUS_SESSION',
         data,
         timestamp: Date.now()
@@ -460,7 +463,8 @@ export class EnhancedNotificationManager {
 
   static async handleDefaultTap(data) {
     try {
-      await AsyncStorage.setItem('pendingAction', JSON.stringify({
+      const pendingActionKey = `pendingAction_${data.userId}`;
+      await AsyncStorage.setItem(pendingActionKey, JSON.stringify({
         type: 'DEFAULT_NOTIFICATION_TAP',
         data,
         timestamp: Date.now()
@@ -591,8 +595,9 @@ export class EnhancedNotificationManager {
         metadata
       };
 
-      // Store engagement data
-      const engagementHistory = await AsyncStorage.getItem('notification_engagement') || '[]';
+      // Store engagement data per user
+      const engagementKey = `notification_engagement_${data.userId}`;
+      const engagementHistory = await AsyncStorage.getItem(engagementKey) || '[]';
       const history = JSON.parse(engagementHistory);
       history.push(engagement);
 
@@ -601,7 +606,7 @@ export class EnhancedNotificationManager {
         history.splice(0, history.length - 100);
       }
 
-      await AsyncStorage.setItem('notification_engagement', JSON.stringify(history));
+      await AsyncStorage.setItem(engagementKey, JSON.stringify(history));
       logger.info('📊 Tracked notification engagement:', action);
     } catch (error) {
       logger.error('Error tracking notification engagement:', error);
@@ -609,11 +614,17 @@ export class EnhancedNotificationManager {
   }
 
   // Get pending action (to be called when app opens)
-  static async getPendingAction() {
+  static async getPendingAction(userId) {
     try {
-      const pendingAction = await AsyncStorage.getItem('pendingAction');
+      if (!userId) {
+        logger.warn('getPendingAction called without userId');
+        return null;
+      }
+
+      const pendingActionKey = `pendingAction_${userId}`;
+      const pendingAction = await AsyncStorage.getItem(pendingActionKey);
       if (pendingAction) {
-        await AsyncStorage.removeItem('pendingAction');
+        await AsyncStorage.removeItem(pendingActionKey);
         return JSON.parse(pendingAction);
       }
       return null;

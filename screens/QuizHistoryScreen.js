@@ -20,6 +20,7 @@ import { auth } from '../firebaseConfig'; // Import auth
 import SafeBackButton from '../components/SafeBackButton';
 import { ListItemSkeleton } from '../components/SkeletonLoader';
 import { BookLoadingScreen } from '../components/BookLoadingAnimation';
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Import hierarchical service
 import logger from '../utils/logger';
 
 
@@ -30,6 +31,12 @@ export default function QuizHistoryScreen({ navigation }) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
+
+    // ✅ NEW: Course filtering state
+    const [filteredHistory, setFilteredHistory] = useState([]);
+    const [selectedFilter, setSelectedFilter] = useState('all'); // 'all', 'subject:SubjectName', 'course:CourseName'
+    const [availableFilters, setAvailableFilters] = useState([]);
+    const [showFilters, setShowFilters] = useState(false);
     
     // Animation ref for smooth exit
     const containerAnim = useRef(new Animated.Value(1)).current;
@@ -55,6 +62,12 @@ export default function QuizHistoryScreen({ navigation }) {
             });
             
             setHistory(sortedHistory);
+
+            // ✅ NEW: Build available filters from quiz history
+            buildFiltersFromHistory(sortedHistory);
+
+            // ✅ NEW: Apply current filter
+            applyFilter(sortedHistory, selectedFilter);
         } catch (error) {
             logger.error('Error fetching quiz history:', error);
             Alert.alert('Error', 'Failed to load quiz history');
@@ -62,6 +75,105 @@ export default function QuizHistoryScreen({ navigation }) {
             setLoading(false);
             setRefreshing(false);
         }
+    };
+
+    // ✅ NEW: Build available filters from quiz history
+    const buildFiltersFromHistory = (quizzes) => {
+        const filters = [{ value: 'all', label: 'All Quizzes', count: quizzes.length, icon: 'list' }];
+        const subjectMap = new Map();
+        const courseMap = new Map();
+
+        quizzes.forEach(quiz => {
+            // Extract subject information from metadata
+            const subject = quiz.metadata?.subject || quiz.metadata?.category || 'General';
+            const course = quiz.metadata?.course || quiz.metadata?.hierarchical?.course;
+
+            // Track subjects
+            if (!subjectMap.has(subject)) {
+                subjectMap.set(subject, { count: 0, courses: new Set() });
+            }
+            subjectMap.get(subject).count++;
+
+            // Track courses within subjects
+            if (course) {
+                subjectMap.get(subject).courses.add(course);
+                const courseKey = `${subject}→${course}`;
+                if (!courseMap.has(courseKey)) {
+                    courseMap.set(courseKey, 0);
+                }
+                courseMap.set(courseKey, courseMap.get(courseKey) + 1);
+            }
+        });
+
+        // Add subject filters
+        Array.from(subjectMap.entries())
+            .sort(([,a], [,b]) => b.count - a.count) // Sort by count descending
+            .forEach(([subject, data]) => {
+                filters.push({
+                    value: `subject:${subject}`,
+                    label: subject,
+                    count: data.count,
+                    icon: HierarchicalSubjectService.getSubjectIcon(subject),
+                    color: HierarchicalSubjectService.getSubjectColor(subject),
+                    type: 'subject'
+                });
+
+                // Add course filters within each subject
+                Array.from(data.courses)
+                    .sort()
+                    .forEach(course => {
+                        const courseKey = `${subject}→${course}`;
+                        const courseCount = courseMap.get(courseKey) || 0;
+                        if (courseCount > 0) {
+                            filters.push({
+                                value: `course:${subject}→${course}`,
+                                label: `${course}`,
+                                sublabel: `in ${subject}`,
+                                count: courseCount,
+                                icon: 'book-open',
+                                color: HierarchicalSubjectService.getSubjectColor(subject),
+                                type: 'course',
+                                subject: subject
+                            });
+                        }
+                    });
+            });
+
+        setAvailableFilters(filters);
+        logger.info('📊 Built quiz history filters:', filters.length);
+    };
+
+    // ✅ NEW: Apply filter to quiz history
+    const applyFilter = (quizzes, filterValue) => {
+        let filtered = quizzes;
+
+        if (filterValue !== 'all') {
+            if (filterValue.startsWith('subject:')) {
+                const subjectName = filterValue.replace('subject:', '');
+                filtered = quizzes.filter(quiz => {
+                    const quizSubject = quiz.metadata?.subject || quiz.metadata?.category || 'General';
+                    return quizSubject === subjectName;
+                });
+            } else if (filterValue.startsWith('course:')) {
+                const courseInfo = filterValue.replace('course:', '');
+                const [subject, course] = courseInfo.split('→');
+                filtered = quizzes.filter(quiz => {
+                    const quizSubject = quiz.metadata?.subject || quiz.metadata?.category || 'General';
+                    const quizCourse = quiz.metadata?.course || quiz.metadata?.hierarchical?.course;
+                    return quizSubject === subject && quizCourse === course;
+                });
+            }
+        }
+
+        setFilteredHistory(filtered);
+        logger.info(`📋 Applied filter "${filterValue}": ${filtered.length}/${quizzes.length} quizzes`);
+    };
+
+    // ✅ NEW: Handle filter selection
+    const handleFilterSelect = (filterValue) => {
+        setSelectedFilter(filterValue);
+        applyFilter(history, filterValue);
+        setShowFilters(false);
     };
 
     // Load history when screen is focused
@@ -269,6 +381,94 @@ export default function QuizHistoryScreen({ navigation }) {
         </Animatable.View>
     );
 
+    // ✅ NEW: Filter Bar Component
+    const FilterBar = () => (
+        <Animatable.View animation="slideInDown" delay={800} style={styles.filterContainer}>
+            <TouchableOpacity
+                style={[styles.filterButton, currentThemeStyles.filterButton]}
+                onPress={() => setShowFilters(!showFilters)}
+            >
+                <FontAwesome5
+                    name="filter"
+                    size={16}
+                    color={currentThemeStyles.filterIcon.color}
+                />
+                <Text style={[styles.filterButtonText, currentThemeStyles.filterButtonText]}>
+                    {selectedFilter === 'all' ? 'All Quizzes' :
+                     availableFilters.find(f => f.value === selectedFilter)?.label || 'Filter'}
+                </Text>
+                <Text style={[styles.filterCount, currentThemeStyles.filterCount]}>
+                    ({filteredHistory.length})
+                </Text>
+                <FontAwesome5
+                    name={showFilters ? 'chevron-up' : 'chevron-down'}
+                    size={12}
+                    color={currentThemeStyles.filterIcon.color}
+                />
+            </TouchableOpacity>
+
+            {showFilters && (
+                <Animatable.View animation="fadeInDown" style={styles.filtersDropdown}>
+                    <FlatList
+                        data={availableFilters}
+                        keyExtractor={(item) => item.value}
+                        renderItem={({ item: filter }) => (
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterOption,
+                                    currentThemeStyles.filterOption,
+                                    selectedFilter === filter.value && styles.selectedFilter
+                                ]}
+                                onPress={() => handleFilterSelect(filter.value)}
+                            >
+                                <View style={styles.filterOptionContent}>
+                                    <View style={[
+                                        styles.filterIcon,
+                                        { backgroundColor: (filter.color || '#D4AF37') + '20' }
+                                    ]}>
+                                        <FontAwesome5
+                                            name={filter.icon}
+                                            size={14}
+                                            color={filter.color || '#D4AF37'}
+                                        />
+                                    </View>
+                                    <View style={styles.filterTextContainer}>
+                                        <Text style={[
+                                            styles.filterOptionText,
+                                            currentThemeStyles.filterOptionText,
+                                            selectedFilter === filter.value && styles.selectedFilterText
+                                        ]}>
+                                            {filter.label}
+                                        </Text>
+                                        {filter.sublabel && (
+                                            <Text style={[styles.filterSublabel, currentThemeStyles.filterSublabel]}>
+                                                {filter.sublabel}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <View style={styles.filterBadge}>
+                                        <Text style={[styles.filterBadgeText, currentThemeStyles.filterBadgeText]}>
+                                            {filter.count}
+                                        </Text>
+                                    </View>
+                                </View>
+                                {selectedFilter === filter.value && (
+                                    <FontAwesome5
+                                        name="check"
+                                        size={16}
+                                        color="#28a745"
+                                        style={styles.selectedIcon}
+                                    />
+                                )}
+                            </TouchableOpacity>
+                        )}
+                        scrollEnabled={false}
+                    />
+                </Animatable.View>
+            )}
+        </Animatable.View>
+    );
+
     const EmptyState = () => (
         <Animatable.View animation="fadeIn" style={[styles.emptyContainer, currentThemeStyles.emptyContainer]}>
             <FontAwesome5 name="history" size={64} color={currentThemeStyles.emptyIcon.color} />
@@ -460,10 +660,15 @@ export default function QuizHistoryScreen({ navigation }) {
             }}>
             
             <FlatList
-                data={history}
+                data={filteredHistory}
                 keyExtractor={(item) => item.id}
                 renderItem={renderQuizItem}
-                ListHeaderComponent={Header}
+                ListHeaderComponent={() => (
+                    <>
+                        <Header />
+                        <FilterBar />
+                    </>
+                )}
                 ListEmptyComponent={EmptyState}
                 contentContainerStyle={styles.listContainer}
                 showsVerticalScrollIndicator={false}
@@ -832,6 +1037,113 @@ const lightStyles = StyleSheet.create({
     refreshColor: {
         color: '#1A2C5B',
     },
+
+    // ✅ NEW: Filter Bar Styles (Light Mode)
+    filterContainer: {
+        marginHorizontal: 16,
+        marginBottom: 16,
+    },
+    filterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(26, 44, 91, 0.1)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        gap: 8,
+    },
+    filterButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A2C5B',
+        flex: 1,
+    },
+    filterCount: {
+        fontSize: 12,
+        color: '#4A5568',
+        backgroundColor: 'rgba(26, 44, 91, 0.1)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    filterIcon: {
+        color: '#D4AF37',
+    },
+    filtersDropdown: {
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        borderRadius: 12,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(26, 44, 91, 0.1)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
+        maxHeight: 300,
+    },
+    filterOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(26, 44, 91, 0.1)',
+    },
+    selectedFilter: {
+        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    },
+    filterOptionContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 12,
+    },
+    filterIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    filterTextContainer: {
+        flex: 1,
+    },
+    filterOptionText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#1A2C5B',
+    },
+    selectedFilterText: {
+        fontWeight: '700',
+        color: '#D4AF37',
+    },
+    filterSublabel: {
+        fontSize: 11,
+        color: '#4A5568',
+        marginTop: 2,
+    },
+    filterBadge: {
+        backgroundColor: 'rgba(26, 44, 91, 0.1)',
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        minWidth: 24,
+        alignItems: 'center',
+    },
+    filterBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#4A5568',
+    },
+    selectedIcon: {
+        marginLeft: 8,
+    },
 });
 
 // Dark Mode Styles
@@ -951,5 +1263,42 @@ const darkStyles = StyleSheet.create({
     skeletonContainer: {
         paddingHorizontal: 16,
         paddingTop: 20,
+    },
+
+    // ✅ NEW: Filter Bar Styles (Dark Mode)
+    filterButton: {
+        backgroundColor: 'rgba(44, 70, 125, 0.8)',
+        borderColor: 'rgba(212, 175, 55, 0.3)',
+        shadowColor: '#D4AF37',
+    },
+    filterButtonText: {
+        color: '#F8F4E3',
+    },
+    filterCount: {
+        color: '#CBD5E0',
+        backgroundColor: 'rgba(212, 175, 55, 0.2)',
+    },
+    filterIcon: {
+        color: '#D4AF37',
+    },
+    filtersDropdown: {
+        backgroundColor: 'rgba(44, 70, 125, 0.95)',
+        borderColor: 'rgba(212, 175, 55, 0.3)',
+        shadowColor: '#D4AF37',
+    },
+    filterOption: {
+        borderBottomColor: 'rgba(212, 175, 55, 0.2)',
+    },
+    filterOptionText: {
+        color: '#F8F4E3',
+    },
+    filterSublabel: {
+        color: '#CBD5E0',
+    },
+    filterBadge: {
+        backgroundColor: 'rgba(212, 175, 55, 0.2)',
+    },
+    filterBadgeText: {
+        color: '#CBD5E0',
     },
 });

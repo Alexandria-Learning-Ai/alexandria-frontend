@@ -1,11 +1,21 @@
 // utils/examScheduleService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '../firebaseConfig'; // ✅ Add auth import
 import logger from '../utils/logger';
 
 
-const STORAGE_KEY = 'scheduled_exams';
+const STORAGE_KEY_PREFIX = 'scheduled_exams_'; // ✅ Changed to prefix for user-specific keys
 
 export class ExamScheduleService {
+    // ✅ NEW: Get user-specific storage key
+    static getUserStorageKey() {
+        const user = auth.currentUser;
+        if (!user) {
+            throw new Error('User must be authenticated to access exam data');
+        }
+        return `${STORAGE_KEY_PREFIX}${user.uid}`;
+    }
+
     // Add this method to match your ScheduleExamScreen
     static async addExam(examData) {
         try {
@@ -22,7 +32,7 @@ export class ExamScheduleService {
             };
             
             const updatedExams = [...existingExams, newExam];
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedExams));
+            await AsyncStorage.setItem(this.getUserStorageKey(), JSON.stringify(updatedExams));
             logger.info('✅ Exam saved:', newExam.title);
             return newExam;
         } catch (error) {
@@ -34,7 +44,7 @@ export class ExamScheduleService {
     // Get all user exams
     static async getUserExams() {
         try {
-            const examsData = await AsyncStorage.getItem(STORAGE_KEY);
+            const examsData = await AsyncStorage.getItem(this.getUserStorageKey());
             if (examsData) {
                 const exams = JSON.parse(examsData);
                 // Convert date strings back to Date objects
@@ -63,7 +73,7 @@ export class ExamScheduleService {
             };
             
             const updatedExams = [...existingExams, newExam];
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedExams));
+            await AsyncStorage.setItem(this.getUserStorageKey(), JSON.stringify(updatedExams));
             return newExam;
         } catch (error) {
             logger.error('Error saving exam:', error);
@@ -76,7 +86,7 @@ export class ExamScheduleService {
         try {
             const existingExams = await this.getUserExams();
             const updatedExams = existingExams.filter(exam => exam.id !== examId);
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedExams));
+            await AsyncStorage.setItem(this.getUserStorageKey(), JSON.stringify(updatedExams));
             logger.info('✅ Exam deleted:', examId);
         } catch (error) {
             logger.error('Error deleting exam:', error);
@@ -96,7 +106,7 @@ export class ExamScheduleService {
                     ...updatedData,
                     examDate: new Date(updatedData.examDate || existingExams[examIndex].examDate)
                 };
-                await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(existingExams));
+                await AsyncStorage.setItem(this.getUserStorageKey(), JSON.stringify(existingExams));
                 return existingExams[examIndex];
             }
             throw new Error('Exam not found');

@@ -28,6 +28,7 @@ import { API_BASE_URL } from '../config/api';
 import SubjectSelector from '../components/SubjectSelector'; // ✅ NEW: Import SubjectSelector
 import { UserCoursesService } from '../services/UserCoursesService'; // ✅ NEW: Import UserCoursesService
 import { StudentProfileService } from '../services/StudentProfileService'; // ✅ NEW: Import for validation
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Import hierarchical service
 import { useTranslation } from 'react-i18next';
 import NavigationHelper from '../utils/NavigationHelper';
 import logger from '../utils/logger';
@@ -176,7 +177,16 @@ export default function UploadScreen({ navigation }) {
     // ✅ NEW: Subject validation states
     const [subjectValidation, setSubjectValidation] = useState(null);
     const [validatingSubject, setValidatingSubject] = useState(false);
-    
+
+    // ✅ NEW: Hierarchical course selection state
+    const [hierarchicalMode, setHierarchicalMode] = useState(false);
+    const [availableSubjects, setAvailableSubjects] = useState([]);
+    const [selectedHierarchicalSubject, setSelectedHierarchicalSubject] = useState(null);
+    const [availableCourses, setAvailableCourses] = useState([]);
+    const [selectedHierarchicalCourse, setSelectedHierarchicalCourse] = useState(null);
+    const [courseSelectionMode, setCourseSelectionMode] = useState('profile'); // 'profile' or 'hierarchical'
+    const [selectedCourse, setSelectedCourse] = useState(null);
+
     // ✅ NEW: Visual enhancement preference
     const [visualEnhancement, setVisualEnhancement] = useState('auto'); // 'auto', 'enabled', 'disabled'
 
@@ -234,11 +244,50 @@ export default function UploadScreen({ navigation }) {
         }
     }, []);
 
-    // Refresh user courses whenever screen comes into focus
+    // ✅ NEW: Load hierarchical subjects for enhanced course selection
+    const loadHierarchicalSubjects = useCallback(() => {
+        try {
+            const subjects = Object.keys(HierarchicalSubjectService.SUBJECT_HIERARCHY);
+            setAvailableSubjects(subjects);
+            logger.info(`🎓 Loaded ${subjects.length} hierarchical subjects for Upload screen`);
+        } catch (error) {
+            logger.error('❌ Error loading hierarchical subjects for Upload screen:', error);
+        }
+    }, []);
+
+    // ✅ NEW: Handle hierarchical subject selection
+    const handleHierarchicalSubjectSelect = useCallback((subjectName) => {
+        setSelectedHierarchicalSubject(subjectName);
+        setSelectedHierarchicalCourse(null); // Clear course selection
+
+        // Load available courses for this subject
+        const hierarchy = HierarchicalSubjectService.SUBJECT_HIERARCHY[subjectName];
+        if (hierarchy && hierarchy.courses) {
+            const courses = Object.keys(hierarchy.courses);
+            setAvailableCourses(courses);
+            logger.info(`📚 Loaded ${courses.length} courses for ${subjectName} in Upload screen`);
+        }
+    }, []);
+
+    // ✅ NEW: Handle hierarchical course selection
+    const handleHierarchicalCourseSelect = useCallback((courseName) => {
+        setSelectedHierarchicalCourse(courseName);
+
+        // Create a course object similar to profile courses for consistency
+        setSelectedCourse({
+            name: courseName,
+            code: `${selectedHierarchicalSubject}_${courseName}`.replace(/\s+/g, '_').toUpperCase(),
+            subject: selectedHierarchicalSubject,
+            source: 'hierarchical'
+        });
+    }, [selectedHierarchicalSubject]);
+
+    // Refresh user courses and load hierarchical subjects when screen comes into focus
     useFocusEffect(
         React.useCallback(() => {
             loadUserCourses();
-        }, [loadUserCourses])
+            loadHierarchicalSubjects();
+        }, [loadUserCourses, loadHierarchicalSubjects])
     );
 
     // Smooth upload progress animation
@@ -550,13 +599,23 @@ export default function UploadScreen({ navigation }) {
                         metadata: {
                             ...res.data.metadata,
                             title: 'Alexandria Trial of Wisdom',
-                            // ✅ NEW: Include subject information for progress tracking
-                            category: selectedSubject?.name || 'Document Study',
+                            // ✅ ENHANCED: Include hierarchical subject information for progress tracking
+                            category: selectedCourse?.name || selectedSubject?.name || 'Document Study',
+                            course: selectedCourse?.name,
+                            subject: selectedHierarchicalSubject || selectedCourse?.subject || selectedSubject?.name,
+                            topic: selectedHierarchicalCourse || selectedCourse?.name,
                             manualSubject: selectedSubject,
                             subjectKey: selectedSubject?.key,
                             subjectType: selectedSubject?.type,
                             subjectValidation: subjectValidation, // Include validation result
-                            fileName: firstFile.name
+                            fileName: firstFile.name,
+                            // ✅ NEW: Hierarchical metadata
+                            hierarchical: {
+                                enabled: courseSelectionMode === 'hierarchical',
+                                subject: selectedHierarchicalSubject,
+                                course: selectedHierarchicalCourse,
+                                source: selectedCourse?.source || 'profile'
+                            }
                         }
                     });
                 });
@@ -2285,5 +2344,72 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: '#F8F4E3',
         marginLeft: 12,
+    },
+
+    // ✅ NEW: Hierarchical Course Selection Styles
+    courseSelectionContainer: {
+        marginBottom: 24,
+    },
+    sectionLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 12,
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 12,
+        padding: 4,
+        marginBottom: 16,
+    },
+    toggleButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+    },
+    activeToggle: {
+        backgroundColor: '#D4AF37',
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    hierarchicalStep: {
+        marginBottom: 16,
+    },
+    stepLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginBottom: 8,
+    },
+    selectionSummary: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 12,
+        gap: 8,
+    },
+    summaryText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    noCoursesMessage: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 12,
+        gap: 8,
+    },
+    noCoursesText: {
+        fontSize: 12,
+        flex: 1,
+        lineHeight: 16,
     },
 });

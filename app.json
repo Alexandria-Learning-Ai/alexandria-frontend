@@ -34,7 +34,7 @@
       "eas": {
         "projectId": "a4ff9d06-5ee5-417e-b658-7b1c431edb9f"
       },
-      "apiBaseUrl": "https://api.alexandria-learning.com"
+      "apiBaseUrl": "https://alexandria-api-ywcw.onrender.com"
     },
     "runtimeVersion": {
       "policy": "appVersion"

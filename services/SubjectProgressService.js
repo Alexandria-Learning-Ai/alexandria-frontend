@@ -1,12 +1,15 @@
 // services/SubjectProgressService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WeaknessAnalysisService } from './WeaknessAnalysisService';
+import HierarchicalSubjectService from './HierarchicalSubjectService'; // ✅ NEW: Hierarchical subjects
 import logger from '../utils/logger';
 
 
 export class SubjectProgressService {
   static PROGRESS_KEY = 'subject_progress';
   static SUBJECT_STATS_KEY = 'subject_statistics';
+  static COURSE_PROGRESS_KEY = 'course_progress'; // ✅ NEW: Course-level progress
+  static HIERARCHICAL_STATS_KEY = 'hierarchical_statistics'; // ✅ NEW: Hierarchical stats
 
   // Define subject categories and their sub-topics
   static SUBJECT_TAXONOMY = {
@@ -77,13 +80,16 @@ export class SubjectProgressService {
     return iconMap[subjectKey] || 'book'; // Default book
   }
 
-  // ✅ Analyze quiz and update subject-specific progress
+  // ✅ ENHANCED: Update both subject and course-level progress
   static async updateSubjectProgress(userId, quizResults) {
     try {
-        logger.info('📊 Updating subject-specific progress...');
+        logger.info('📊 Updating hierarchical subject progress...');
         logger.info('📊 Quiz results structure:', JSON.stringify(quizResults, null, 2)); // Debug log
 
-        // ✅ FIX: Validate and normalize quizResults structure
+        // ✅ NEW: Update hierarchical progress first
+        await this.updateHierarchicalProgress(userId, quizResults);
+
+        // ✅ FIX: Validate and normalize quizResults structure (legacy support)
         const normalizedResults = this.normalizeQuizResults(quizResults);
         
         if (!normalizedResults.answers || normalizedResults.answers.length === 0) {
@@ -607,11 +613,212 @@ export class SubjectProgressService {
   static calculateOverallBalance(progress) {
     const subjects = Object.values(progress);
     if (subjects.length === 0) return 100;
-    
+
     const consistencyScores = subjects.map(s => s.consistency || 0);
     const averageConsistency = consistencyScores.reduce((a, b) => a + b, 0) / subjects.length;
-    
+
     return Math.round(averageConsistency);
+  }
+
+  // ✅ NEW: Hierarchical Progress Management Methods
+
+  /**
+   * Update hierarchical progress (Subject → Course → Topic)
+   */
+  static async updateHierarchicalProgress(userId, quizResults) {
+    try {
+      logger.info('🎯 Updating hierarchical progress...');
+
+      // Extract hierarchical information from quiz results
+      const { subject, course, topic, answers, score, totalQuestions } = quizResults;
+
+      if (!subject) {
+        logger.warn('No subject found in quiz results, skipping hierarchical update');
+        return;
+      }
+
+      // Get current hierarchical progress
+      const currentProgress = await this.getHierarchicalProgress(userId);
+
+      // Update subject-level progress
+      if (!currentProgress[subject]) {
+        currentProgress[subject] = {
+          name: subject,
+          totalQuizzes: 0,
+          totalQuestions: 0,
+          correctAnswers: 0,
+          averageScore: 0,
+          lastUpdated: new Date().toISOString(),
+          courses: {},
+          ...HierarchicalSubjectService.getHierarchyDisplayInfo(subject)
+        };
+      }
+
+      // Update course-level progress
+      if (course && !currentProgress[subject].courses[course]) {
+        currentProgress[subject].courses[course] = {
+          name: course,
+          totalQuizzes: 0,
+          totalQuestions: 0,
+          correctAnswers: 0,
+          averageScore: 0,
+          lastUpdated: new Date().toISOString(),
+          topics: {}
+        };
+      }
+
+      // Update topic-level progress
+      if (topic && course && !currentProgress[subject].courses[course].topics[topic]) {
+        currentProgress[subject].courses[course].topics[topic] = {
+          name: topic,
+          totalQuizzes: 0,
+          totalQuestions: 0,
+          correctAnswers: 0,
+          averageScore: 0,
+          lastUpdated: new Date().toISOString()
+        };
+      }
+
+      // Calculate statistics
+      const correctCount = score || (answers ? answers.filter(a => a.isCorrect).length : 0);
+      const totalCount = totalQuestions || (answers ? answers.length : 0);
+
+      if (totalCount > 0) {
+        // Update subject stats
+        this.updateHierarchyNode(currentProgress[subject], correctCount, totalCount);
+
+        // Update course stats
+        if (course) {
+          this.updateHierarchyNode(currentProgress[subject].courses[course], correctCount, totalCount);
+
+          // Update topic stats
+          if (topic) {
+            this.updateHierarchyNode(currentProgress[subject].courses[course].topics[topic], correctCount, totalCount);
+          }
+        }
+      }
+
+      // Save updated progress
+      await AsyncStorage.setItem(
+        `${this.COURSE_PROGRESS_KEY}_${userId}`,
+        JSON.stringify(currentProgress)
+      );
+
+      logger.info(`✅ Hierarchical progress updated: ${subject}${course ? ` → ${course}` : ''}${topic ? ` → ${topic}` : ''}`);
+
+    } catch (error) {
+      logger.error('❌ Error updating hierarchical progress:', error);
+    }
+  }
+
+  /**
+   * Update statistics for a hierarchy node (subject, course, or topic)
+   */
+  static updateHierarchyNode(node, correctCount, totalCount) {
+    node.totalQuizzes += 1;
+    node.totalQuestions += totalCount;
+    node.correctAnswers += correctCount;
+    node.averageScore = Math.round((node.correctAnswers / node.totalQuestions) * 100);
+    node.lastUpdated = new Date().toISOString();
+
+    // Calculate trend
+    const newScore = Math.round((correctCount / totalCount) * 100);
+    if (!node.recentScores) node.recentScores = [];
+    node.recentScores.push(newScore);
+    if (node.recentScores.length > 10) node.recentScores.shift();
+
+    // Calculate trend direction
+    if (node.recentScores.length >= 3) {
+      const recent = node.recentScores.slice(-3);
+      const trend = recent[2] - recent[0];
+      node.trend = trend > 5 ? 'improving' : trend < -5 ? 'declining' : 'stable';
+    }
+  }
+
+  /**
+   * Get hierarchical progress data
+   */
+  static async getHierarchicalProgress(userId) {
+    try {
+      const stored = await AsyncStorage.getItem(`${this.COURSE_PROGRESS_KEY}_${userId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch (error) {
+      logger.error('Error getting hierarchical progress:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Get course-level progress for a specific subject
+   */
+  static async getCourseProgress(userId, subject) {
+    const hierarchicalProgress = await this.getHierarchicalProgress(userId);
+    return hierarchicalProgress[subject]?.courses || {};
+  }
+
+  /**
+   * Get topic-level progress for a specific course
+   */
+  static async getTopicProgress(userId, subject, course) {
+    const hierarchicalProgress = await this.getHierarchicalProgress(userId);
+    return hierarchicalProgress[subject]?.courses?.[course]?.topics || {};
+  }
+
+  /**
+   * Get recommendations based on hierarchical performance
+   */
+  static async getHierarchicalRecommendations(userId) {
+    try {
+      const progress = await this.getHierarchicalProgress(userId);
+      const recommendations = [];
+
+      Object.entries(progress).forEach(([subjectName, subject]) => {
+        // Subject-level recommendations
+        if (subject.averageScore < 70 && subject.totalQuizzes >= 2) {
+          recommendations.push({
+            type: 'subject_improvement',
+            subject: subjectName,
+            message: `Focus on improving ${subjectName} fundamentals`,
+            priority: 'high',
+            actionable: `Practice more ${subjectName} quizzes`
+          });
+        }
+
+        // Course-level recommendations
+        Object.entries(subject.courses || {}).forEach(([courseName, course]) => {
+          if (course.averageScore < 60 && course.totalQuizzes >= 2) {
+            recommendations.push({
+              type: 'course_improvement',
+              subject: subjectName,
+              course: courseName,
+              message: `Struggling with ${courseName}`,
+              priority: 'medium',
+              actionable: `Review ${courseName} concepts and practice more`
+            });
+          }
+
+          if (course.trend === 'declining') {
+            recommendations.push({
+              type: 'course_trend',
+              subject: subjectName,
+              course: courseName,
+              message: `Performance declining in ${courseName}`,
+              priority: 'medium',
+              actionable: `Revisit recent ${courseName} topics`
+            });
+          }
+        });
+      });
+
+      return recommendations.sort((a, b) => {
+        const priority = { high: 3, medium: 2, low: 1 };
+        return priority[b.priority] - priority[a.priority];
+      });
+
+    } catch (error) {
+      logger.error('Error getting hierarchical recommendations:', error);
+      return [];
+    }
   }
 }
 

@@ -195,6 +195,7 @@ export default function ProfileScreen({ navigation, route }) {
     const [profile, setProfile] = useState({
         firstName: '',
         lastName: '',
+        birthDate: '',
         educationLevel: '',
         year: '',
         semester: '',
@@ -364,6 +365,16 @@ export default function ProfileScreen({ navigation, route }) {
                     Alert.alert(t('profile.validation.required'), 'Please enter both your first and last name.');
                     return false;
                 }
+                if (!profile.birthDate.trim()) {
+                    Alert.alert(t('profile.validation.required'), 'Please enter your birth date.');
+                    return false;
+                }
+                // Basic birth date format validation
+                const dateRegex = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/;
+                if (!dateRegex.test(profile.birthDate)) {
+                    Alert.alert('Invalid Date', 'Please enter birth date in MM/DD/YYYY format.');
+                    return false;
+                }
                 break;
             case 2:
                 if (!profile.educationLevel) {
@@ -476,17 +487,17 @@ export default function ProfileScreen({ navigation, route }) {
                         ]
                     );
                 } else {
-                    // New profile creation - welcome message and go to Home
+                    // New profile creation - welcome message and go to Terms
                     Alert.alert(
-                        '🎉 Welcome to Alexandria!',
-                        `Hi ${profile.firstName}! Your personalized study profile is complete. Alexandria is now ready to create learning experiences tailored just for you!`,
+                        '🎉 Profile Complete!',
+                        `Hi ${profile.firstName}! Your personalized study profile is ready. Next, please review and accept our terms of service to start learning.`,
                         [
                             {
-                                text: 'Start Learning',
+                                text: 'Review Terms',
                                 onPress: () => {
                                     navigation.reset({
                                         index: 0,
-                                        routes: [{ name: 'Home' }]
+                                        routes: [{ name: 'TermsAndAgreementScreen' }]
                                     });
                                 }
                             }
@@ -847,6 +858,20 @@ export default function ProfileScreen({ navigation, route }) {
                     placeholderTextColor="#CBD5E0"
                     maxLength={25}
                 />
+            </View>
+
+            <View style={styles.inputContainer}>
+                <Text style={styles.label}>Birth Date *</Text>
+                <TextInput
+                    style={styles.input}
+                    value={profile.birthDate}
+                    onChangeText={(text) => setProfile(prev => ({ ...prev, birthDate: text }))}
+                    placeholder="MM/DD/YYYY"
+                    placeholderTextColor="#CBD5E0"
+                    maxLength={10}
+                    keyboardType="numeric"
+                />
+                <Text style={styles.helperText}>Required for age verification and compliance</Text>
             </View>
         </Animatable.View>
     );
@@ -1360,6 +1385,12 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#F8F4E3',
         marginBottom: 8,
+    },
+    helperText: {
+        fontSize: 12,
+        color: '#CBD5E0',
+        marginTop: 4,
+        fontStyle: 'italic',
     },
     input: {
         backgroundColor: 'rgba(248, 244, 227, 0.1)',

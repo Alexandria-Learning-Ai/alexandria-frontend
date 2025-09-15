@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from '../firebaseConfig';
 import { useTranslation } from 'react-i18next';
 import { API_BASE_URL } from '../config/api';
+import { StudentProfileService } from '../services/StudentProfileService';
 import logger from '../utils/logger';
 
 
@@ -82,26 +83,49 @@ export default function TermsAndAgreementScreen({ navigation }) {
       if (user) {
         // Store terms acceptance with timestamp and version
         // Get user's language preference with fallback chain
-        const userLanguage = 
+        const userLanguage =
           (await AsyncStorage.getItem(`selectedLanguage_${user.uid}`)) ||
           (await AsyncStorage.getItem(`userLanguage_${user.uid}`)) ||
           (await AsyncStorage.getItem('selectedLanguage')) ||
           i18n.language || 'en';
-        
-        //  Comprehensive legal compliance data
+
+        // Load user's profile data for enhanced legal compliance
+        let userProfile = null;
+        try {
+          const profileStatus = await StudentProfileService.checkProfileStatus(user.uid);
+          if (profileStatus.exists) {
+            userProfile = await StudentProfileService.getProfile(user.uid);
+          }
+        } catch (error) {
+          logger.warn('Could not load profile for terms acceptance:', error);
+        }
+
+        //  Comprehensive legal compliance data with profile information
         const termsAcceptance = {
           accepted: true,
           timestamp: new Date().toISOString(),
           version: '1.0.0-beta',
-          user_id: user.uid,           
-          user_email: user.email,     
-          device_info: Platform.OS,    
-          language_preference: userLanguage, 
+          user_id: user.uid,
+          user_email: user.email,
+          device_info: Platform.OS,
+          language_preference: userLanguage,
           // Additional legal compliance metadata
           app_version: '1.0.0',        // App version for legal records
           terms_display_language: userLanguage, // Language terms were displayed in
           user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           consent_method: 'explicit',  // How consent was obtained
+
+          // Enhanced profile data for better legal compliance
+          ...(userProfile && {
+            full_name: userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim(),
+            birth_date: userProfile.birthDate,
+            education_level: userProfile.educationLevel,
+            academic_year: userProfile.year,
+            program: userProfile.program,
+            study_goals: userProfile.studyGoals,
+            profile_completion_date: userProfile.createdAt,
+            terms_acceptance_context: 'post_profile_setup'
+          })
         };
         
         // Store locally (for app functionality)
@@ -135,10 +159,10 @@ export default function TermsAndAgreementScreen({ navigation }) {
           // Continue anyway - local storage is sufficient for app functionality
         }
 
-        // Navigate to the app (likely ProfileScreen for new users)
+        // Navigate to the app main interface after terms acceptance
         navigation.reset({
           index: 0,
-          routes: [{ name: 'ProfileScreen' }]
+          routes: [{ name: 'Home' }]
         });
       }
     } catch (error) {

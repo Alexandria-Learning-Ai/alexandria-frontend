@@ -603,6 +603,9 @@ const QuizScreen = ({ route, navigation }) => {
           completedAt: new Date().toISOString(),
           category: routeParams.metadata?.category || 'general',
           difficulty: routeParams.metadata?.difficulty || 'medium',
+          // ✅ FIX: Ensure subject/topic data is preserved
+          subject: routeParams.metadata?.subject || routeParams.metadata?.topic || routeParams.subject,
+          topic: routeParams.metadata?.topic || routeParams.metadata?.subject || routeParams.subject,
         };
 
         navigateToResults(enhancedMetadata);
@@ -623,6 +626,9 @@ const QuizScreen = ({ route, navigation }) => {
           isChallenge: routeParams.isChallenge,
           challengeId: routeParams.challengeId,
           completionTime: Date.now() - quizMetadata.startTime,
+          // ✅ FIX: Ensure subject/topic data is preserved
+          subject: routeParams.metadata?.subject || routeParams.metadata?.topic || routeParams.subject,
+          topic: routeParams.metadata?.topic || routeParams.metadata?.subject || routeParams.subject,
         };
 
         navigateToResults(basicMetadata);
@@ -643,6 +649,9 @@ const QuizScreen = ({ route, navigation }) => {
         isChallenge: routeParams.isChallenge,
         challengeId: routeParams.challengeId,
         completionTime: Date.now() - quizMetadata.startTime,
+        // ✅ FIX: Ensure subject/topic data is preserved
+        subject: routeParams.metadata?.subject || routeParams.metadata?.topic || routeParams.subject,
+        topic: routeParams.metadata?.topic || routeParams.metadata?.subject || routeParams.subject,
       };
 
       navigateToResults(fallbackMetadata);

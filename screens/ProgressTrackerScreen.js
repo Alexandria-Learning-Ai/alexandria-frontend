@@ -22,6 +22,7 @@ import { auth } from '../firebaseConfig';
 import { SubjectProgressService } from '../services/SubjectProgressService';
 import { QuizHistoryManager } from '../services/QuizHistoryManager';
 import { UserCoursesService } from '../services/UserCoursesService'; // ✅ NEW: Import UserCoursesService
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Hierarchical subjects
 import AdvancedProgressAnalytics from '../services/AdvancedProgressAnalytics';
 import SafeBackButton from '../components/SafeBackButton';
 import logger from '../utils/logger';
@@ -81,13 +82,18 @@ const ProgressTrackerScreen = ({ navigation }) => {
     const [selectedPeriod, setSelectedPeriod] = useState('week'); // week, month, all
     const [refreshing, setRefreshing] = useState(false);
     const [notificationInsights, setNotificationInsights] = useState(null);
-    const [activeTab, setActiveTab] = useState('overall'); // 'overall', 'subjects', or 'advanced'
+    const [activeTab, setActiveTab] = useState('overall'); // 'overall', 'subjects', 'courses', or 'advanced'
     const [subjectProgress, setSubjectProgress] = useState({});
     const [subjectRecommendations, setSubjectRecommendations] = useState([]);
     const [subjectSummary, setSubjectSummary] = useState(null);
     const [pieChartMode, setPieChartMode] = useState('difficulty'); // 'difficulty' or 'subjects'
     const [userCourses, setUserCourses] = useState([]); // ✅ NEW: User's profile courses
     const [hasProfileCourses, setHasProfileCourses] = useState(false);
+
+    // ✅ NEW: Hierarchical progress state
+    const [hierarchicalProgress, setHierarchicalProgress] = useState({});
+    const [selectedSubject, setSelectedSubject] = useState(null);
+    const [hierarchicalRecommendations, setHierarchicalRecommendations] = useState([]);
     
     // 🚀 NEW: Advanced analytics state
     const [streakPrediction, setStreakPrediction] = useState(null);
@@ -240,6 +246,7 @@ const ProgressTrackerScreen = ({ navigation }) => {
         React.useCallback(() => {
             fetchAnalytics();
             loadUserCourses(); // Reload user's profile courses
+            loadHierarchicalProgress(); // ✅ NEW: Load hierarchical progress
         }, [])
     );
 
@@ -257,6 +264,27 @@ const ProgressTrackerScreen = ({ navigation }) => {
             }
         } catch (error) {
             logger.error('❌ Error loading user courses for Progress Tracker:', error);
+        }
+    };
+
+    // ✅ NEW: Load hierarchical progress data
+    const loadHierarchicalProgress = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Load hierarchical progress
+            const progress = await SubjectProgressService.getHierarchicalProgress(user.uid);
+            setHierarchicalProgress(progress);
+
+            // Load hierarchical recommendations
+            const recommendations = await SubjectProgressService.getHierarchicalRecommendations(user.uid);
+            setHierarchicalRecommendations(recommendations);
+
+            logger.info('📊 Hierarchical progress loaded:', Object.keys(progress));
+
+        } catch (error) {
+            logger.error('❌ Error loading hierarchical progress:', error);
         }
     };
 
@@ -680,10 +708,10 @@ const ProgressTrackerScreen = ({ navigation }) => {
                 ]}
                 onPress={() => setActiveTab('overall')}
             >
-                <FontAwesome5 
-                    name="chart-line" 
-                    size={14} 
-                    color={activeTab === 'overall' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')} 
+                <FontAwesome5
+                    name="chart-line"
+                    size={14}
+                    color={activeTab === 'overall' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')}
                 />
                 <Text style={[
                     styles.tabText,
@@ -691,7 +719,7 @@ const ProgressTrackerScreen = ({ navigation }) => {
                     activeTab === 'overall' && currentTheme.activeTabText
                 ]}>Overview</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
                 style={[
                     styles.tab,
@@ -700,10 +728,10 @@ const ProgressTrackerScreen = ({ navigation }) => {
                 ]}
                 onPress={() => setActiveTab('subjects')}
             >
-                <FontAwesome5 
-                    name="book-open" 
-                    size={14} 
-                    color={activeTab === 'subjects' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')} 
+                <FontAwesome5
+                    name="book-open"
+                    size={14}
+                    color={activeTab === 'subjects' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')}
                 />
                 <Text style={[
                     styles.tabText,
@@ -716,14 +744,34 @@ const ProgressTrackerScreen = ({ navigation }) => {
                 style={[
                     styles.tab,
                     currentTheme.tab,
+                    activeTab === 'courses' && currentTheme.activeTab
+                ]}
+                onPress={() => setActiveTab('courses')}
+            >
+                <FontAwesome5
+                    name="graduation-cap"
+                    size={14}
+                    color={activeTab === 'courses' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')}
+                />
+                <Text style={[
+                    styles.tabText,
+                    currentTheme.tabText,
+                    activeTab === 'courses' && currentTheme.activeTabText
+                ]}>Courses</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={[
+                    styles.tab,
+                    currentTheme.tab,
                     activeTab === 'advanced' && currentTheme.activeTab
                 ]}
                 onPress={() => setActiveTab('advanced')}
             >
-                <FontAwesome5 
-                    name="brain" 
-                    size={14} 
-                    color={activeTab === 'advanced' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')} 
+                <FontAwesome5
+                    name="brain"
+                    size={14}
+                    color={activeTab === 'advanced' ? getThemeProperty(currentTheme, 'activeTabText', '#FFFFFF') : getThemeProperty(currentTheme, 'tabText', '#4A5568')}
                 />
                 <Text style={[
                     styles.tabText,
@@ -1464,18 +1512,18 @@ const ProgressTrackerScreen = ({ navigation }) => {
         return (
             <Animatable.View animation="fadeInUp" delay={900} style={[styles.chartContainer, currentTheme.chartContainer]}>
                 <Text style={[styles.chartTitle, currentTheme.chartTitle]}>🎯 Smart Recommendations</Text>
-                
+
                 {subjectRecommendations.slice(0, 3).map((rec, index) => {
-                    const priorityColor = rec.priority === 'high' ? '#dc3545' : 
+                    const priorityColor = rec.priority === 'high' ? '#dc3545' :
                                         rec.priority === 'medium' ? '#ffc107' : '#17a2b8';
-                    
+
                     return (
                         <View key={index} style={styles.recommendationItem}>
                             <View style={styles.recommendationHeader}>
-                                <FontAwesome5 
-                                    name={rec.priority === 'high' ? 'exclamation-circle' : 'lightbulb'} 
-                                    size={14} 
-                                    color={priorityColor} 
+                                <FontAwesome5
+                                    name={rec.priority === 'high' ? 'exclamation-circle' : 'lightbulb'}
+                                    size={14}
+                                    color={priorityColor}
                                 />
                                 <Text style={[styles.recommendationPriority, { color: priorityColor }]}>
                                     {rec.priority.toUpperCase()}
@@ -1488,7 +1536,7 @@ const ProgressTrackerScreen = ({ navigation }) => {
                                 style={[styles.actionButton, { backgroundColor: priorityColor + '20', borderColor: priorityColor }]}
                                 onPress={() => {
                                     if (rec.action === 'take_quiz' || rec.action === 'focus_practice') {
-                                        navigation.navigate('AskAlexandria', { 
+                                        navigation.navigate('AskAlexandria', {
                                             suggestedTopic: rec.subjectKey,
                                             focusWeaknesses: rec.action === 'focus_practice'
                                         });
@@ -1503,6 +1551,221 @@ const ProgressTrackerScreen = ({ navigation }) => {
                     );
                 })}
             </Animatable.View>
+        );
+    };
+
+    // ✅ NEW: Hierarchical Courses View Component
+    const HierarchicalCoursesView = () => {
+        const hierarchicalEntries = Object.entries(hierarchicalProgress);
+
+        if (hierarchicalEntries.length === 0) {
+            return (
+                <Animatable.View animation="fadeInUp" delay={700} style={[styles.chartContainer, currentTheme.chartContainer]}>
+                    <Text style={[styles.chartTitle, currentTheme.chartTitle]}>🎓 Course Progress</Text>
+                    <View style={styles.noDataContainer}>
+                        <FontAwesome5 name="graduation-cap" size={48} color={getThemeProperty(currentTheme, 'noDataIcon', '#7F8C8D')} />
+                        <Text style={[styles.noDataText, currentTheme.noDataText]}>
+                            Start taking quizzes to track hierarchical course progress!
+                        </Text>
+                    </View>
+                </Animatable.View>
+            );
+        }
+
+        return (
+            <>
+                <Animatable.View animation="fadeInUp" delay={700} style={[styles.chartContainer, currentTheme.chartContainer]}>
+                    <Text style={[styles.chartTitle, currentTheme.chartTitle]}>🎓 Course Progress Overview</Text>
+
+                    <View style={styles.hierarchicalStats}>
+                        <View style={styles.hierarchicalStat}>
+                            <Text style={[styles.hierarchicalValue, currentTheme.statNumber]}>
+                                {hierarchicalEntries.length}
+                            </Text>
+                            <Text style={[styles.hierarchicalLabel, currentTheme.statLabel]}>Subjects</Text>
+                        </View>
+
+                        <View style={styles.hierarchicalStat}>
+                            <Text style={[styles.hierarchicalValue, { color: '#28a745' }]}>
+                                {hierarchicalEntries.reduce((total, [_, subject]) =>
+                                    total + Object.keys(subject.courses || {}).length, 0
+                                )}
+                            </Text>
+                            <Text style={[styles.hierarchicalLabel, currentTheme.statLabel]}>Courses</Text>
+                        </View>
+
+                        <View style={styles.hierarchicalStat}>
+                            <Text style={[styles.hierarchicalValue, { color: '#3498DB' }]}>
+                                {hierarchicalEntries.reduce((total, [_, subject]) =>
+                                    total + Object.values(subject.courses || {}).reduce((courseTotal, course) =>
+                                        courseTotal + Object.keys(course.topics || {}).length, 0
+                                    ), 0
+                                )}
+                            </Text>
+                            <Text style={[styles.hierarchicalLabel, currentTheme.statLabel]}>Topics</Text>
+                        </View>
+                    </View>
+                </Animatable.View>
+
+                {hierarchicalEntries.map(([subjectName, subjectData], subjectIndex) => (
+                    <Animatable.View
+                        key={subjectName}
+                        animation="fadeInUp"
+                        delay={800 + (subjectIndex * 100)}
+                        style={[styles.chartContainer, currentTheme.chartContainer]}
+                    >
+                        <View style={styles.subjectHeaderExpanded}>
+                            <View style={styles.subjectTitleSection}>
+                                <View style={[styles.subjectIconLarge, { backgroundColor: HierarchicalSubjectService.getSubjectColor(subjectName) + '20' }]}>
+                                    <FontAwesome5
+                                        name={HierarchicalSubjectService.getSubjectIcon(subjectName)}
+                                        size={24}
+                                        color={HierarchicalSubjectService.getSubjectColor(subjectName)}
+                                    />
+                                </View>
+                                <View>
+                                    <Text style={[styles.subjectNameLarge, currentTheme.chartTitle]}>{subjectName}</Text>
+                                    <Text style={[styles.subjectSummary, currentTheme.chartSubtitle]}>
+                                        {Object.keys(subjectData.courses || {}).length} courses •
+                                        {subjectData.totalQuizzes || 0} quizzes •
+                                        {Math.round(subjectData.averageScore || 0)}% avg
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.expandButton, { borderColor: HierarchicalSubjectService.getSubjectColor(subjectName) }]}
+                                onPress={() => {
+                                    if (selectedSubject === subjectName) {
+                                        setSelectedSubject(null);
+                                    } else {
+                                        setSelectedSubject(subjectName);
+                                    }
+                                }}
+                            >
+                                <FontAwesome5
+                                    name={selectedSubject === subjectName ? 'chevron-up' : 'chevron-down'}
+                                    size={14}
+                                    color={HierarchicalSubjectService.getSubjectColor(subjectName)}
+                                />
+                            </TouchableOpacity>
+                        </View>
+
+                        {selectedSubject === subjectName && (
+                            <View style={styles.coursesContainer}>
+                                {Object.entries(subjectData.courses || {}).map(([courseName, courseData]) => (
+                                    <View key={courseName} style={styles.courseCard}>
+                                        <View style={styles.courseHeader}>
+                                            <View style={styles.courseInfo}>
+                                                <Text style={[styles.courseName, currentTheme.categoryName]}>{courseName}</Text>
+                                                <Text style={[styles.courseStats, currentTheme.categoryCount]}>
+                                                    {courseData.totalQuizzes || 0} quizzes • {Math.round(courseData.averageScore || 0)}% avg
+                                                </Text>
+                                            </View>
+                                            <View style={styles.courseScoreContainer}>
+                                                <Text style={[styles.courseScore, { color: getAccuracyColor(courseData.averageScore || 0) }]}>
+                                                    {Math.round(courseData.averageScore || 0)}%
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.progressBarContainer}>
+                                            <View style={[styles.progressBar, {
+                                                width: `${Math.min(courseData.averageScore || 0, 100)}%`,
+                                                backgroundColor: getAccuracyColor(courseData.averageScore || 0)
+                                            }]} />
+                                        </View>
+
+                                        {Object.keys(courseData.topics || {}).length > 0 && (
+                                            <View style={styles.topicsContainer}>
+                                                <Text style={[styles.topicsTitle, currentTheme.categoryCount]}>
+                                                    Topics ({Object.keys(courseData.topics).length}):
+                                                </Text>
+                                                <View style={styles.topicsList}>
+                                                    {Object.entries(courseData.topics).slice(0, 3).map(([topicName, topicData]) => (
+                                                        <View key={topicName} style={styles.topicChip}>
+                                                            <Text style={[styles.topicName, currentTheme.categoryCount]}>{topicName}</Text>
+                                                            <Text style={[styles.topicScore, { color: getAccuracyColor(topicData.averageScore || 0) }]}>
+                                                                {Math.round(topicData.averageScore || 0)}%
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                    {Object.keys(courseData.topics).length > 3 && (
+                                                        <Text style={[styles.moreTopics, currentTheme.categoryCount]}>
+                                                            +{Object.keys(courseData.topics).length - 3} more
+                                                        </Text>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        )}
+
+                                        <TouchableOpacity
+                                            style={[styles.practiceButton, { borderColor: HierarchicalSubjectService.getSubjectColor(subjectName) }]}
+                                            onPress={() => {
+                                                navigation.navigate('AskAlexandria', {
+                                                    suggestedTopic: courseName,
+                                                    subjectKey: subjectName,
+                                                    courseKey: courseName,
+                                                    hierarchicalMode: true
+                                                });
+                                            }}
+                                        >
+                                            <FontAwesome5 name="play" size={12} color={HierarchicalSubjectService.getSubjectColor(subjectName)} />
+                                            <Text style={[styles.practiceButtonText, { color: HierarchicalSubjectService.getSubjectColor(subjectName) }]}>
+                                                Practice {courseName}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+                    </Animatable.View>
+                ))}
+
+                {hierarchicalRecommendations.length > 0 && (
+                    <Animatable.View animation="fadeInUp" delay={1000} style={[styles.chartContainer, currentTheme.chartContainer]}>
+                        <Text style={[styles.chartTitle, currentTheme.chartTitle]}>🎯 Hierarchical Recommendations</Text>
+
+                        {hierarchicalRecommendations.slice(0, 3).map((rec, index) => {
+                            const priorityColor = rec.priority === 'high' ? '#dc3545' :
+                                               rec.priority === 'medium' ? '#ffc107' : '#17a2b8';
+
+                            return (
+                                <View key={index} style={styles.recommendationItem}>
+                                    <View style={styles.recommendationHeader}>
+                                        <FontAwesome5
+                                            name={rec.priority === 'high' ? 'exclamation-circle' : 'lightbulb'}
+                                            size={14}
+                                            color={priorityColor}
+                                        />
+                                        <Text style={[styles.recommendationPriority, { color: priorityColor }]}>
+                                            {rec.priority?.toUpperCase() || 'MEDIUM'}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.recommendationMessage, currentTheme.categoryName]}>
+                                        {rec.message}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={[styles.actionButton, { backgroundColor: priorityColor + '20', borderColor: priorityColor }]}
+                                        onPress={() => {
+                                            navigation.navigate('AskAlexandria', {
+                                                suggestedTopic: rec.course || rec.subject,
+                                                subjectKey: rec.subject,
+                                                courseKey: rec.course,
+                                                hierarchicalMode: true
+                                            });
+                                        }}
+                                    >
+                                        <Text style={[styles.actionButtonText, { color: priorityColor }]}>
+                                            Practice {rec.course || rec.subject}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            );
+                        })}
+                    </Animatable.View>
+                )}
+            </>
         );
     };
 
@@ -1561,6 +1824,10 @@ const ProgressTrackerScreen = ({ navigation }) => {
                             <SubjectOverviewCard />
                             <SubjectProgressCards />
                             <SmartRecommendations />
+                        </>
+                    ) : activeTab === 'courses' ? (
+                        <>
+                            <HierarchicalCoursesView />
                         </>
                     ) : (
                         <>
@@ -2172,6 +2439,124 @@ const styles = StyleSheet.create({
     recommendationItem: {
         fontSize: 12,
         marginBottom: 4,
+    },
+    // ✅ NEW: Hierarchical Courses Styles
+    hierarchicalStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    hierarchicalStat: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    hierarchicalValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    hierarchicalLabel: {
+        fontSize: 12,
+        marginTop: 4,
+    },
+    subjectHeaderExpanded: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    subjectTitleSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    subjectIconLarge: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    subjectNameLarge: {
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    subjectSummary: {
+        fontSize: 14,
+        marginTop: 4,
+    },
+    expandButton: {
+        padding: 8,
+        borderRadius: 16,
+        borderWidth: 1,
+    },
+    coursesContainer: {
+        marginTop: 16,
+    },
+    courseCard: {
+        marginBottom: 16,
+        padding: 16,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+    },
+    courseHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    courseInfo: {
+        flex: 1,
+    },
+    courseName: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    courseStats: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    courseScoreContainer: {
+        alignItems: 'flex-end',
+    },
+    courseScore: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    topicsContainer: {
+        marginTop: 12,
+    },
+    topicsTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    topicsList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    topicChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    topicName: {
+        fontSize: 11,
+        fontWeight: '500',
+    },
+    topicScore: {
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    moreTopics: {
+        fontSize: 11,
+        fontStyle: 'italic',
+        alignSelf: 'center',
     },
 });
 
