@@ -20,6 +20,8 @@ import { auth } from '../firebaseConfig';
 import { useTranslation } from 'react-i18next';
 import { API_BASE_URL } from '../config/api';
 import { StudentProfileService } from '../services/StudentProfileService';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import logger from '../utils/logger';
 
 
@@ -100,6 +102,10 @@ export default function TermsAndAgreementScreen({ navigation }) {
           logger.warn('Could not load profile for terms acceptance:', error);
         }
 
+        // Generate comprehensive device and user agent information
+        const deviceInfo = `${Platform.OS}-${Device.osVersion || 'unknown'}`;
+        const userAgent = `Alexandria-Mobile-App/${Constants.expoConfig?.version || '1.0.0'} (${Platform.OS} ${Device.osVersion || 'unknown'}; ${Device.modelName || 'unknown'}) Expo/${Constants.expoConfig?.sdkVersion || 'unknown'}`;
+
         //  Comprehensive legal compliance data with profile information
         const termsAcceptance = {
           accepted: true,
@@ -107,10 +113,11 @@ export default function TermsAndAgreementScreen({ navigation }) {
           version: '1.0.0-beta',
           user_id: user.uid,
           user_email: user.email,
-          device_info: Platform.OS,
+          device_info: deviceInfo,
+          user_agent: userAgent,
           language_preference: userLanguage,
           // Additional legal compliance metadata
-          app_version: '1.0.0',        // App version for legal records
+          app_version: Constants.expoConfig?.version || '1.0.0',
           terms_display_language: userLanguage, // Language terms were displayed in
           user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           consent_method: 'explicit',  // How consent was obtained
