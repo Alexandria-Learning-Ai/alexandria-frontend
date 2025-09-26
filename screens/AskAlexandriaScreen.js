@@ -343,10 +343,10 @@ export default function AskAlexandriaScreen({ navigation, route }) {
       logger.info('🎯 Full API response:', JSON.stringify(response.data, null, 2));
       
       // ✅ ADD: Check for freshness features and show indicator
-      if (response.data.metadata?.freshness_features && 
+      if (response.data.metadata?.freshness_features &&
           response.data.metadata.freshness_features.length > 0) {
-          setShowFreshnessIndicator(true);
-          setTimeout(() => setShowFreshnessIndicator(false), 3000);
+          setUiState(prev => ({ ...prev, showFreshnessIndicator: true }));
+          setTimeout(() => setUiState(prev => ({ ...prev, showFreshnessIndicator: false })), 3000);
       }
 
       const quizData = response.data.quiz;
