@@ -624,6 +624,36 @@ export class SmartQuizRecommendationService {
             return null;
         }
     }
+
+    /**
+     * Get recent quiz recommendations for a user within specified hours
+     */
+    static async getRecentRecommendations(userId, hoursBack = 24) {
+        try {
+            const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000));
+            const storageKey = `quiz_recommendations_${userId}`;
+
+            const stored = await AsyncStorage.getItem(storageKey);
+            if (!stored) {
+                return [];
+            }
+
+            const recommendations = JSON.parse(stored);
+
+            // Filter recommendations from the last N hours
+            const recent = recommendations.filter(rec => {
+                const recTime = new Date(rec.generatedAt || rec.timestamp);
+                return recTime >= cutoffTime;
+            });
+
+            logger.info(`📊 Found ${recent.length} recommendations in last ${hoursBack} hours for user ${userId}`);
+            return recent;
+
+        } catch (error) {
+            logger.error('Error getting recent recommendations:', error);
+            return [];
+        }
+    }
 }
 
 export default SmartQuizRecommendationService;
