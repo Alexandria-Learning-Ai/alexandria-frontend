@@ -188,7 +188,7 @@ export class UnifiedNotificationService {
             await Notifications.setNotificationHandler({
                 handleNotification: async (notification) => {
                     const { data } = notification.request.content;
-                    const category = this.CATEGORIES[data?.category?.toUpperCase()] || this.CATEGORIES.STUDY_REMINDER;
+                    const category = this.CATEGORIES[(data?.category || '').toUpperCase()] || this.CATEGORIES.STUDY_REMINDER;
 
                     return {
                         shouldShowBanner: true,

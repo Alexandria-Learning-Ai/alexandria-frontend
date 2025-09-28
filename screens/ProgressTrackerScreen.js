@@ -17,13 +17,14 @@ import * as Animatable from 'react-native-animatable';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NotificationManager } from '../utils/NotificationManager';
+import UnifiedNotificationService from '../utils/UnifiedNotificationService';
 import { auth } from '../firebaseConfig';
 import { SubjectProgressService } from '../services/SubjectProgressService';
 import { QuizHistoryManager } from '../services/QuizHistoryManager';
 import { UserCoursesService } from '../services/UserCoursesService'; // ✅ NEW: Import UserCoursesService
 import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Hierarchical subjects
 import AdvancedProgressAnalytics from '../services/AdvancedProgressAnalytics';
+import { BackendSyncService } from '../services/BackendSyncService'; // ✅ NEW: Backend API service
 import SafeBackButton from '../components/SafeBackButton';
 import logger from '../utils/logger';
 
@@ -81,6 +82,11 @@ const ProgressTrackerScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [selectedPeriod, setSelectedPeriod] = useState('week'); // week, month, all
     const [refreshing, setRefreshing] = useState(false);
+    const [backendError, setBackendError] = useState(null);
+    const [dataSource, setDataSource] = useState('loading'); // 'backend', 'local', 'loading'
+    const [learningProfile, setLearningProfile] = useState(null);
+    const [streakInfo, setStreakInfo] = useState(null);
+    const [studyInsights, setStudyInsights] = useState(null);
     const [notificationInsights, setNotificationInsights] = useState(null);
     const [activeTab, setActiveTab] = useState('overall'); // 'overall', 'subjects', 'courses', or 'advanced'
     const [subjectProgress, setSubjectProgress] = useState({});
@@ -134,6 +140,7 @@ const ProgressTrackerScreen = ({ navigation }) => {
         titleIconColor: { color: '#1A2C5B' },
         title: { color: '#1A2C5B' },
         subtitle: { color: '#4A5568' },
+        dataSourceText: { color: '#4A5568' },
         chartContainer: { backgroundColor: '#FFFFFF', shadowColor: '#1A2C5B' },
         chartTitle: { color: '#2C3E50' },
         chartSubtitle: { color: '#4A5568' },
@@ -172,6 +179,7 @@ const ProgressTrackerScreen = ({ navigation }) => {
         titleIconColor: { color: '#D4AF37' },
         title: { color: '#F8F4E3' },
         subtitle: { color: '#CBD5E0' },
+        dataSourceText: { color: '#CBD5E0' },
         chartContainer: { backgroundColor: '#2C3E50', shadowColor: '#D4AF37' },
         chartTitle: { color: '#FFFFFF' },
         chartSubtitle: { color: '#CBD5E0' },
@@ -246,38 +254,13 @@ const ProgressTrackerScreen = ({ navigation }) => {
         React.useCallback(() => {
             fetchAnalytics();
             loadUserCourses(); // Reload user's profile courses
-            loadHierarchicalProgress(); // ✅ NEW: Load hierarchical progress
+            // loadHierarchicalProgress(); // TODO: Implement hierarchical progress loading
         }, [])
     );
 
     // ✅ NEW: Load user's profile courses for progress tracking
     const loadUserCourses = async () => {
         try {
-            const courses = await UserCoursesService.getUserCourses();
-            setUserCourses(courses);
-            setHasProfileCourses(courses.length > 0);
-            
-            if (courses.length > 0) {
-                logger.info(`📚 Loaded ${courses.length} courses from user profile for Progress Tracker`);
-                // Initialize progress tracking for user's courses
-                initializeCourseProgress(courses);
-            }
-        } catch (error) {
-            logger.error('❌ Error loading user courses for Progress Tracker:', error);
-        }
-    };
-
-    // ✅ NEW: Load hierarchical progress data
-    const loadHierarchicalProgress = async () => {
-        try {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            // Load hierarchical progress
-            const progress = await SubjectProgressService.getHierarchicalProgress(user.uid);
-            setHierarchicalProgress(progress);
-
-            // Load hierarchical recommendations
             const recommendations = await SubjectProgressService.getHierarchicalRecommendations(user.uid);
             setHierarchicalRecommendations(recommendations);
 
@@ -375,7 +358,9 @@ const ProgressTrackerScreen = ({ navigation }) => {
     const fetchAnalytics = async () => {
         try {
             setLoading(true);
+            setDataSource('loading');
             const user = auth.currentUser;
+
             if (!user) {
                 // Clear all data if no user
                 setAnalytics({
@@ -396,43 +381,183 @@ const ProgressTrackerScreen = ({ navigation }) => {
                 setSubjectProgress({});
                 setSubjectRecommendations([]);
                 setSubjectSummary(null);
+                setLearningProfile(null);
+                setStreakInfo(null);
+                setStudyInsights(null);
+                setDataSource('local');
                 setLoading(false);
                 return;
             }
 
-            // Load both analytics and subject data in parallel
-            const [quizHistory, subjectData] = await Promise.all([
-                AsyncStorage.getItem(`quizHistory_${user.uid}`),
-                Promise.all([
-                    SubjectProgressService.getSubjectProgress(user.uid),
-                    SubjectProgressService.getSubjectRecommendations(user.uid),
-                    SubjectProgressService.getSubjectSummary(user.uid)
-                ])
-            ]);
+            let quizzes = [];
+            let backendDataLoaded = false;
 
-            const quizzes = quizHistory ? JSON.parse(quizHistory) : [];
-            let filteredQuizzes = [];
-            
-            // Update analytics (existing logic)
-            if (quizzes.length > 0) {
-                filteredQuizzes = filterQuizzesByPeriod(quizzes, selectedPeriod);
-                const calculatedAnalytics = calculateAnalytics(filteredQuizzes, quizzes);
-                setAnalytics(calculatedAnalytics);
+            // ✅ PRIMARY: Try to load from backend APIs
+            try {
+                logger.info('📊 Loading progress data from backend...');
+                setBackendError(null);
+
+                // Load all backend data in parallel
+                const [
+                    backendProfile,
+                    backendStreak,
+                    backendInsights,
+                    backendSubjects,
+                    backendHistory
+                ] = await Promise.all([
+                    BackendSyncService.getLearningProfile(),
+                    BackendSyncService.getStreakInfo(),
+                    BackendSyncService.getStudyInsights(selectedPeriod === 'week' ? 7 : selectedPeriod === 'month' ? 30 : 365),
+                    BackendSyncService.getSubjectProgress(),
+                    BackendSyncService.getQuizHistory({
+                        page: 1,
+                        pageSize: 100,
+                        daysBack: selectedPeriod === 'week' ? 7 : selectedPeriod === 'month' ? 30 : undefined
+                    })
+                ]);
+
+                // Store backend data
+                setLearningProfile(backendProfile);
+                setStreakInfo(backendStreak);
+                setStudyInsights(backendInsights);
+
+                // Convert backend data to analytics format
+                const backendAnalytics = {
+                    totalQuizzes: backendProfile.total_quizzes_taken || 0,
+                    averageScore: backendProfile.overall_accuracy || 0,
+                    bestScore: backendProfile.best_accuracy || 0,
+                    totalCorrect: Math.round((backendProfile.total_questions_answered || 0) * (backendProfile.overall_accuracy || 0) / 100),
+                    totalQuestions: backendProfile.total_questions_answered || 0,
+                    currentStreak: backendStreak.current_streak || 0,
+                    longestStreak: backendStreak.longest_streak || 0,
+                    scoreHistory: [], // Will be populated from quiz history
+                    categoryStats: [], // Will be populated from subjects
+                    weeklyProgress: backendInsights.weekly_progress || {},
+                    difficultyBreakdown: [], // Will be calculated
+                    subjectBreakdown: [], // Will be populated from subjects
+                    recentActivity: [], // Will be populated from quiz history
+                    // Backend-specific data
+                    learningVelocity: backendInsights.learning_velocity || 0,
+                    consistencyScore: backendInsights.consistency_score || 0,
+                    performanceLevel: backendProfile.performance_level || 'beginner',
+                    studyTime: Math.round((backendProfile.total_study_time || 0) / 60), // Convert to minutes
+                };
+
+                // Process subject progress
+                const subjectProgressData = {};
+                const subjectBreakdown = [];
+                backendSubjects.forEach(subject => {
+                    subjectProgressData[subject.subject] = {
+                        accuracy: subject.accuracy,
+                        quizCount: subject.quiz_count,
+                        masteryLevel: subject.mastery_level,
+                        lastPracticed: subject.last_practiced,
+                        improvementTrend: subject.improvement_trend
+                    };
+
+                    subjectBreakdown.push({
+                        name: subject.subject,
+                        value: subject.quiz_count,
+                        accuracy: subject.accuracy,
+                        color: HierarchicalSubjectService.getSubjectColor(subject.subject)
+                    });
+                });
+
+                // Process quiz history for score history and recent activity
+                if (backendHistory.history) {
+                    const scoreHistory = backendHistory.history.map(quiz => ({
+                        score: quiz.accuracy,
+                        date: new Date(quiz.completion_date).toLocaleDateString(),
+                        subject: quiz.subject_key || 'Unknown'
+                    })).reverse(); // Most recent first for charts
+
+                    const recentActivity = backendHistory.history.slice(0, 10).map(quiz => ({
+                        id: quiz.id,
+                        title: quiz.topic,
+                        score: quiz.accuracy,
+                        date: quiz.completion_date,
+                        subject: quiz.subject_key
+                    }));
+
+                    backendAnalytics.scoreHistory = scoreHistory;
+                    backendAnalytics.recentActivity = recentActivity;
+                }
+
+                backendAnalytics.subjectBreakdown = subjectBreakdown;
+
+                setAnalytics(backendAnalytics);
+                setSubjectProgress(subjectProgressData);
+                setSubjectRecommendations(backendInsights.subject_recommendations || []);
+
+                backendDataLoaded = true;
+                setDataSource('backend');
+                logger.info('✅ Backend progress data loaded successfully');
+
+            } catch (backendError) {
+                logger.warn('⚠️ Backend loading failed, falling back to local data:', backendError);
+                setBackendError(backendError.message);
+
+                // ✅ FALLBACK: Load from local storage (existing logic)
+                try {
+                    const [quizHistory, subjectData] = await Promise.all([
+                        AsyncStorage.getItem(`quizHistory_${user.uid}`),
+                        Promise.all([
+                            SubjectProgressService.getSubjectProgress(user.uid),
+                            SubjectProgressService.getSubjectRecommendations(user.uid),
+                            SubjectProgressService.getSubjectSummary(user.uid)
+                        ])
+                    ]);
+
+                    quizzes = quizHistory ? JSON.parse(quizHistory) : [];
+
+                    if (quizzes.length > 0) {
+                        const filteredQuizzes = filterQuizzesByPeriod(quizzes, selectedPeriod);
+                        const calculatedAnalytics = calculateAnalytics(filteredQuizzes, quizzes);
+                        setAnalytics(calculatedAnalytics);
+                    }
+
+                    const [progress, recommendations, summary] = subjectData;
+                    setSubjectProgress(progress);
+                    setSubjectRecommendations(recommendations);
+                    setSubjectSummary(summary);
+
+                    // Load advanced analytics for local data
+                    if (quizzes.length > 0) {
+                        const filteredQuizzes = filterQuizzesByPeriod(quizzes, selectedPeriod);
+                        await loadAdvancedAnalytics(user.uid, quizzes, filteredQuizzes);
+                    }
+
+                    setDataSource('local');
+                    logger.info('📱 Local progress data loaded successfully');
+
+                } catch (localError) {
+                    logger.error('❌ Failed to load local data:', localError);
+                    setDataSource('local');
+                }
             }
 
-            // Update subject data
-            const [progress, recommendations, summary] = subjectData;
-            setSubjectProgress(progress);
-            setSubjectRecommendations(recommendations);
-            setSubjectSummary(summary);
-
-            // 🚀 NEW: Load advanced analytics
-            if (quizzes.length > 0) {
-                await loadAdvancedAnalytics(user.uid, quizzes, filteredQuizzes);
+            // Load additional data if we have backend data
+            if (backendDataLoaded && learningProfile) {
+                try {
+                    // Load advanced analytics with backend data
+                    const backendQuizzes = analytics.recentActivity || [];
+                    if (backendQuizzes.length > 0) {
+                        // Convert backend format for advanced analytics
+                        const formattedQuizzes = backendQuizzes.map(activity => ({
+                            results: { percentage: activity.score },
+                            metadata: { completedAt: activity.date, subject: activity.subject }
+                        }));
+                        await loadAdvancedAnalytics(user.uid, formattedQuizzes, formattedQuizzes);
+                    }
+                } catch (advancedError) {
+                    logger.warn('⚠️ Failed to load advanced analytics:', advancedError);
+                }
             }
-            
+
         } catch (error) {
-            logger.error('Error fetching analytics:', error);
+            logger.error('❌ Error in fetchAnalytics:', error);
+            setBackendError(error.message);
+            setDataSource('local');
         } finally {
             setLoading(false);
         }
@@ -670,6 +795,23 @@ const ProgressTrackerScreen = ({ navigation }) => {
                 <Text style={[styles.subtitle, currentTheme.subtitle]}>
                     Track your learning journey and improvements
                 </Text>
+
+                {/* ✅ NEW: Data source indicator */}
+                {dataSource !== 'loading' && (
+                    <View style={styles.dataSourceIndicator}>
+                        <FontAwesome5
+                            name={dataSource === 'backend' ? 'cloud' : 'mobile-alt'}
+                            size={12}
+                            color={dataSource === 'backend' ? '#4CAF50' : '#FF9800'}
+                        />
+                        <Text style={[styles.dataSourceText, currentTheme.dataSourceText]}>
+                            {dataSource === 'backend' ? 'Cloud Synced' : 'Local Data'}
+                        </Text>
+                        {backendError && (
+                            <FontAwesome5 name="exclamation-triangle" size={10} color="#FF9800" style={{ marginLeft: 4 }} />
+                        )}
+                    </View>
+                )}
             </Animatable.View>
         </Animatable.View>
     );
@@ -819,10 +961,13 @@ const ProgressTrackerScreen = ({ navigation }) => {
             );
         }
 
+        // Safe guard against undefined scoreHistory
+        const scoreData = analytics?.scoreHistory || [];
+
         const data = {
-            labels: analytics.scoreHistory.map(item => `Q${item.x}`),
+            labels: scoreData.map(item => `Q${item?.x || 0}`),
             datasets: [{
-                data: analytics.scoreHistory.map(item => item.y),
+                data: scoreData.map(item => item?.y || 0),
                 strokeWidth: 3,
             }]
         };
@@ -978,10 +1123,13 @@ const ProgressTrackerScreen = ({ navigation }) => {
     };
 
     const WeeklyActivity = () => {
+        // Safe guard against undefined weeklyProgress
+        const weeklyData = Array.isArray(analytics?.weeklyProgress) ? analytics.weeklyProgress : [];
+
         const data = {
-            labels: analytics.weeklyProgress.map(day => day.day),
+            labels: weeklyData.map(day => day?.day || 'Day'),
             datasets: [{
-                data: analytics.weeklyProgress.map(day => day.quizzes),
+                data: weeklyData.map(day => day?.quizzes || 0),
             }]
         };
 
@@ -1901,6 +2049,24 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         paddingHorizontal: 20,
     },
+
+    // ✅ NEW: Data source indicator styles
+    dataSourceIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        alignSelf: 'center',
+    },
+    dataSourceText: {
+        fontSize: 11,
+        fontWeight: '600',
+        marginLeft: 4,
+        opacity: 0.8,
+    },
     periodSelector: {
         flexDirection: 'row',
         marginBottom: 30,
@@ -1930,12 +2096,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 12,
-        paddingHorizontal: 16,
+        paddingHorizontal: 6,
         borderRadius: 8,
-        gap: 8,
+        gap: 4,
     },
     tabText: {
-        fontSize: 14,
+        fontSize: 10,
         fontWeight: '600',
     },
     statsContainer: {

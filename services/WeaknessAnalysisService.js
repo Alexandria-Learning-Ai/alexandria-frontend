@@ -1,6 +1,6 @@
 // services/WeaknessAnalysisService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NotificationManager } from '../utils/NotificationManager';
+import { UnifiedNotificationService } from '../utils/UnifiedNotificationService';
 import * as Notifications from 'expo-notifications';
 import { SubjectDetector } from '../utils/SubjectDetector';
 import { API_BASE_URL } from '../config/api';

@@ -227,7 +227,7 @@ export class EnhancedNotificationManager {
     progress = null
   }) {
     try {
-      const category = this.NOTIFICATION_CATEGORIES[categoryId.toUpperCase()] || 
+      const category = this.NOTIFICATION_CATEGORIES[(categoryId || '').toUpperCase()] ||
                       this.NOTIFICATION_CATEGORIES.STUDY_REMINDER;
 
       const content = {

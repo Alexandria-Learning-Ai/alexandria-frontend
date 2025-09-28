@@ -192,7 +192,7 @@ export const AchievementCelebrationModal = ({
               style={styles.rarityBadge}
             >
               <Text style={styles.rarityText}>
-                {currentAchievement.rarity.toUpperCase()}
+                {(currentAchievement.rarity || 'common').toUpperCase()}
               </Text>
             </LinearGradient>
 
