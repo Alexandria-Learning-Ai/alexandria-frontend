@@ -654,6 +654,117 @@ export class SmartQuizRecommendationService {
             return [];
         }
     }
+
+    /**
+     * Get weekly stats for user analysis
+     */
+    static async getWeeklyStats(userId) {
+        try {
+            const stats = await AsyncStorage.getItem(`weekly_stats_${userId}`);
+            if (!stats) {
+                return {
+                    totalQuizzes: 0,
+                    averageScore: 0,
+                    improvementTrend: 0,
+                    consistencyScore: 0,
+                    lastActivityDate: null
+                };
+            }
+            return JSON.parse(stats);
+        } catch (error) {
+            logger.error('Error getting weekly stats:', error);
+            return {
+                totalQuizzes: 0,
+                averageScore: 0,
+                improvementTrend: 0,
+                consistencyScore: 0,
+                lastActivityDate: null
+            };
+        }
+    }
+
+    /**
+     * Generate a welcome quiz for new users
+     */
+    static async generateWelcomeQuiz(userId) {
+        try {
+            logger.info(`🎉 Generating welcome quiz for new user: ${userId}`);
+
+            const welcomeQuiz = {
+                id: `welcome_${userId}_${Date.now()}`,
+                title: "Welcome to Alexandria! 🏛️",
+                description: "Let's discover your learning style with this personalized quiz",
+                questions: [
+                    {
+                        question_number: 1,
+                        question_text: "What's your preferred way to learn new concepts?",
+                        type: "multiple_choice",
+                        options: [
+                            { label: "A", text: "Reading and taking notes" },
+                            { label: "B", text: "Visual diagrams and charts" },
+                            { label: "C", text: "Practice problems and exercises" },
+                            { label: "D", text: "Discussion and explanation" }
+                        ],
+                        correct_answer: "C",
+                        difficulty: "easy"
+                    },
+                    {
+                        question_number: 2,
+                        question_text: "How often do you prefer to study?",
+                        type: "multiple_choice",
+                        options: [
+                            { label: "A", text: "Daily short sessions" },
+                            { label: "B", text: "Long sessions 2-3 times per week" },
+                            { label: "C", text: "Intensive sessions before exams" },
+                            { label: "D", text: "Flexible based on my schedule" }
+                        ],
+                        correct_answer: "A",
+                        difficulty: "easy"
+                    },
+                    {
+                        question_number: 3,
+                        question_text: "What motivates you most in learning?",
+                        type: "multiple_choice",
+                        options: [
+                            { label: "A", text: "Achieving high scores" },
+                            { label: "B", text: "Understanding concepts deeply" },
+                            { label: "C", text: "Preparing for real-world applications" },
+                            { label: "D", text: "Competing with peers" }
+                        ],
+                        correct_answer: "B",
+                        difficulty: "easy"
+                    }
+                ],
+                metadata: {
+                    isWelcomeQuiz: true,
+                    personalizedFor: userId,
+                    generatedAt: new Date().toISOString(),
+                    source: 'welcome_generation'
+                },
+                smartFeatures: {
+                    isPersonalized: true,
+                    adaptiveScoring: false,
+                    contextualFeedback: true,
+                    progressTracking: true
+                },
+                notification: {
+                    title: "🎉 Welcome to Alexandria!",
+                    body: "Take your first quiz to help us personalize your learning experience",
+                    actionText: "Start Welcome Quiz"
+                }
+            };
+
+            // Save the welcome quiz
+            await this.saveQuizRecommendation(userId, welcomeQuiz, 'welcome', 'new_user');
+
+            logger.info('✅ Welcome quiz generated successfully');
+            return welcomeQuiz;
+
+        } catch (error) {
+            logger.error('Error generating welcome quiz:', error);
+            return null;
+        }
+    }
 }
 
 export default SmartQuizRecommendationService;
