@@ -41,6 +41,7 @@ const MaterialViewerScreen = () => {
     const [fontSize, setFontSize] = useState(16);
     const [audioUrl, setAudioUrl] = useState(null);
     const [audioDuration, setAudioDuration] = useState(0);
+    const [audioId, setAudioId] = useState(null);
     const [audioLoading, setAudioLoading] = useState(false);
     const [audioError, setAudioError] = useState(null);
     const [audioGenerationProgress, setAudioGenerationProgress] = useState(0);
@@ -136,6 +137,9 @@ const MaterialViewerScreen = () => {
                     logger.info('✅ Loaded cached audio from server');
                     setAudioUrl(response.data.audio_url);
                     setAudioDuration(response.data.duration || 0);
+                    if (response.data.audio_id) {
+                        setAudioId(response.data.audio_id);
+                    }
                     // Don't auto-play, just make it available
                 }
             }
@@ -356,6 +360,9 @@ const MaterialViewerScreen = () => {
             if (response.data) {
                 setAudioUrl(response.data.audio_url);
                 setAudioDuration(response.data.duration || 0);
+                if (response.data.audio_id) {
+                    setAudioId(response.data.audio_id);
+                }
                 setIsPlaying(true);
                 setViewMode('listen');
                 setAudioError(null);
@@ -1036,7 +1043,7 @@ const MaterialViewerScreen = () => {
                             </View>
 
                             {/* Save to Playlist Button */}
-                            {audioUrl && (
+                            {audioUrl && audioId && (
                                 <TouchableOpacity
                                     style={styles.saveToPlaylistButton}
                                     onPress={() => setShowAddToPlaylistModal(true)}
@@ -1489,7 +1496,7 @@ const MaterialViewerScreen = () => {
                 visible={showAddToPlaylistModal}
                 onClose={() => setShowAddToPlaylistModal(false)}
                 audioData={{
-                    audio_id: material.id,
+                    audio_id: audioId,
                     material_id: material.id,
                     title: material.title,
                     duration: audioDuration
