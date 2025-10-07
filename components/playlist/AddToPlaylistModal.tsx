@@ -86,7 +86,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       const response = await axios.post(
         `${API_BASE_URL}/api/audio/playlists/${playlistId}/items`,
         {
-          audio_id: audioData.audio_id,
+          audio_id: String(audioData.audio_id),  // Convert to string for API compatibility
           material_id: audioData.material_id,
           title: audioData.title,
           duration: audioData.duration,
