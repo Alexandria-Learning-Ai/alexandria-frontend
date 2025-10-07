@@ -119,7 +119,7 @@ const MaterialViewerScreen = () => {
 
                 // Try to GET existing audio
                 const response = await axios.get(
-                    `${API_BASE_URL}/study/materials/${material.id}/audio`,
+                    `${API_BASE_URL}/api/study/materials/${material.id}/audio`,
                     {
                         params: {
                             user_id: user.uid,
@@ -339,7 +339,7 @@ const MaterialViewerScreen = () => {
 
             // POST will return cached audio if available
             const response = await axios.post(
-                `${API_BASE_URL}/study/materials/${material.id}/audio`,
+                `${API_BASE_URL}/api/study/materials/${material.id}/audio`,
                 formData,
                 {
                     headers: {
