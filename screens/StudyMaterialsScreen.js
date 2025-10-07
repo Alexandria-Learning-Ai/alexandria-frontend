@@ -238,7 +238,7 @@ export default function StudyMaterialsScreen({ navigation }) {
                                     return;
                                 }
 
-                                await axios.delete(`${API_BASE_URL}/study/materials/${materialId}`, {
+                                await axios.delete(`${API_BASE_URL}/api/study/materials/${materialId}`, {
                                     headers: {
                                         'X-User-ID': user.uid,
                                     },
