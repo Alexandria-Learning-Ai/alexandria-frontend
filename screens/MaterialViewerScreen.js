@@ -22,6 +22,7 @@ import { API_BASE_URL } from '../config/api';
 import axios from 'axios';
 import logger from '../utils/logger';
 import { styles } from '../styles/MaterialViewerScreenStyles';
+import AddToPlaylistModal from '../components/playlist/AddToPlaylistModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -62,6 +63,7 @@ const MaterialViewerScreen = () => {
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [emphasizedSegments, setEmphasizedSegments] = useState([]);
     const [audioSyncPosition, setAudioSyncPosition] = useState(0);
+    const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
 
     // Use the light theme colors from Colors constants
     const themeStyles = {
@@ -995,6 +997,19 @@ const MaterialViewerScreen = () => {
                                 </Text>
                             </View>
 
+                            {/* Save to Playlist Button */}
+                            {audioUrl && (
+                                <TouchableOpacity
+                                    style={styles.saveToPlaylistButton}
+                                    onPress={() => setShowAddToPlaylistModal(true)}
+                                >
+                                    <FontAwesome5 name="plus-circle" size={18} color="#D4AF37" />
+                                    <Text style={[styles.saveToPlaylistText, themeStyles.textSecondary]}>
+                                        Save to Playlist
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
                             {/* Voice Selection Button */}
                             {!audioUrl && (
                                 <TouchableOpacity
@@ -1430,6 +1445,18 @@ const MaterialViewerScreen = () => {
                     {renderContent()}
                 </View>
             </Animatable.View>
+
+            {/* Add to Playlist Modal */}
+            <AddToPlaylistModal
+                visible={showAddToPlaylistModal}
+                onClose={() => setShowAddToPlaylistModal(false)}
+                audioData={{
+                    audio_id: material.id,
+                    material_id: material.id,
+                    title: material.title,
+                    duration: audioDuration
+                }}
+            />
         </SafeAreaView>
     );
 };

@@ -1,6 +1,6 @@
 // navigation/AppNavigator.js
 import React, { useEffect, useState, forwardRef, useImperativeHandle, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
@@ -30,9 +30,15 @@ import ScheduleExamScreen from '../screens/ScheduleExamScreen';
 import ExamListScreen from '../screens/ExamListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
+import ProfileEditSelectionScreen from '../screens/ProfileEditSelectionScreen';
 import WeaknessAnalysisScreen from '../screens/WeaknessAnalysisScreen';
 import TermsAndAgreementScreen from '../screens/TermsAndAgreementScreen';
 import FlashcardScreen from '../screens/FlashcardScreen';
+import FlashcardStudyScreen from '../screens/FlashcardStudyScreen';
+import StudyMaterialsScreen from '../screens/StudyMaterialsScreen';
+import MaterialViewerScreen from '../screens/MaterialViewerScreen';
+import AudioPlaylistsScreen from '../screens/AudioPlaylistsScreen';
+import PlaylistDetailsScreen from '../screens/PlaylistDetailsScreen';
 
 // New subscription screens
 import SubscriptionScreen from '../screens/SubscriptionScreen';
@@ -387,6 +393,15 @@ const PremiumBadge = ({ tier }) => {
 const NavigationStackWrapper = ({ user, userState }) => {
   const subscription = useSubscription(); // ✅ Now this is inside SubscriptionProvider
   const { currentTier, hasActiveSubscription, isLoading: subscriptionLoading } = subscription;
+  const navigationRef = useRef(null);
+
+  // 🔒 MANUAL NAVIGATION APPROACH
+  // Instead of automatic navigation, we'll rely on manual navigation from screens
+  // This avoids the navigation readiness issues we've been experiencing
+  useEffect(() => {
+    logger.info(`🔄 NavigationStackWrapper - userState: ${userState}`);
+    // No automatic navigation - let screens handle their own navigation
+  }, [userState]);
 
   // Theme colors
   const colors = {
@@ -431,8 +446,8 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <HomeScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="Upload" 
+            <Stack.Screen
+              name="Upload"
               options={{
                 ...getScreenOptions('Create Quiz', { gestureEnabled: true })
               }}
@@ -440,10 +455,46 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <UploadScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="QuizScreen" 
+            <Stack.Screen
+              name="StudyMaterials"
               options={{
-                ...getScreenOptions('Quiz', { 
+                ...getScreenOptions('Study Materials', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <StudyMaterialsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="MaterialViewer"
+              options={{
+                ...getScreenOptions('Material Viewer', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <MaterialViewerScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="AudioPlaylists"
+              options={{
+                ...getScreenOptions('Audio Playlists', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <AudioPlaylistsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="PlaylistDetails"
+              options={{
+                ...getScreenOptions('Playlist', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="QuizScreen"
+              options={{
+                ...getScreenOptions('Quiz', {
                   gestureEnabled: false,
                   headerRight: () => currentTier?.id === 'explorer' && (
                     <FontAwesome5 name="info-circle" size={20} color={colors.accent} style={{ marginRight: 15 }} />
@@ -513,15 +564,23 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <WeaknessAnalysisScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="FlashcardScreen" 
+            <Stack.Screen
+              name="FlashcardScreen"
               options={{
                 ...getScreenOptions('Study Flashcards', { gestureEnabled: true })
               }}
               component={FlashcardScreen}
             />
 
-            <Stack.Screen 
+            <Stack.Screen
+              name="FlashcardStudy"
+              options={{
+                ...getScreenOptions('Study Session', { gestureEnabled: true })
+              }}
+              component={FlashcardStudyScreen}
+            />
+
+            <Stack.Screen
               name="Coach" 
               options={{
                 ...getScreenOptions('Coach', { gestureEnabled: true })
@@ -558,23 +617,30 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <ExamListScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ProfileScreen" 
+            <Stack.Screen
+              name="Profile"
               options={{ headerShown: false }}
             >
               {(props) => <ProfileScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ProfileView" 
+            <Stack.Screen
+              name="ProfileView"
               options={{ headerShown: false }}
             >
               {(props) => <ProfileViewScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="TermsAndAgreement" 
-              options={{ 
+            <Stack.Screen
+              name="ProfileEditSelection"
+              options={{ headerShown: false }}
+            >
+              {(props) => <ProfileEditSelectionScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="TermsAndAgreement"
+              options={{
                 headerShown: false,
                 gestureEnabled: true // ✅ FIXED: Allow swipe back gesture now that we have proper back button
               }}
@@ -625,13 +691,27 @@ const NavigationStackWrapper = ({ user, userState }) => {
             </Stack.Screen>
             
             {/* Include profile and home screens for after terms acceptance */}
-            <Stack.Screen 
-              name="ProfileScreen" 
+            <Stack.Screen
+              name="ProfileView"
               options={{ headerShown: false, gestureEnabled: false }}
+            >
+              {(props) => <ProfileViewScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="ProfileEditSelection"
+              options={{ headerShown: false }}
+            >
+              {(props) => <ProfileEditSelectionScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="Profile"
+              options={{ headerShown: false }}
             >
               {(props) => <ProfileScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
-            
+
             <Stack.Screen
               name="Home"
               options={{
@@ -650,11 +730,11 @@ const NavigationStackWrapper = ({ user, userState }) => {
         // User is authenticated but needs to complete profile
         return (
           <>
-            <Stack.Screen 
-              name="SignUp" 
-              options={{ 
-                gestureEnabled: true,
-                title: 'Sign Up',
+            <Stack.Screen
+              name="ProfileSetup"
+              options={{
+                gestureEnabled: false,
+                title: 'Profile Setup',
                 headerStyle: {
                   backgroundColor: colors.surface,
                 },
@@ -664,7 +744,7 @@ const NavigationStackWrapper = ({ user, userState }) => {
                 },
               }}
             >
-              {(props) => <SignUpScreen {...props} />}
+              {(props) => <ProfileScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             <Stack.Screen 
@@ -701,16 +781,6 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <ForgotPasswordScreen {...props} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ProfileScreen" 
-              options={{ 
-                headerShown: false,
-                gestureEnabled: true // Allow going back to sign up
-              }}
-            >
-              {(props) => <ProfileScreen {...props} user={user} subscription={subscription} />}
-            </Stack.Screen>
-
             {/* Include ALL authenticated screens for after profile completion */}
             <Stack.Screen
               name="Home"
@@ -724,8 +794,8 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <HomeScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="Upload" 
+            <Stack.Screen
+              name="Upload"
               options={{
                 ...getScreenOptions('Create Quiz', { gestureEnabled: true })
               }}
@@ -733,8 +803,44 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <UploadScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="QuizScreen" 
+            <Stack.Screen
+              name="StudyMaterials"
+              options={{
+                ...getScreenOptions('Study Materials', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <StudyMaterialsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="MaterialViewer"
+              options={{
+                ...getScreenOptions('Material Viewer', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <MaterialViewerScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="AudioPlaylists"
+              options={{
+                ...getScreenOptions('Audio Playlists', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <AudioPlaylistsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="PlaylistDetails"
+              options={{
+                ...getScreenOptions('Playlist', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="QuizScreen"
               options={{
                 ...getScreenOptions('Quiz', { gestureEnabled: false })
               }}
@@ -796,15 +902,23 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <WeaknessAnalysisScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="FlashcardScreen" 
+            <Stack.Screen
+              name="FlashcardScreen"
               options={{
                 ...getScreenOptions('Study Flashcards', { gestureEnabled: true })
               }}
               component={FlashcardScreen}
             />
 
-            <Stack.Screen 
+            <Stack.Screen
+              name="FlashcardStudy"
+              options={{
+                ...getScreenOptions('Study Session', { gestureEnabled: true })
+              }}
+              component={FlashcardStudyScreen}
+            />
+
+            <Stack.Screen
               name="Coach" 
               options={{
                 ...getScreenOptions('Coach', { gestureEnabled: true })
@@ -836,16 +950,23 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <ExamListScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ProfileView" 
+            <Stack.Screen
+              name="ProfileView"
               options={{ headerShown: false }}
             >
               {(props) => <ProfileViewScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="TermsAndAgreement" 
-              options={{ 
+            <Stack.Screen
+              name="ProfileEditSelection"
+              options={{ headerShown: false }}
+            >
+              {(props) => <ProfileEditSelectionScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="TermsAndAgreement"
+              options={{
                 headerShown: false,
                 gestureEnabled: true // ✅ FIXED: Allow swipe back gesture now that we have proper back button
               }}
@@ -906,8 +1027,8 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <LoginScreen {...props} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ForgotPassword" 
+            <Stack.Screen
+              name="ForgotPassword"
               options={{
                 title: 'Reset Password',
                 gestureEnabled: true,
@@ -923,21 +1044,31 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <ForgotPasswordScreen {...props} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ProfileScreen" 
-              options={{ headerShown: false }}
-            >
-              {(props) => <ProfileScreen {...props} />}
-            </Stack.Screen>
-
-            <Stack.Screen 
-              name="TermsAndAgreement" 
-              options={{ 
-                headerShown: false,
-                gestureEnabled: true // ✅ FIXED: Allow swipe back gesture now that we have proper back button
+            <Stack.Screen
+              name="ProfileSetup"
+              options={{
+                gestureEnabled: true,
+                title: 'Create Account',
+                headerStyle: {
+                  backgroundColor: colors.surface,
+                },
+                headerTintColor: colors.text,
+                headerTitleStyle: {
+                  fontWeight: 'bold',
+                },
               }}
             >
-              {(props) => <TermsAndAgreementScreen {...props} />}
+              {(props) => <ProfileScreen {...props} user={null} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="TermsAndAgreement"
+              options={{
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <TermsAndAgreementScreen {...props} user={null} />}
             </Stack.Screen>
 
             {/* ✅ ADD THIS: Subscription screen for unauthenticated users */}
@@ -961,7 +1092,7 @@ const NavigationStackWrapper = ({ user, userState }) => {
       case 'needsTerms':
         return 'TermsAndAgreement';
       case 'needsProfile':
-        return 'SignUp';
+        return 'ProfileSetup';
       case 'authenticated':
         return 'Home';
       case 'unauthenticated':
@@ -972,6 +1103,7 @@ const NavigationStackWrapper = ({ user, userState }) => {
 
   return (
     <Stack.Navigator
+      ref={navigationRef}
       initialRouteName={getInitialRouteName()}
       screenOptions={{
         headerShown: true,
@@ -1021,7 +1153,8 @@ const AppNavigator = forwardRef((props, ref) => {
     },
     isReady: () => {
       return navigationRef?.isReady() || false;
-    }
+    },
+    refreshUserState: refreshUserState
   }), [navigationRef]);
 
   // Development helper: Clear auth and storage for testing
@@ -1037,93 +1170,236 @@ const AppNavigator = forwardRef((props, ref) => {
     }
   };
 
-  // Enhanced auth state management with profile completion check
+  // Function to manually refresh user state (can be called externally)
+  const refreshUserState = async () => {
+    const currentUser = auth.currentUser;
+    await checkUserState(currentUser);
+  };
+
+  // Expose refresh function globally for terms acceptance
   useEffect(() => {
-    // 🚨 DISABLED: Clear auth on app start for testing onboarding
-    // clearAuthForTesting(); // ⚠️ This was causing login issues for existing users!
-    
+    // Store the refresh function globally so TermsAndAgreementScreen can access it
+    global.refreshAppNavigatorState = refreshUserState;
+    return () => {
+      // Cleanup
+      delete global.refreshAppNavigatorState;
+    };
+  }, []);
+
+  // 🔒 BULLETPROOF TERMS ENFORCEMENT: 4-Layer Security System
+  const checkUserState = async (currentUser) => {
+    if (!currentUser) {
+      setUserState('unauthenticated');
+      setTimeout(() => {
+        setLoading(false);
+      }, 2500);
+      return;
+    }
+
+    try {
+      // ✅ Initialize hybrid data service for authenticated users
+      await HybridDataService.initialize();
+      logger.info('🔥 HybridDataService initialized for user:', currentUser.uid);
+
+      // ✅ Auto-migrate existing user data to Firebase
+      await FirebaseMigration.autoMigrate(currentUser.uid);
+
+      // 🔒 LAYER 1: BULLETPROOF TERMS VALIDATION
+      // Multiple redundant checks to prevent bypass
+      const termsValidation = await validateTermsAcceptance(currentUser.uid);
+
+      if (!termsValidation.isValid) {
+        logger.warn('🚨 SECURITY: Terms validation failed:', termsValidation.reason);
+
+        // Check if profile exists for terms enforcement flow
+        try {
+          const profileStatus = await Promise.race([
+            HybridDataService.getUserProfile(currentUser.uid).then(profile => ({ exists: !!profile })),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Profile check timeout')), 8000))
+          ]);
+
+          if (!profileStatus.exists) {
+            // User needs profile first
+            setUserState('needsProfile');
+            await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
+            logger.info('👤 Profile not found, user needs profile setup (step 1)');
+            setLoading(false);
+            return;
+          } else {
+            // Profile exists but terms invalid - force terms acceptance
+            setUserState('needsTerms');
+            await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`); // 🔒 Remove app access
+            logger.info('🔒 SECURITY: Forcing terms acceptance due to validation failure');
+            setLoading(false);
+            return;
+          }
+        } catch (profileError) {
+          // Fallback to profile setup if we can't verify profile
+          setUserState('needsProfile');
+          await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
+          logger.info('🔒 SECURITY: Fallback to profile setup due to profile check failure');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 🔒 LAYER 2: PROFILE VALIDATION
+      try {
+        logger.info('🔍 Checking profile status for user:', currentUser.uid);
+        const profileStatus = await Promise.race([
+          HybridDataService.getUserProfile(currentUser.uid).then(profile => ({ exists: !!profile })),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Profile check timeout')), 8000))
+        ]);
+
+        if (!profileStatus.exists) {
+          // User needs to complete profile first (step 1)
+          setUserState('needsProfile');
+          await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
+          await AsyncStorage.removeItem(`termsAccepted_${currentUser.uid}`); // 🔒 Clear terms on profile reset
+          logger.info('👤 Profile not found, user needs profile setup (step 1)');
+          setLoading(false);
+          return;
+        }
+
+        // 🔒 LAYER 3: FINAL TERMS VERIFICATION
+        // Even if profile exists, recheck terms with strict validation
+        const finalTermsCheck = await validateTermsAcceptance(currentUser.uid);
+
+        if (!finalTermsCheck.isValid) {
+          // Profile exists but terms validation still fails
+          setUserState('needsTerms');
+          await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`); // 🔒 Remove app access
+          logger.warn('🔒 SECURITY: Final terms check failed, forcing terms acceptance');
+          setLoading(false);
+          return;
+        }
+
+        // 🔒 LAYER 4: GRANT AUTHENTICATED ACCESS
+        // All validations passed - user has complete access
+        setUserState('authenticated');
+        await AsyncStorage.setItem(`profileCompleted_${currentUser.uid}`, 'true');
+        logger.info('✅ All security layers passed, user authenticated');
+        setLoading(false);
+
+      } catch (profileError) {
+        logger.error('❌ Profile check failed, using secure fallback:', profileError.message);
+
+        // 🔒 SECURE FALLBACK: Default to strictest validation
+        const strictTermsCheck = await validateTermsAcceptance(currentUser.uid);
+        const profileCompleted = await AsyncStorage.getItem(`profileCompleted_${currentUser.uid}`);
+
+        if (!strictTermsCheck.isValid) {
+          // Always enforce terms if validation fails
+          setUserState('needsTerms');
+          await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
+          logger.info('🔒 SECURITY: Secure fallback enforcing terms');
+          setLoading(false);
+        } else if (!profileCompleted || profileCompleted !== 'true') {
+          // Terms valid but profile status unclear
+          setUserState('needsProfile');
+          logger.info('🔒 SECURITY: Secure fallback to profile setup');
+          setLoading(false);
+        } else {
+          // Both appear valid in cache
+          setUserState('authenticated');
+          logger.info('✅ Secure fallback: user authenticated');
+          setLoading(false);
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Critical error during user state check:', error);
+      // 🔒 SECURITY: On any critical error, deny access
+      setUserState('unauthenticated');
+      await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
+      await AsyncStorage.removeItem(`termsAccepted_${currentUser.uid}`);
+      setLoading(false);
+    }
+  };
+
+  // 🔒 BULLETPROOF TERMS VALIDATION FUNCTION
+  const validateTermsAcceptance = async (userId) => {
+    try {
+      // Multiple validation checks to prevent bypass
+      const checks = await Promise.all([
+        // Check 1: Local storage
+        AsyncStorage.getItem(`termsAccepted_${userId}`),
+        // Check 2: Profile completion flag (terms unlock this)
+        AsyncStorage.getItem(`profileCompleted_${userId}`),
+        // Check 3: App access timestamp validation
+        AsyncStorage.getItem(`lastTermsValidation_${userId}`)
+      ]);
+
+      const [termsAccepted, profileCompleted, lastValidation] = checks;
+
+      // Parse terms acceptance data
+      let termsData = null;
+      try {
+        termsData = termsAccepted ? JSON.parse(termsAccepted) : null;
+      } catch (parseError) {
+        logger.warn('🔒 SECURITY: Invalid terms data format');
+        return { isValid: false, reason: 'Invalid terms data format' };
+      }
+
+      // Validation 1: Terms data must exist and be properly formatted
+      if (!termsData || typeof termsData !== 'object') {
+        return { isValid: false, reason: 'No valid terms data found' };
+      }
+
+      // Validation 2: Terms must be explicitly accepted
+      if (termsData.accepted !== true) {
+        return { isValid: false, reason: 'Terms not explicitly accepted' };
+      }
+
+      // Validation 3: Terms must have valid timestamp
+      if (!termsData.timestamp || !Date.parse(termsData.timestamp)) {
+        return { isValid: false, reason: 'Invalid or missing timestamp' };
+      }
+
+      // Validation 4: Terms must have user ID matching current user
+      if (termsData.user_id !== userId) {
+        return { isValid: false, reason: 'Terms user ID mismatch' };
+      }
+
+      // Validation 5: Profile completion flag must exist (terms unlock this)
+      if (profileCompleted !== 'true') {
+        return { isValid: false, reason: 'Profile completion flag missing' };
+      }
+
+      // Validation 6: Timestamp must be within reasonable range (not future, not too old)
+      const termsDate = new Date(termsData.timestamp);
+      const now = new Date();
+      const daysDiff = (now - termsDate) / (1000 * 60 * 60 * 24);
+
+      if (termsDate > now) {
+        return { isValid: false, reason: 'Terms timestamp in future' };
+      }
+
+      if (daysDiff > 365) { // Terms older than 1 year might need re-acceptance
+        logger.warn('🔒 SECURITY: Terms acceptance older than 1 year');
+        return { isValid: false, reason: 'Terms acceptance expired' };
+      }
+
+      // Update validation timestamp for audit trail
+      await AsyncStorage.setItem(`lastTermsValidation_${userId}`, now.toISOString());
+
+      logger.info('✅ Terms validation passed all security checks');
+      return { isValid: true, reason: 'All validations passed' };
+
+    } catch (error) {
+      logger.error('🔒 SECURITY: Terms validation error:', error);
+      return { isValid: false, reason: 'Validation process failed' };
+    }
+  };
+
+  // 🔒 ENHANCED AUTH STATE MANAGEMENT WITH BULLETPROOF TERMS ENFORCEMENT
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      
+
       if (currentUser) {
-        try {
-          // ✅ Initialize hybrid data service for authenticated users
-          await HybridDataService.initialize();
-          logger.info('🔥 HybridDataService initialized for user:', currentUser.uid);
-
-          // ✅ Auto-migrate existing user data to Firebase
-          await FirebaseMigration.autoMigrate(currentUser.uid);
-
-          // ✅ ENHANCED: Check both terms acceptance AND profile completion
-          const termsAccepted = await AsyncStorage.getItem(`termsAccepted_${currentUser.uid}`);
-          
-          if (!termsAccepted || termsAccepted === 'false') {
-            // User hasn't accepted terms yet
-            setUserState('needsTerms');
-          } else {
-            // Try to check profile status with timeout and fallback
-            try {
-              logger.info('🔍 Checking profile status for user:', currentUser.uid);
-              const profileStatus = await Promise.race([
-                // Try hybrid approach first, fallback to original service
-                HybridDataService.getUserProfile(currentUser.uid).then(profile => ({ exists: !!profile })),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Profile check timeout')), 8000))
-              ]);
-              
-              if (profileStatus.exists) {
-                // User has accepted terms and has profile - fully authenticated
-                setUserState('authenticated');
-                await AsyncStorage.setItem(`profileCompleted_${currentUser.uid}`, 'true');
-                logger.info('✅ Profile found, user authenticated');
-              } else {
-                // User has accepted terms but needs profile
-                setUserState('needsProfile');
-                await AsyncStorage.removeItem(`profileCompleted_${currentUser.uid}`);
-                logger.info('⚠️ Profile not found, needs profile completion');
-              }
-            } catch (profileError) {
-              logger.error('❌ Profile check failed, using fallback logic:', profileError.message);
-              
-              // Fallback: Check local storage flag
-              const profileCompleted = await AsyncStorage.getItem(`profileCompleted_${currentUser.uid}`);
-              
-              if (profileCompleted === 'true') {
-                // Trust local storage if API is down
-                setUserState('authenticated');
-                logger.info('✅ Using cached profile status: authenticated');
-              } else {
-                // 🔧 FIX: Default to authenticated instead of needsProfile
-                // This ensures existing users can access all features even if profile check fails
-                setUserState('authenticated');
-                logger.info('⚠️ Using fallback: granting full access (authenticated)');
-                
-                // Cache the decision to avoid repeated API calls
-                await AsyncStorage.setItem(`profileCompleted_${currentUser.uid}`, 'true');
-              }
-            }
-          }
-        } catch (error) {
-          logger.error('❌ Auth state error:', error);
-          // Fallback to legacy check
-          try {
-            const profileCompleted = await AsyncStorage.getItem(`profileCompleted_${currentUser.uid}`);
-            const termsAccepted = await AsyncStorage.getItem(`termsAccepted_${currentUser.uid}`);
-            
-            if (!termsAccepted || termsAccepted === 'false') {
-              setUserState('needsTerms');
-            } else if (profileCompleted === 'true') {
-              setUserState('authenticated');
-            } else {
-              setUserState('needsProfile');
-            }
-          } catch (fallbackError) {
-            logger.error('Fallback profile check failed:', fallbackError);
-            // 🔧 FIX: Default to authenticated instead of needsTerms
-            setUserState('authenticated');
-            logger.info('⚠️ Ultimate fallback: granting full access');
-          }
-        }
-        setLoading(false); // ✅ For authenticated users, load immediately
+        // 🔒 Use the same bulletproof checkUserState function
+        // This ensures consistent security validation across all auth events
+        await checkUserState(currentUser);
       } else {
         // ✅ FIX: Add a delay for the unauthenticated path to showcase the loading animation
         setTimeout(() => {
@@ -1132,7 +1408,7 @@ const AppNavigator = forwardRef((props, ref) => {
         }, 2500); // 2.5-second delay to enjoy the animation
       }
     });
-    
+
     return unsubscribe;
   }, []);
 
@@ -1173,7 +1449,9 @@ const AppNavigator = forwardRef((props, ref) => {
         QuizHistory: 'history',
         ReviewScreen: 'review',
         ProgressTracker: 'progress',
-        ProfileScreen: 'profile',
+        Profile: 'profile',
+        ProfileSetup: 'profile/setup',
+        ProfileView: 'profile/view',
         
         // Subscription screens
         Subscription: 'subscription',
@@ -1195,101 +1473,6 @@ const AppNavigator = forwardRef((props, ref) => {
     },
   };
 
-  // New upload and quiz generation handler
-  const handleUploadAndGenerateQuiz = async () => {
-    if (files.length === 0) {
-        Alert.alert(
-            "🏛️ No Sacred Texts Found", 
-            "Please select study materials from the archives to forge your trial of knowledge."
-        );
-        return;
-    }
-
-    const selectedQuizTypes = Object.keys(quizConfig.types).filter(type => quizConfig.types[type]);
-    if (selectedQuizTypes.length === 0) {
-        Alert.alert(
-            "🏛️ No Trial Format Selected", 
-            "Please choose at least one format for your trial of wisdom."
-        );
-        return;
-    }
-
-    setUiState(prev => ({ ...prev, uploading: true, isTransitioning: true }));
-    setResponseText(null);
-
-    let res; // ✅ Declare res once, outside all try blocks
-
-    try {
-        const formData = new FormData();
-        const firstFile = files[0];
-        formData.append('file', {
-            uri: firstFile.uri,
-            name: firstFile.name,
-            type: firstFile.mimeType || 'application/octet-stream',
-        });
-
-        formData.append('quiz_types', JSON.stringify(selectedQuizTypes));
-        formData.append('num_questions', quizConfig.questionCount.toString());
-        formData.append('difficulty', quizConfig.difficulty);
-        
-        const user = auth.currentUser;
-        if (user) {
-            formData.append('user_id', user.uid);
-        }
-
-        // ✅ Use centralized API configuration
-        res = await axios.post(`${API_BASE_URL}/upload`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-                'X-User-ID': user?.uid || 'anonymous',
-            },
-            timeout: 600000,
-        });
-        
-        logger.info('✅ Upload successful:', res.status);
-
-        // ✅ Handle response immediately after successful upload
-        if (res && res.data && res.data.metadata?.anti_repetition_applied) {
-            setUiState(prev => ({ ...prev, showFreshnessIndicator: true }));
-            setTimeout(() => {
-                setUiState(prev => ({ ...prev, showFreshnessIndicator: false }));
-            }, 3000);
-        }
-
-        if (res && res.data && res.data.quiz) {
-            Animated.timing(containerAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-            }).start(() => {
-                navigation.navigate('QuizScreen', { 
-                    quiz: res.data.quiz,
-                    metadata: {
-                        ...res.data.metadata,
-                        title: 'Alexandria Trial of Wisdom'
-                    }
-                });
-            });
-            
-            setFiles([]);
-            Vibration.vibrate([100, 50, 200]);
-        } else if (res && res.data && res.data.detail) {
-            Alert.alert("🏛️ Oracle Error", res.data.detail);
-            setResponseText(`Oracle speaks: ${res.data.detail}`);
-        } else {
-            Alert.alert("🏛️ Wisdom Forged", res.data?.message || "Your trial has been prepared in the sacred halls.");
-            setResponseText(res.data?.message || "Trial preparation complete.");
-        }
-
-    } catch (error) {
-        logger.error("Trial creation error: ", error.response ? error.response.data : error.message);
-        const errorMessage = error.response?.data?.detail || error.message || "The ancient powers have failed us.";
-        Alert.alert("🏛️ Trial Creation Failed", `The wisdom could not be forged: ${errorMessage}`);
-        setResponseText(`Oracle's warning: ${errorMessage}`);
-    } finally {
-        setUiState(prev => ({ ...prev, uploading: false, isTransitioning: false }));
-    }
-  };
 
   if (loading || userState === 'loading') {
     return (
