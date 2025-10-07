@@ -15,6 +15,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 
@@ -26,6 +27,8 @@ interface PlaylistItemProps {
   onPlay: () => void;
   onRemove: () => void;
   isDragging?: boolean;
+  isPlaying?: boolean;
+  isLoading?: boolean;
 }
 
 const PlaylistItem: React.FC<PlaylistItemProps> = ({
@@ -36,6 +39,8 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({
   onPlay,
   onRemove,
   isDragging = false,
+  isPlaying = false,
+  isLoading = false,
 }) => {
   // Format duration from seconds to MM:SS
   const formatDuration = (seconds: number): string => {
@@ -45,7 +50,11 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({
   };
 
   return (
-    <View style={[styles.container, isDragging && styles.dragging]}>
+    <View style={[
+      styles.container,
+      isDragging && styles.dragging,
+      isPlaying && styles.playing
+    ]}>
       {/* Position Number */}
       <View style={styles.positionContainer}>
         <Text style={styles.positionText}>{position + 1}</Text>
@@ -56,23 +65,41 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({
         <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
-        <Text style={styles.duration}>{formatDuration(duration)}</Text>
+        <View style={styles.metadataRow}>
+          <Text style={styles.duration}>{formatDuration(duration)}</Text>
+          {isPlaying && (
+            <View style={styles.playingIndicator}>
+              <FontAwesome5 name="volume-up" size={12} color="#28a745" />
+              <Text style={styles.playingText}>Playing</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Action Buttons */}
       <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.playButton}
+          style={[styles.playButton, isPlaying && styles.playButtonActive]}
           onPress={onPlay}
           activeOpacity={0.7}
+          disabled={isLoading}
         >
-          <FontAwesome5 name="play" size={14} color="#D4AF37" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#D4AF37" />
+          ) : (
+            <FontAwesome5
+              name={isPlaying ? "stop" : "play"}
+              size={14}
+              color={isPlaying ? "#28a745" : "#D4AF37"}
+            />
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.removeButton}
           onPress={onRemove}
           activeOpacity={0.7}
+          disabled={isLoading}
         >
           <FontAwesome5 name="trash" size={14} color="#E74C3C" />
         </TouchableOpacity>
@@ -108,6 +135,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
   },
+  playing: {
+    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+    borderColor: 'rgba(40, 167, 69, 0.4)',
+  },
   positionContainer: {
     width: 28,
     height: 28,
@@ -131,9 +162,24 @@ const styles = StyleSheet.create({
     color: '#F8F4E3',
     lineHeight: 18,
   },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   duration: {
     fontSize: 12,
     color: '#CBD5E0',
+  },
+  playingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  playingText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#28a745',
   },
   actions: {
     flexDirection: 'row',
@@ -149,6 +195,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.4)',
+  },
+  playButtonActive: {
+    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+    borderColor: 'rgba(40, 167, 69, 0.5)',
   },
   removeButton: {
     width: 32,

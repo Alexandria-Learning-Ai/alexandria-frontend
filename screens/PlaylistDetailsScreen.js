@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { Audio } from 'expo-av';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
 import { useFocusEffect } from '@react-navigation/native';
@@ -23,6 +24,7 @@ import logger from '../utils/logger';
 import axios from 'axios';
 import PlaylistItem from '../components/playlist/PlaylistItem';
 import { usePlaylistStore, selectPlaylistById } from '../stores/playlistStore';
+import { getCachedAudioUri } from '../utils/audioCacheUtils';
 
 export default function PlaylistDetailsScreen({ navigation, route }) {
   const { playlist: initialPlaylist } = route.params;
@@ -38,6 +40,9 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [sound, setSound] = useState(null);
+  const [currentPlayingItem, setCurrentPlayingItem] = useState(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
   // Theme colors
   const themeColors = useMemo(() => ({
@@ -57,6 +62,16 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
       loadPlaylistDetails();
     }, [playlist.id])
   );
+
+  // Cleanup audio on component unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        logger.info('Cleaning up audio on unmount');
+        sound.unloadAsync().catch(err => logger.error('Error unloading sound:', err));
+      }
+    };
+  }, [sound]);
 
   // Load playlist details with items
   const loadPlaylistDetails = async (refresh = false) => {
@@ -126,11 +141,107 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
     return `${minutes}m`;
   };
 
-  // Play audio (placeholder - integrate with audio player)
-  const handlePlayAudio = (item) => {
-    logger.info('🎵 Playing audio:', item.title);
-    Alert.alert('Play Audio', `Playing: ${item.title}\n\nAudio player integration coming soon!`);
-    // TODO: Integrate with audio player service
+  // Play audio with local caching
+  const handlePlayAudio = async (item) => {
+    try {
+      setIsLoadingAudio(true);
+      logger.info('Playing audio:', item.title);
+
+      // Stop current audio if playing
+      if (sound) {
+        logger.info('Stopping current audio...');
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      // If clicking the same item that's playing, just stop it
+      if (currentPlayingItem?.id === item.id) {
+        setCurrentPlayingItem(null);
+        setIsLoadingAudio(false);
+        return;
+      }
+
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to play audio.');
+        setIsLoadingAudio(false);
+        return;
+      }
+
+      // Fetch audio URL from backend
+      logger.info(`Fetching audio for material: ${item.material_id}, audio: ${item.audio_id}`);
+      const response = await axios.get(
+        `${API_BASE_URL}/api/study/materials/${item.material_id}/audio`,
+        {
+          params: {
+            user_id: user.uid,
+            audio_id: item.audio_id,
+          },
+          headers: { 'X-User-ID': user.uid },
+          timeout: 30000,
+        }
+      );
+
+      if (!response.data || !response.data.audio_url) {
+        throw new Error('Audio URL not found in response');
+      }
+
+      const audioUrlPath = response.data.audio_url;
+      const serverAudioId = response.data.audio_id || item.audio_id;
+
+      // Try to get cached audio URI (or download and cache it)
+      logger.info('Checking cache for audio...');
+      const cachedUri = await getCachedAudioUri(
+        audioUrlPath,
+        API_BASE_URL,
+        item.material_id,
+        serverAudioId
+      );
+
+      // Use cached URI if available, otherwise fall back to backend URL
+      const audioUri = cachedUri || `${API_BASE_URL}${audioUrlPath}`;
+      logger.info(`Playing audio from: ${cachedUri ? 'LOCAL CACHE' : 'BACKEND URL'}`, audioUri);
+
+      // Configure audio mode
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+
+      // Load and play audio
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
+
+      setSound(newSound);
+      setCurrentPlayingItem(item);
+      logger.info('Audio playback started successfully');
+    } catch (error) {
+      logger.error('Error playing audio:', error);
+      Alert.alert(
+        'Playback Error',
+        'Failed to play audio. The file may no longer be available on the server.'
+      );
+      setCurrentPlayingItem(null);
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  };
+
+  // Handle playback status updates
+  const onPlaybackStatusUpdate = (status) => {
+    if (status.didJustFinish) {
+      logger.info('Audio playback finished');
+      setCurrentPlayingItem(null);
+      if (sound) {
+        sound.unloadAsync().catch(err => logger.error('Error unloading sound:', err));
+        setSound(null);
+      }
+    }
   };
 
   // Remove item from playlist with optimistic update
@@ -256,22 +367,29 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
   };
 
   // Render playlist item
-  const renderPlaylistItem = ({ item, index }) => (
-    <Animatable.View
-      animation="fadeInUp"
-      delay={index * 50}
-      duration={400}
-    >
-      <PlaylistItem
-        id={item.id}
-        title={item.title}
-        duration={item.duration}
-        position={item.position}
-        onPlay={() => handlePlayAudio(item)}
-        onRemove={() => handleRemoveItem(item.id, item.title)}
-      />
-    </Animatable.View>
-  );
+  const renderPlaylistItem = ({ item, index }) => {
+    const isPlaying = currentPlayingItem?.id === item.id;
+    const isLoading = isLoadingAudio && currentPlayingItem?.id === item.id;
+
+    return (
+      <Animatable.View
+        animation="fadeInUp"
+        delay={index * 50}
+        duration={400}
+      >
+        <PlaylistItem
+          id={item.id}
+          title={item.title}
+          duration={item.duration}
+          position={item.position}
+          onPlay={() => handlePlayAudio(item)}
+          onRemove={() => handleRemoveItem(item.id, item.title)}
+          isPlaying={isPlaying}
+          isLoading={isLoading}
+        />
+      </Animatable.View>
+    );
+  };
 
   // Render empty state
   const renderEmptyState = () => (
