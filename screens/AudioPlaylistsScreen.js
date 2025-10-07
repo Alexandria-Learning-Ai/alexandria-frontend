@@ -23,11 +23,13 @@ import logger from '../utils/logger';
 import axios from 'axios';
 import PlaylistCard from '../components/playlist/PlaylistCard';
 import CreatePlaylistModal from '../components/playlist/CreatePlaylistModal';
+import { usePlaylistStore } from '../stores/playlistStore';
 
 export default function AudioPlaylistsScreen({ navigation }) {
-  // State management
-  const [playlists, setPlaylists] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Global playlist store
+  const { playlists, loading, fetchPlaylists, addPlaylist, deletePlaylist } = usePlaylistStore();
+
+  // Local UI state only
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -51,57 +53,20 @@ export default function AudioPlaylistsScreen({ navigation }) {
     }, [])
   );
 
-  // Load playlists from backend
+  // Load playlists from global store
   const loadPlaylists = async (refresh = false) => {
-    try {
-      if (refresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+    if (refresh) {
+      setRefreshing(true);
+    }
 
-      const user = auth.currentUser;
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
+    await fetchPlaylists();
 
-      // Call playlists API
-      const response = await axios.get(`${API_BASE_URL}/audio/playlists/`, {
-        params: {
-          user_id: user.uid,
-        },
-        headers: {
-          'X-User-ID': user.uid,
-        },
-        timeout: 30000,
-      });
-
-      if (response.data && response.data.playlists) {
-        setPlaylists(response.data.playlists);
-        logger.info(`🎵 Loaded ${response.data.playlists.length} audio playlists`);
-      } else {
-        throw new Error('Invalid response format from server');
-      }
-    } catch (error) {
-      logger.error('❌ Error loading playlists:', error);
-
-      if (error.response?.status === 401) {
-        Alert.alert('Authentication Error', 'Please log in again to access your playlists.');
-      } else if (error.response?.status === 404) {
-        logger.info('🎵 Playlists API not available - showing empty state');
-        setPlaylists([]);
-      } else {
-        Alert.alert('Error', 'Failed to load playlists. Please try again.');
-      }
-
-      setPlaylists([]);
-    } finally {
-      setLoading(false);
+    if (refresh) {
       setRefreshing(false);
     }
   };
 
-  // Create new playlist
+  // Create new playlist with optimistic update
   const handleCreatePlaylist = async (name, description, thumbnailColor) => {
     try {
       const user = auth.currentUser;
@@ -110,6 +75,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
         return;
       }
 
+      // Make API call
       const response = await axios.post(
         `${API_BASE_URL}/audio/playlists/`,
         {
@@ -131,8 +97,8 @@ export default function AudioPlaylistsScreen({ navigation }) {
 
       if (response.data) {
         logger.info('✅ Created playlist:', response.data.name);
-        // Reload playlists
-        await loadPlaylists();
+        // Optimistic update - add to global store immediately
+        addPlaylist(response.data);
         Alert.alert('Success', `Playlist "${name}" created successfully!`);
       }
     } catch (error) {
@@ -142,7 +108,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
     }
   };
 
-  // Delete playlist
+  // Delete playlist with optimistic update
   const handleDeletePlaylist = async (playlistId, playlistName) => {
     Alert.alert(
       'Delete Playlist',
@@ -160,6 +126,10 @@ export default function AudioPlaylistsScreen({ navigation }) {
                 return;
               }
 
+              // Optimistic update - remove from store immediately
+              deletePlaylist(playlistId);
+
+              // Make API call
               await axios.delete(`${API_BASE_URL}/audio/playlists/${playlistId}`, {
                 params: {
                   user_id: user.uid,
@@ -170,13 +140,13 @@ export default function AudioPlaylistsScreen({ navigation }) {
                 timeout: 30000,
               });
 
-              // Remove from local state
-              setPlaylists(prev => prev.filter(p => p.id !== playlistId));
               logger.info(`🗑️ Deleted playlist: ${playlistName}`);
               Alert.alert('Success', 'Playlist deleted successfully.');
             } catch (error) {
               logger.error('❌ Error deleting playlist:', error);
               Alert.alert('Error', 'Failed to delete playlist. Please try again.');
+              // Re-fetch to restore state on error
+              await fetchPlaylists();
             }
           },
         },

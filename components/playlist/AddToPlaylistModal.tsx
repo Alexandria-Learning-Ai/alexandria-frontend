@@ -26,6 +26,7 @@ import axios from 'axios';
 import { auth } from '../../firebaseConfig';
 import { API_BASE_URL } from '../../config/api';
 import logger from '../../utils/logger';
+import { usePlaylistStore } from '../../stores/playlistStore';
 
 interface Playlist {
   id: string;
@@ -53,43 +54,18 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   onClose,
   audioData,
 }) => {
+  // Global playlist store
+  const { playlists, loading, fetchPlaylists, updatePlaylistItems } = usePlaylistStore();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
 
   // Fetch playlists when modal opens
   useEffect(() => {
     if (visible) {
       fetchPlaylists();
     }
-  }, [visible]);
-
-  const fetchPlaylists = async () => {
-    setIsLoading(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert('Error', 'Please log in to view playlists');
-        return;
-      }
-
-      const response = await axios.get(`${API_BASE_URL}/audio/playlists/`, {
-        params: { user_id: user.uid },
-        headers: { 'X-User-ID': user.uid },
-        timeout: 10000,
-      });
-
-      if (response.data?.success) {
-        setPlaylists(response.data.data || []);
-      }
-    } catch (error) {
-      logger.error('Error fetching playlists:', error);
-      Alert.alert('Error', 'Failed to load playlists');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [visible, fetchPlaylists]);
 
   // Filter playlists by search query
   const filteredPlaylists = (playlists || []).filter((playlist) =>
@@ -119,7 +95,21 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
         }
       );
 
-      if (response.data?.success) {
+      if (response.data?.success || response.data) {
+        // Update global store with new playlist state
+        const updatedPlaylist = response.data.playlist || response.data;
+        if (updatedPlaylist.items) {
+          updatePlaylistItems(
+            playlistId,
+            updatedPlaylist.items,
+            updatedPlaylist.item_count,
+            updatedPlaylist.total_duration
+          );
+        } else {
+          // If no items returned, just refresh the store
+          await fetchPlaylists();
+        }
+
         Alert.alert('Success', 'Audio added to playlist!');
         setSearchQuery('');
         onClose();
@@ -242,7 +232,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           </TouchableOpacity>
 
           {/* Playlists List */}
-          {isLoading ? (
+          {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#D4AF37" />
               <Text style={styles.loadingText}>Loading playlists...</Text>

@@ -22,12 +22,19 @@ import NavigationHelper from '../utils/NavigationHelper';
 import logger from '../utils/logger';
 import axios from 'axios';
 import PlaylistItem from '../components/playlist/PlaylistItem';
+import { usePlaylistStore, selectPlaylistById } from '../stores/playlistStore';
 
 export default function PlaylistDetailsScreen({ navigation, route }) {
   const { playlist: initialPlaylist } = route.params;
 
-  // State management
-  const [playlist, setPlaylist] = useState(initialPlaylist);
+  // Global playlist store
+  const { playlists, fetchPlaylists, updatePlaylistItems } = usePlaylistStore();
+
+  // Get current playlist from store (with fallback to initial)
+  const storePlaylist = selectPlaylistById({ playlists }, initialPlaylist.id);
+  const playlist = storePlaylist || initialPlaylist;
+
+  // Local UI state
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,7 +87,15 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
       );
 
       if (response.data) {
-        setPlaylist(response.data);
+        // Update global store with playlist items
+        updatePlaylistItems(
+          playlist.id,
+          response.data.items || [],
+          response.data.item_count,
+          response.data.total_duration
+        );
+
+        // Update local items state
         setItems(response.data.items || []);
         logger.info(`🎵 Loaded playlist details: ${response.data.name} with ${response.data.items?.length || 0} items`);
       }
@@ -118,7 +133,7 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
     // TODO: Integrate with audio player service
   };
 
-  // Remove item from playlist
+  // Remove item from playlist with optimistic update
   const handleRemoveItem = async (itemId, itemTitle) => {
     Alert.alert(
       'Remove from Playlist',
@@ -136,6 +151,22 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
                 return;
               }
 
+              // Get item duration before removing
+              const removedItem = items.find(i => i.id === itemId);
+              const removedDuration = removedItem?.duration || 0;
+
+              // Optimistic update - remove from local state immediately
+              const newItems = items.filter(item => item.id !== itemId);
+              setItems(newItems);
+
+              // Calculate new counts
+              const newItemCount = playlist.item_count - 1;
+              const newTotalDuration = playlist.total_duration - removedDuration;
+
+              // Update global store
+              updatePlaylistItems(playlist.id, newItems, newItemCount, newTotalDuration);
+
+              // Make API call
               await axios.delete(
                 `${API_BASE_URL}/audio/playlists/${playlist.id}/items/${itemId}`,
                 {
@@ -149,18 +180,12 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
                 }
               );
 
-              // Remove from local state and update counts
-              setItems(prev => prev.filter(item => item.id !== itemId));
-              setPlaylist(prev => ({
-                ...prev,
-                item_count: prev.item_count - 1,
-                total_duration: prev.total_duration - (items.find(i => i.id === itemId)?.duration || 0),
-              }));
-
               logger.info(`🗑️ Removed item from playlist: ${itemTitle}`);
             } catch (error) {
               logger.error('❌ Error removing item:', error);
               Alert.alert('Error', 'Failed to remove item. Please try again.');
+              // Re-fetch to restore state on error
+              await loadPlaylistDetails();
             }
           },
         },
