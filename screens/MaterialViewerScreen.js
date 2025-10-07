@@ -16,6 +16,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { Colors } from '../constants/Colors';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
@@ -78,6 +79,127 @@ const MaterialViewerScreen = () => {
         border: { borderColor: Colors.border },
     };
 
+    // Audio cache directory constants
+    const AUDIO_CACHE_DIR = `${FileSystem.documentDirectory}audio_cache/`;
+    const MAX_CACHED_FILES = 20;
+
+    // Helper function: Get cache file path for audio
+    const getAudioCachePath = (materialId, audioIdParam) => {
+        return `${AUDIO_CACHE_DIR}audio_${materialId}_${audioIdParam}.mp3`;
+    };
+
+    // Helper function: Check if audio is cached locally
+    const isAudioCached = async (materialId, audioIdParam) => {
+        try {
+            const cachePath = getAudioCachePath(materialId, audioIdParam);
+            const fileInfo = await FileSystem.getInfoAsync(cachePath);
+            return fileInfo.exists;
+        } catch (error) {
+            logger.error('Error checking audio cache:', error);
+            return false;
+        }
+    };
+
+    // Helper function: Download and cache audio file
+    const downloadAndCacheAudio = async (audioUrlPath, materialId, audioIdParam) => {
+        try {
+            // Ensure cache directory exists
+            const dirInfo = await FileSystem.getInfoAsync(AUDIO_CACHE_DIR);
+            if (!dirInfo.exists) {
+                logger.info('Creating audio cache directory...');
+                await FileSystem.makeDirectoryAsync(AUDIO_CACHE_DIR, { intermediates: true });
+            }
+
+            const cachePath = getAudioCachePath(materialId, audioIdParam);
+            const fullAudioUrl = `${API_BASE_URL}${audioUrlPath}`;
+
+            logger.info(`Downloading audio to cache: ${fullAudioUrl} -> ${cachePath}`);
+
+            // Download the audio file
+            const downloadResult = await FileSystem.downloadAsync(fullAudioUrl, cachePath);
+
+            if (downloadResult.status === 200) {
+                logger.info(`Audio cached successfully at: ${cachePath}`);
+
+                // Clean up old cache files if needed
+                await cleanupAudioCache();
+
+                return cachePath;
+            } else {
+                throw new Error(`Download failed with status: ${downloadResult.status}`);
+            }
+        } catch (error) {
+            logger.error('Error downloading and caching audio:', error);
+            throw error;
+        }
+    };
+
+    // Helper function: Get cached audio URI or download it
+    const getCachedAudioUri = async (audioUrlPath, materialId, audioIdParam) => {
+        try {
+            // Check if already cached
+            const cached = await isAudioCached(materialId, audioIdParam);
+
+            if (cached) {
+                const cachePath = getAudioCachePath(materialId, audioIdParam);
+                logger.info(`Using cached audio: ${cachePath}`);
+                return cachePath;
+            }
+
+            // Not cached, download it
+            logger.info('Audio not cached, downloading...');
+            const cachePath = await downloadAndCacheAudio(audioUrlPath, materialId, audioIdParam);
+            return cachePath;
+        } catch (error) {
+            logger.error('Error getting cached audio URI:', error);
+            // Fall back to backend URL if caching fails
+            return null;
+        }
+    };
+
+    // Helper function: Clean up old cached audio files
+    const cleanupAudioCache = async () => {
+        try {
+            const dirInfo = await FileSystem.getInfoAsync(AUDIO_CACHE_DIR);
+            if (!dirInfo.exists) return;
+
+            const files = await FileSystem.readDirectoryAsync(AUDIO_CACHE_DIR);
+
+            if (files.length <= MAX_CACHED_FILES) {
+                logger.info(`Cache size OK: ${files.length} files`);
+                return;
+            }
+
+            // Get file info with timestamps
+            const fileInfos = await Promise.all(
+                files.map(async (filename) => {
+                    const filePath = `${AUDIO_CACHE_DIR}${filename}`;
+                    const info = await FileSystem.getInfoAsync(filePath);
+                    return {
+                        path: filePath,
+                        modificationTime: info.modificationTime || 0,
+                        filename
+                    };
+                })
+            );
+
+            // Sort by modification time (oldest first)
+            fileInfos.sort((a, b) => a.modificationTime - b.modificationTime);
+
+            // Delete oldest files to keep only MAX_CACHED_FILES
+            const filesToDelete = fileInfos.slice(0, files.length - MAX_CACHED_FILES);
+
+            for (const file of filesToDelete) {
+                await FileSystem.deleteAsync(file.path, { idempotent: true });
+                logger.info(`Deleted old cached audio: ${file.filename}`);
+            }
+
+            logger.info(`Cache cleanup complete. Removed ${filesToDelete.length} files.`);
+        } catch (error) {
+            logger.error('Error cleaning up audio cache:', error);
+        }
+    };
+
     useEffect(() => {
         if (!material) {
             Alert.alert('Error', 'Material data not found');
@@ -94,6 +216,11 @@ const MaterialViewerScreen = () => {
 
             // Check if material already has summary or audio
             checkExistingContent();
+
+            // Run cache cleanup on component mount
+            cleanupAudioCache().catch(err =>
+                logger.error('Error during cache cleanup:', err)
+            );
         }
     }, [material, navigation]);
 
@@ -113,12 +240,12 @@ const MaterialViewerScreen = () => {
         try {
             // Check if material has audio flag
             if (material.hasAudio || material.has_audio) {
-                logger.info('🔊 Material has audio, attempting to load cached version...');
+                logger.info('🔊 Material has audio, checking local cache...');
 
                 const user = auth.currentUser;
                 if (!user) return;
 
-                // Try to GET existing audio
+                // Try to GET existing audio from backend
                 const response = await axios.get(
                     `${API_BASE_URL}/api/study/materials/${material.id}/audio`,
                     {
@@ -134,13 +261,47 @@ const MaterialViewerScreen = () => {
                 );
 
                 if (response.data && response.data.audio_url) {
-                    logger.info('✅ Loaded cached audio from server');
-                    setAudioUrl(response.data.audio_url);
-                    setAudioDuration(response.data.duration || 0);
-                    if (response.data.audio_id) {
-                        setAudioId(response.data.audio_id);
+                    const serverAudioId = response.data.audio_id || 'default';
+
+                    // Check if audio is cached locally
+                    const cached = await isAudioCached(material.id, serverAudioId);
+
+                    if (cached) {
+                        // Use local cached version
+                        const localUri = getAudioCachePath(material.id, serverAudioId);
+                        logger.info('✅ Using locally cached audio:', localUri);
+                        setAudioUrl(localUri);
+                        setAudioDuration(response.data.duration || 0);
+                        setAudioId(serverAudioId);
+                    } else {
+                        // Not cached locally, try to download and cache it
+                        logger.info('📥 Audio not cached locally, downloading...');
+                        try {
+                            const localUri = await getCachedAudioUri(
+                                response.data.audio_url,
+                                material.id,
+                                serverAudioId
+                            );
+
+                            if (localUri) {
+                                logger.info('✅ Audio downloaded and cached:', localUri);
+                                setAudioUrl(localUri);
+                            } else {
+                                // Fall back to server URL if caching fails
+                                logger.warn('⚠️ Caching failed, using server URL');
+                                setAudioUrl(response.data.audio_url);
+                            }
+
+                            setAudioDuration(response.data.duration || 0);
+                            setAudioId(serverAudioId);
+                        } catch (cacheError) {
+                            // Fall back to server URL
+                            logger.error('❌ Error caching audio:', cacheError);
+                            setAudioUrl(response.data.audio_url);
+                            setAudioDuration(response.data.duration || 0);
+                            setAudioId(serverAudioId);
+                        }
                     }
-                    // Don't auto-play, just make it available
                 }
             }
 
@@ -358,11 +519,34 @@ const MaterialViewerScreen = () => {
             setAudioGenerationProgress(100);
 
             if (response.data) {
-                setAudioUrl(response.data.audio_url);
-                setAudioDuration(response.data.duration || 0);
-                if (response.data.audio_id) {
-                    setAudioId(response.data.audio_id);
+                const serverAudioId = response.data.audio_id || 'default';
+                const serverAudioUrl = response.data.audio_url;
+
+                // Download and cache the audio file locally
+                logger.info('📥 Downloading and caching generated audio...');
+                try {
+                    const localUri = await getCachedAudioUri(
+                        serverAudioUrl,
+                        material.id,
+                        serverAudioId
+                    );
+
+                    if (localUri) {
+                        logger.info('✅ Audio cached locally:', localUri);
+                        setAudioUrl(localUri);
+                    } else {
+                        // Fall back to server URL if caching fails
+                        logger.warn('⚠️ Caching failed, using server URL');
+                        setAudioUrl(serverAudioUrl);
+                    }
+                } catch (cacheError) {
+                    // Fall back to server URL
+                    logger.error('❌ Error caching audio:', cacheError);
+                    setAudioUrl(serverAudioUrl);
                 }
+
+                setAudioDuration(response.data.duration || 0);
+                setAudioId(serverAudioId);
                 setIsPlaying(true);
                 setViewMode('listen');
                 setAudioError(null);
@@ -456,13 +640,25 @@ const MaterialViewerScreen = () => {
                 shouldDuckAndroid: true,
             });
 
-            // Construct full audio URL
-            const fullAudioUrl = `${API_BASE_URL}${audioUrl}`;
-            logger.info(`🔊 Full audio URL: ${fullAudioUrl}`);
+            // Determine if audioUrl is a local file path or remote URL
+            let audioUri;
+            if (audioUrl.startsWith('file://') || audioUrl.includes(FileSystem.documentDirectory)) {
+                // Local cached file
+                audioUri = audioUrl;
+                logger.info(`🔊 Playing from local cache: ${audioUri}`);
+            } else if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
+                // Full URL already provided
+                audioUri = audioUrl;
+                logger.info(`🔊 Playing from remote URL: ${audioUri}`);
+            } else {
+                // Relative path, construct full URL
+                audioUri = `${API_BASE_URL}${audioUrl}`;
+                logger.info(`🔊 Playing from backend: ${audioUri}`);
+            }
 
             // Load and play the sound
             const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: fullAudioUrl },
+                { uri: audioUri },
                 { shouldPlay: true, progressUpdateIntervalMillis: 1000 },
                 onPlaybackStatusUpdate
             );
