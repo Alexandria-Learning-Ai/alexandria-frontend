@@ -27,6 +27,7 @@ import { auth } from '../../firebaseConfig';
 import { API_BASE_URL } from '../../config/api';
 import logger from '../../utils/logger';
 import { usePlaylistStore } from '../../stores/playlistStore';
+import CreatePlaylistModal from './CreatePlaylistModal';
 
 interface Playlist {
   id: string;
@@ -55,10 +56,11 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   audioData,
 }) => {
   // Global playlist store
-  const { playlists, loading, fetchPlaylists, updatePlaylistItems } = usePlaylistStore();
+  const { playlists, loading, fetchPlaylists, updatePlaylistItems, addPlaylist } = usePlaylistStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch playlists when modal opens
   useEffect(() => {
@@ -130,12 +132,54 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   };
 
   const handleCreateNew = () => {
-    onClose();
-    Alert.alert(
-      'Create Playlist',
-      'Navigate to Audio Playlists screen to create a new playlist',
-      [{ text: 'OK' }]
-    );
+    setShowCreateModal(true);
+  };
+
+  const handleCreatePlaylistSubmit = async (name: string, description: string, thumbnailColor: string) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to create playlists.');
+        return;
+      }
+
+      // Create playlist via API
+      const response = await axios.post(
+        `${API_BASE_URL}/audio/playlists/`,
+        {
+          name,
+          description,
+          thumbnail_color: thumbnailColor,
+        },
+        {
+          params: {
+            user_id: user.uid,
+          },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': user.uid,
+          },
+          timeout: 30000,
+        }
+      );
+
+      if (response.data) {
+        logger.info('✅ Created playlist:', response.data.name);
+
+        // Add to global store immediately (optimistic update)
+        addPlaylist(response.data);
+
+        // Close create modal
+        setShowCreateModal(false);
+
+        // Automatically select the newly created playlist and add audio to it
+        await handleSelectPlaylist(response.data.id);
+      }
+    } catch (error) {
+      logger.error('❌ Error creating playlist:', error);
+      Alert.alert('Error', 'Failed to create playlist. Please try again.');
+      throw error;
+    }
   };
 
   const renderPlaylistItem = ({ item }: { item: Playlist }) => (
@@ -256,6 +300,13 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           )}
         </View>
       </View>
+
+      {/* Create Playlist Modal */}
+      <CreatePlaylistModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreatePlaylistSubmit}
+      />
     </Modal>
   );
 };
