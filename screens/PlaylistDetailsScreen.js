@@ -24,7 +24,7 @@ import logger from '../utils/logger';
 import axios from 'axios';
 import PlaylistItem from '../components/playlist/PlaylistItem';
 import { usePlaylistStore, selectPlaylistById } from '../stores/playlistStore';
-import { getCachedAudioUri } from '../utils/audioCacheUtils';
+import { getAudioCachePath, isAudioCached } from '../utils/audioCacheUtils';
 
 export default function PlaylistDetailsScreen({ navigation, route }) {
   const { playlist: initialPlaylist } = route.params;
@@ -141,7 +141,7 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
     return `${minutes}m`;
   };
 
-  // Play audio with local caching
+  // Play audio from local cache only
   const handlePlayAudio = async (item) => {
     try {
       setIsLoadingAudio(true);
@@ -149,86 +149,60 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
 
       // Stop current audio if playing
       if (sound) {
-        logger.info('Stopping current audio...');
         await sound.stopAsync();
         await sound.unloadAsync();
         setSound(null);
       }
 
-      // If clicking the same item that's playing, just stop it
+      // If clicking the same item, just stop
       if (currentPlayingItem?.id === item.id) {
         setCurrentPlayingItem(null);
         setIsLoadingAudio(false);
         return;
       }
 
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert('Error', 'Please log in to play audio.');
+      // Check if audio is cached locally
+      const isCached = await isAudioCached(item.material_id, item.audio_id);
+
+      if (!isCached) {
+        // Audio not cached - show error
+        Alert.alert(
+          'Audio Not Available',
+          'This audio file is not available. Please regenerate it from the study materials screen.',
+          [{ text: 'OK' }]
+        );
         setIsLoadingAudio(false);
         return;
       }
 
-      // Fetch audio URL from backend
-      logger.info(`Fetching audio for material: ${item.material_id}, audio: ${item.audio_id}`);
-      const response = await axios.get(
-        `${API_BASE_URL}/api/study/materials/${item.material_id}/audio`,
-        {
-          params: {
-            user_id: user.uid,
-            audio_id: item.audio_id,
-          },
-          headers: { 'X-User-ID': user.uid },
-          timeout: 30000,
-        }
-      );
-
-      if (!response.data || !response.data.audio_url) {
-        throw new Error('Audio URL not found in response');
-      }
-
-      const audioUrlPath = response.data.audio_url;
-      const serverAudioId = response.data.audio_id || item.audio_id;
-
-      // Try to get cached audio URI (or download and cache it)
-      logger.info('Checking cache for audio...');
-      const cachedUri = await getCachedAudioUri(
-        audioUrlPath,
-        API_BASE_URL,
-        item.material_id,
-        serverAudioId
-      );
-
-      // Use cached URI if available, otherwise fall back to backend URL
-      const audioUri = cachedUri || `${API_BASE_URL}${audioUrlPath}`;
-      logger.info(`Playing audio from: ${cachedUri ? 'LOCAL CACHE' : 'BACKEND URL'}`, audioUri);
+      // Get cached audio path
+      const cachedAudioUri = getAudioCachePath(item.material_id, item.audio_id);
+      logger.info(`Playing cached audio: ${cachedAudioUri}`);
 
       // Configure audio mode
       await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
       });
 
-      // Load and play audio
+      // Load and play the sound
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
+        { uri: cachedAudioUri },
         { shouldPlay: true },
         onPlaybackStatusUpdate
       );
 
       setSound(newSound);
       setCurrentPlayingItem(item);
-      logger.info('Audio playback started successfully');
+      setIsLoadingAudio(false);
+
     } catch (error) {
       logger.error('Error playing audio:', error);
-      Alert.alert(
-        'Playback Error',
-        'Failed to play audio. The file may no longer be available on the server.'
-      );
-      setCurrentPlayingItem(null);
-    } finally {
+      Alert.alert('Playback Error', 'Unable to play this audio file.');
       setIsLoadingAudio(false);
+      setCurrentPlayingItem(null);
     }
   };
 
