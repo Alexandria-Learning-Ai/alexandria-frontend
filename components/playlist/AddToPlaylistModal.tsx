@@ -9,7 +9,7 @@
  * - Search/filter playlists
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,50 +19,114 @@ import {
   FlatList,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
+import axios from 'axios';
+import { auth } from '../../firebaseConfig';
+import { API_BASE_URL } from '../../config/api';
+import logger from '../../utils/logger';
 
 interface Playlist {
   id: string;
   name: string;
   description?: string;
-  itemCount: number;
-  thumbnailColor: string;
+  item_count: number;
+  thumbnail_color: string;
+}
+
+interface AudioData {
+  audio_id: string;
+  material_id: string;
+  title: string;
+  duration: number;
 }
 
 interface AddToPlaylistModalProps {
   visible: boolean;
   onClose: () => void;
-  playlists: Playlist[];
-  onSelectPlaylist: (playlistId: string) => Promise<void>;
-  onCreateNew: () => void;
-  isLoading?: boolean;
+  audioData: AudioData;
 }
 
 const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   visible,
   onClose,
-  playlists,
-  onSelectPlaylist,
-  onCreateNew,
-  isLoading = false,
+  audioData,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
+  // Fetch playlists when modal opens
+  useEffect(() => {
+    if (visible) {
+      fetchPlaylists();
+    }
+  }, [visible]);
+
+  const fetchPlaylists = async () => {
+    setIsLoading(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to view playlists');
+        return;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/audio/playlists/`, {
+        params: { user_id: user.uid },
+        headers: { 'X-User-ID': user.uid },
+        timeout: 10000,
+      });
+
+      if (response.data?.success) {
+        setPlaylists(response.data.data || []);
+      }
+    } catch (error) {
+      logger.error('Error fetching playlists:', error);
+      Alert.alert('Error', 'Failed to load playlists');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter playlists by search query
-  const filteredPlaylists = playlists.filter((playlist) =>
+  const filteredPlaylists = (playlists || []).filter((playlist) =>
     playlist.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleSelectPlaylist = async (playlistId: string) => {
     setIsAdding(true);
     try {
-      await onSelectPlaylist(playlistId);
-      setSearchQuery('');
-      onClose();
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert('Error', 'Please log in to add to playlist');
+        return;
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/audio/playlists/${playlistId}/items`,
+        {
+          audio_id: audioData.audio_id,
+          material_id: audioData.material_id,
+          title: audioData.title,
+          duration: audioData.duration,
+        },
+        {
+          headers: { 'X-User-ID': user.uid },
+          timeout: 10000,
+        }
+      );
+
+      if (response.data?.success) {
+        Alert.alert('Success', 'Audio added to playlist!');
+        setSearchQuery('');
+        onClose();
+      }
     } catch (error) {
-      // Error handling is done in parent component
+      logger.error('Error adding to playlist:', error);
+      Alert.alert('Error', 'Failed to add audio to playlist');
     } finally {
       setIsAdding(false);
     }
@@ -75,6 +139,15 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
     }
   };
 
+  const handleCreateNew = () => {
+    onClose();
+    Alert.alert(
+      'Create Playlist',
+      'Navigate to Audio Playlists screen to create a new playlist',
+      [{ text: 'OK' }]
+    );
+  };
+
   const renderPlaylistItem = ({ item }: { item: Playlist }) => (
     <TouchableOpacity
       style={styles.playlistItem}
@@ -82,7 +155,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       disabled={isAdding}
       activeOpacity={0.7}
     >
-      <View style={[styles.playlistThumbnail, { backgroundColor: item.thumbnailColor }]}>
+      <View style={[styles.playlistThumbnail, { backgroundColor: item.thumbnail_color || '#D4AF37' }]}>
         <FontAwesome5 name="music" size={18} color="#FFF" />
       </View>
       <View style={styles.playlistInfo}>
@@ -90,7 +163,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           {item.name}
         </Text>
         <Text style={styles.playlistStats}>
-          {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'}
+          {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
         </Text>
       </View>
       <FontAwesome5 name="chevron-right" size={14} color="#CBD5E0" />
@@ -156,10 +229,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
           {/* Create New Playlist Button */}
           <TouchableOpacity
             style={styles.createButton}
-            onPress={() => {
-              onClose();
-              onCreateNew();
-            }}
+            onPress={handleCreateNew}
             disabled={isAdding}
             activeOpacity={0.7}
           >
