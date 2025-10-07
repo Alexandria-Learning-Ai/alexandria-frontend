@@ -110,21 +110,48 @@ const MaterialViewerScreen = () => {
         if (!material) return;
 
         try {
-            // If material indicates it has a summary, we could optionally pre-load it
-            if (material.hasSummary) {
-                logger.info('📝 Material has existing summary available');
-                // Optionally: load existing summary here
+            // Check if material has audio flag
+            if (material.hasAudio || material.has_audio) {
+                logger.info('🔊 Material has audio, attempting to load cached version...');
+
+                const user = auth.currentUser;
+                if (!user) return;
+
+                // Try to GET existing audio
+                const response = await axios.get(
+                    `${API_BASE_URL}/study/materials/${material.id}/audio`,
+                    {
+                        params: {
+                            user_id: user.uid,
+                            voice: selectedVoice,
+                            speed: 1.0,
+                            content_type: 'full'
+                        },
+                        headers: { 'X-User-ID': user.uid },
+                        timeout: 10000
+                    }
+                );
+
+                if (response.data && response.data.audio_url) {
+                    logger.info('✅ Loaded cached audio from server');
+                    setAudioUrl(response.data.audio_url);
+                    setAudioDuration(response.data.duration || 0);
+                    // Don't auto-play, just make it available
+                }
             }
 
-            // If material indicates it has audio, we could optionally pre-load the URL
-            if (material.hasAudio) {
-                logger.info('🔊 Material has existing audio available');
-                // Optionally: load existing audio URL here
+            // Check for summary
+            if (material.hasSummary || material.has_summary) {
+                logger.info('📝 Material has summary available');
+                // Could optionally pre-load summary here
             }
 
         } catch (error) {
-            logger.error('❌ Error checking existing content:', error);
-            // Don't show error to user, this is just a convenience check
+            // 404 is expected if no audio exists yet
+            if (error.response?.status !== 404) {
+                logger.error('❌ Error loading existing content:', error);
+            }
+            // Don't show error to user - they can still generate new audio
         }
     };
 
@@ -273,6 +300,15 @@ const MaterialViewerScreen = () => {
             return;
         }
 
+        // If audio already loaded, just play it
+        if (audioUrl) {
+            logger.info('▶️ Audio already available, starting playback...');
+            await loadAndPlaySound();
+            setIsPlaying(true);
+            setViewMode('listen');
+            return;
+        }
+
         setAudioLoading(true);
         setIsLoading(true);
         setAudioError(null);
@@ -286,7 +322,7 @@ const MaterialViewerScreen = () => {
                 return;
             }
 
-            logger.info(`🔊 Generating audio for material: ${material.id}`);
+            logger.info(`🔊 Requesting audio for material: ${material.id}`);
 
             // Simulate progress updates
             const progressInterval = setInterval(() => {
@@ -299,7 +335,9 @@ const MaterialViewerScreen = () => {
             formData.append('speed', '1.0');
             formData.append('language', 'en');
             formData.append('content_type', 'full'); // full text
+            formData.append('force_regenerate', 'false'); // ✅ Use cached if available
 
+            // POST will return cached audio if available
             const response = await axios.post(
                 `${API_BASE_URL}/study/materials/${material.id}/audio`,
                 formData,
@@ -322,12 +360,12 @@ const MaterialViewerScreen = () => {
                 setViewMode('listen');
                 setAudioError(null);
 
-                logger.info(`✅ Audio generated: ${response.data.duration}s duration`);
+                logger.info(`✅ Audio ready: ${response.data.duration}s duration`);
 
                 // Show success message
                 Alert.alert(
                     'Audio Ready',
-                    `Audio narration generated successfully! Duration: ${Math.round(response.data.duration / 60)} minutes`
+                    `Audio narration ready! Duration: ${Math.round(response.data.duration / 60)} minutes`
                 );
 
                 // Start actual audio playback
