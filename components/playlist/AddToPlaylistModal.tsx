@@ -84,7 +84,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
       }
 
       const response = await axios.post(
-        `${API_BASE_URL}/audio/playlists/${playlistId}/items`,
+        `${API_BASE_URL}/api/audio/playlists/${playlistId}/items`,
         {
           audio_id: audioData.audio_id,
           material_id: audioData.material_id,
@@ -145,7 +145,7 @@ const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
 
       // Create playlist via API
       const response = await axios.post(
-        `${API_BASE_URL}/audio/playlists/`,
+        `${API_BASE_URL}/api/audio/playlists/`,
         {
           name,
           description,

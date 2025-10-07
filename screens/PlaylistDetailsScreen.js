@@ -74,7 +74,7 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
 
       // Get playlist details with items
       const response = await axios.get(
-        `${API_BASE_URL}/audio/playlists/${playlist.id}`,
+        `${API_BASE_URL}/api/audio/playlists/${playlist.id}`,
         {
           params: {
             user_id: user.uid,
@@ -168,7 +168,7 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
 
               // Make API call
               await axios.delete(
-                `${API_BASE_URL}/audio/playlists/${playlist.id}/items/${itemId}`,
+                `${API_BASE_URL}/api/audio/playlists/${playlist.id}/items/${itemId}`,
                 {
                   params: {
                     user_id: user.uid,
@@ -230,7 +230,7 @@ export default function PlaylistDetailsScreen({ navigation, route }) {
               }
 
               await axios.delete(
-                `${API_BASE_URL}/audio/playlists/${playlist.id}`,
+                `${API_BASE_URL}/api/audio/playlists/${playlist.id}`,
                 {
                   params: {
                     user_id: user.uid,

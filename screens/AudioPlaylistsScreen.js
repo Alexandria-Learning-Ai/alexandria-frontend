@@ -77,7 +77,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
 
       // Make API call
       const response = await axios.post(
-        `${API_BASE_URL}/audio/playlists/`,
+        `${API_BASE_URL}/api/audio/playlists/`,
         {
           name,
           description,
@@ -130,7 +130,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
               deletePlaylist(playlistId);
 
               // Make API call
-              await axios.delete(`${API_BASE_URL}/audio/playlists/${playlistId}`, {
+              await axios.delete(`${API_BASE_URL}/api/audio/playlists/${playlistId}`, {
                 params: {
                   user_id: user.uid,
                 },
