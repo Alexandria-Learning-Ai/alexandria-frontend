@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from '../config/api';
 import logger from '../utils/logger';
+import { auth } from '../firebaseConfig';
 
 interface Playlist {
   id: string;
@@ -58,12 +59,18 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
   fetchPlaylists: async () => {
     set({ loading: true, error: null });
     try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       logger.info('📚 Fetching playlists from backend...');
 
       const response = await fetch(`${API_BASE_URL}/api/audio/playlists/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'X-User-ID': user.uid,
         },
       });
 
