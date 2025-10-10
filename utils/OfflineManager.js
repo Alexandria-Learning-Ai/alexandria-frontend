@@ -98,7 +98,7 @@ class OfflineManager {
       };
       
       await AsyncStorage.setItem(`cache_${key}`, JSON.stringify(cacheItem));
-      logger.info(`📦 Cached data for key: ${key}`);
+      logger.debug(`📦 Cached data for key: ${key}`);
       return true;
     } catch (error) {
       logger.error(`Error caching data for ${key}:`, error);
@@ -118,12 +118,12 @@ class OfflineManager {
       const isExpired = Date.now() - timestamp > expiry;
 
       if (isExpired) {
-        logger.info(`🕒 Cache expired for key: ${key}`);
+        logger.debug(`🕒 Cache expired for key: ${key}`);
         await AsyncStorage.removeItem(`cache_${key}`);
         return null;
       }
 
-      logger.info(`✅ Retrieved cached data for key: ${key}`);
+      logger.debug(`✅ Retrieved cached data for key: ${key}`);
       return data;
     } catch (error) {
       logger.error(`Error retrieving cached data for ${key}:`, error);
@@ -182,38 +182,103 @@ class OfflineManager {
 
   // Process queued actions when back online
   static async processOfflineQueue() {
-    if (!this.isOnline || this.offlineQueue.length === 0) return;
+    if (!this.isOnline || this.offlineQueue.length === 0) {
+      logger.info('📭 No offline actions to process');
+      return;
+    }
 
     logger.info(`🔄 Processing ${this.offlineQueue.length} offline actions`);
 
     const processedActions = [];
     const failedActions = [];
+    const errors = [];
 
     for (const action of this.offlineQueue) {
       try {
+        // Add retry count if not present
+        if (!action.retryCount) {
+          action.retryCount = 0;
+        }
+
+        logger.info(`⚙️ Processing action: ${action.type} (attempt ${action.retryCount + 1})`);
+
         const success = await this.executeOfflineAction(action);
+
         if (success) {
           processedActions.push(action.id);
+          logger.info(`✅ Successfully processed: ${action.type}`);
+        } else {
+          // Increment retry count
+          action.retryCount++;
+
+          // Max retries: 5 attempts
+          if (action.retryCount >= 5) {
+            logger.error(`❌ Max retries exceeded for action ${action.id}:${action.type}`);
+            errors.push({
+              action: action.type,
+              id: action.id,
+              reason: 'Max retries exceeded',
+              retryCount: action.retryCount,
+            });
+            // Remove from queue after max retries
+          } else {
+            logger.warn(`⚠️ Action failed, will retry (${action.retryCount}/5): ${action.type}`);
+            failedActions.push(action);
+          }
+        }
+      } catch (error) {
+        logger.error(`❌ Error processing offline action ${action.id}:`, error);
+
+        action.retryCount = (action.retryCount || 0) + 1;
+
+        if (action.retryCount >= 5) {
+          logger.error(`❌ Max retries exceeded for action ${action.id}`);
+          errors.push({
+            action: action.type,
+            id: action.id,
+            reason: error.message,
+            retryCount: action.retryCount,
+          });
         } else {
           failedActions.push(action);
         }
-      } catch (error) {
-        logger.error(`Error processing offline action ${action.id}:`, error);
-        failedActions.push(action);
       }
     }
 
-    // Remove processed actions
+    // Update queue with only failed actions that haven't exceeded retry limit
     this.offlineQueue = failedActions;
     await AsyncStorage.setItem(
       this.CACHE_KEYS.OFFLINE_ACTIONS,
       JSON.stringify(this.offlineQueue)
     );
 
-    logger.info(`✅ Processed ${processedActions.length} actions, ${failedActions.length} failed`);
+    // Log summary
+    logger.info(`
+      ✅ Offline Queue Processing Summary:
+      - Processed: ${processedActions.length}
+      - Failed (will retry): ${failedActions.length}
+      - Permanently failed: ${errors.length}
+    `);
+
+    // Store errors for debugging
+    if (errors.length > 0) {
+      const errorLog = await AsyncStorage.getItem('offline_sync_errors') || '[]';
+      const existingErrors = JSON.parse(errorLog);
+      existingErrors.push({
+        timestamp: Date.now(),
+        errors,
+      });
+      await AsyncStorage.setItem('offline_sync_errors', JSON.stringify(existingErrors));
+    }
 
     // Update last sync time
     await AsyncStorage.setItem(this.CACHE_KEYS.LAST_SYNC, Date.now().toString());
+
+    return {
+      processed: processedActions.length,
+      failed: failedActions.length,
+      errors: errors.length,
+    };
   }
 
   // Execute individual offline action
@@ -240,24 +305,133 @@ class OfflineManager {
 
   // Sync methods for different data types
   static async syncQuizCompletion(data) {
-    // Implementation would depend on your API
-    logger.info('Syncing quiz completion:', data);
-    return true; // Placeholder
+    try {
+      logger.info('🔄 Syncing quiz completion to backend:', {
+        id: data.id,
+        title: data.title,
+      });
+
+      // Dynamically import to avoid circular dependency
+      const { BackendSyncService } = await import('../services/BackendSyncService');
+
+      // Prepare quiz data for backend
+      const quizData = {
+        id: data.id,
+        questions: data.questions || [],
+        userAnswers: data.userAnswers || {},
+        totalQuestions: data.results?.totalQuestions || data.totalQuestions,
+        correctCount: data.results?.correctCount || data.score,
+        percentage: data.results?.percentage || data.percentage,
+        title: data.title,
+        metadata: data.metadata || {},
+        timeSpent: data.metadata?.timeSpent || 0,
+      };
+
+      // Prepare progress data
+      const progressData = {
+        questionsAnswered: quizData.totalQuestions,
+        questionsCorrect: quizData.correctCount,
+        accuracy: quizData.percentage,
+        timeSpent: quizData.timeSpent,
+        subject: quizData.metadata?.subject,
+        difficulty: quizData.metadata?.difficulty,
+      };
+
+      // Sync to backend
+      const result = await BackendSyncService.syncQuizCompletion(
+        quizData,
+        progressData
+      );
+
+      if (result.success) {
+        logger.info('✅ Quiz completion synced successfully');
+        return true;
+      } else {
+        logger.warn('⚠️ Quiz sync returned unsuccessful result');
+        return false;
+      }
+    } catch (error) {
+      logger.error('❌ Failed to sync quiz completion:', error);
+      return false;
+    }
   }
 
   static async syncProfileUpdate(data) {
-    logger.info('Syncing profile update:', data);
-    return true; // Placeholder
+    try {
+      logger.info('🔄 Syncing profile update to backend:', {
+        fields: Object.keys(data),
+      });
+
+      // Dynamically import to avoid circular dependency
+      const { BackendSyncService } = await import('../services/BackendSyncService');
+
+      // Sync to backend
+      const result = await BackendSyncService.updateUserProfile(data);
+
+      if (result) {
+        logger.info('✅ Profile update synced successfully');
+        return true;
+      } else {
+        logger.warn('⚠️ Profile sync returned unsuccessful result');
+        return false;
+      }
+    } catch (error) {
+      logger.error('❌ Failed to sync profile update:', error);
+      return false;
+    }
   }
 
   static async syncFlashcardProgress(data) {
-    logger.info('Syncing flashcard progress:', data);
-    return true; // Placeholder
+    try {
+      logger.info('🔄 Syncing flashcard progress to backend:', {
+        flashcardSetId: data.flashcardSetId,
+        cardsReviewed: data.cardsReviewed,
+      });
+
+      // Dynamically import to avoid circular dependency
+      const { BackendSyncService } = await import('../services/BackendSyncService');
+
+      // Sync to backend
+      const result = await BackendSyncService.updateFlashcardProgress(data);
+
+      if (result && result.success) {
+        logger.info('✅ Flashcard progress synced successfully');
+        return true;
+      } else {
+        logger.warn('⚠️ Flashcard sync returned unsuccessful result');
+        return false;
+      }
+    } catch (error) {
+      logger.error('❌ Failed to sync flashcard progress:', error);
+      return false;
+    }
   }
 
   static async syncExamSchedule(data) {
-    logger.info('Syncing exam schedule:', data);
-    return true; // Placeholder
+    try {
+      logger.info('🔄 Syncing exam schedule to backend:', {
+        examId: data.examId,
+        subject: data.subject,
+        date: data.date,
+      });
+
+      // Dynamically import to avoid circular dependency
+      const { BackendSyncService } = await import('../services/BackendSyncService');
+
+      // Sync to backend
+      const result = await BackendSyncService.updateExamSchedule(data);
+
+      if (result) {
+        logger.info('✅ Exam schedule synced successfully');
+        return true;
+      } else {
+        logger.warn('⚠️ Exam schedule sync returned unsuccessful result');
+        return false;
+      }
+    } catch (error) {
+      logger.error('❌ Failed to sync exam schedule:', error);
+      return false;
+    }
   }
 
   // Get data with offline fallback
@@ -380,6 +554,88 @@ class OfflineManager {
     } catch (error) {
       logger.error('Error cleaning up expired cache:', error);
       return 0;
+    }
+  }
+
+  // Get sync errors for debugging
+  static async getSyncErrors() {
+    try {
+      const errorLog = await AsyncStorage.getItem('offline_sync_errors');
+      if (!errorLog) return [];
+
+      const errors = JSON.parse(errorLog);
+      logger.info(`📋 Retrieved ${errors.length} sync error entries`);
+      return errors;
+    } catch (error) {
+      logger.error('Error getting sync errors:', error);
+      return [];
+    }
+  }
+
+  // Clear sync error log
+  static async clearSyncErrors() {
+    try {
+      await AsyncStorage.removeItem('offline_sync_errors');
+      logger.info('🗑️ Sync error log cleared');
+      return true;
+    } catch (error) {
+      logger.error('Error clearing sync errors:', error);
+      return false;
+    }
+  }
+
+  // Get sync status and statistics
+  static async getSyncStatus() {
+    try {
+      const lastSync = await AsyncStorage.getItem(this.CACHE_KEYS.LAST_SYNC);
+      const queueLength = this.offlineQueue.length;
+      const errors = await this.getSyncErrors();
+
+      const status = {
+        isOnline: this.isOnline,
+        lastSyncTime: lastSync ? parseInt(lastSync) : null,
+        lastSyncDate: lastSync ? new Date(parseInt(lastSync)).toISOString() : null,
+        queuedActions: queueLength,
+        totalErrors: errors.reduce((sum, entry) => sum + entry.errors.length, 0),
+        recentErrors: errors.slice(-5), // Last 5 error entries
+      };
+
+      logger.info('📊 Sync status:', status);
+      return status;
+    } catch (error) {
+      logger.error('Error getting sync status:', error);
+      return null;
+    }
+  }
+
+  // Manually trigger sync (useful for debugging or user-initiated sync)
+  static async manualSync() {
+    try {
+      logger.info('🔄 Manual sync triggered');
+
+      if (!this.isOnline) {
+        logger.warn('⚠️ Cannot sync: device is offline');
+        return {
+          success: false,
+          reason: 'offline',
+          message: 'Device is offline. Sync will run automatically when connection is restored.',
+        };
+      }
+
+      const result = await this.processOfflineQueue();
+
+      return {
+        success: true,
+        ...result,
+        message: `Sync complete: ${result.processed} processed, ${result.failed} failed`,
+      };
+    } catch (error) {
+      logger.error('❌ Manual sync failed:', error);
+      return {
+        success: false,
+        reason: 'error',
+        message: error.message,
+      };
     }
   }
 }
