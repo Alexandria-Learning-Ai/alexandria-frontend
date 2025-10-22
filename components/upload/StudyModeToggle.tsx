@@ -39,20 +39,21 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
 
   useEffect(() => {
     if (enableStudyMode) {
-      Animated.parallel([
+      Animated.spring(iconBounce, {
+        toValue: 1.15,
+        tension: 100,
+        friction: 3,
+        useNativeDriver: true,
+      }).start(() => {
         Animated.spring(iconBounce, {
-          toValue: 1.15,
-          tension: 100,
-          friction: 3,
+          toValue: 1,
+          tension: 50,
+          friction: 5,
           useNativeDriver: true,
-        }).start(() => {
-          Animated.spring(iconBounce, {
-            toValue: 1,
-            tension: 50,
-            friction: 5,
-            useNativeDriver: true,
-          }).start();
-        }),
+        }).start();
+      });
+
+      Animated.parallel([
         Animated.timing(glowAnim, {
           toValue: 1,
           duration: 300,
@@ -64,7 +65,7 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
           friction: 10,
           useNativeDriver: true,
         }),
-      ]);
+      ]).start();
     } else {
       Animated.parallel([
         Animated.timing(glowAnim, {
@@ -78,7 +79,7 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
           friction: 10,
           useNativeDriver: true,
         }),
-      ]);
+      ]).start();
     }
   }, [enableStudyMode]);
 
@@ -109,7 +110,7 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
     <View style={styles.inputContainer}>
       {/* Enhanced Label */}
       <View style={enhancedStyles.labelRow}>
-        <FontAwesome5 name="book-reader" size={14} color="#D4AF37" />
+        <FontAwesome5 name="book-reader" size={11} color="#D4AF37" style={{ opacity: 0.7 }} />
         <Text style={[styles.label, enhancedStyles.label]}>Study Mode Features</Text>
         {enableStudyMode && (
           <View style={enhancedStyles.enabledBadge}>
@@ -170,7 +171,7 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
             >
               <FontAwesome5
                 name={enableStudyMode ? "check-circle" : "circle"}
-                size={24}
+                size={18} // TERTIARY: Smaller icon
                 color={enableStudyMode ? "#28a745" : "#CBD5E0"}
                 solid={enableStudyMode}
               />
@@ -190,9 +191,7 @@ const StudyModeToggle: React.FC<StudyModeToggleProps> = ({
                   <FontAwesome5 name="star" size={12} color="#FFD700" />
                 )}
               </View>
-              <Text style={[styles.toggleDescription, enhancedStyles.toggleDescription]}>
-                Extract text for summaries, flashcards, and audio reading
-              </Text>
+              {/* REMOVED: Verbose description to reduce clutter - details shown in feature preview below */}
             </View>
 
             {/* Chevron indicator */}
@@ -273,12 +272,14 @@ const enhancedStyles = StyleSheet.create({
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8, // TERTIARY: Reduced spacing
   },
   label: {
     marginLeft: 8,
     marginBottom: 0,
     flex: 1,
+    fontSize: 12, // TERTIARY: Smaller label
+    opacity: 0.7, // TERTIARY: Muted
   },
   enabledBadge: {
     backgroundColor: '#28a745',
@@ -294,15 +295,16 @@ const enhancedStyles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   toggleCard: {
-    borderRadius: 16,
+    borderRadius: 12, // TERTIARY: Smaller radius
     shadowColor: '#28a745',
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 }, // TERTIARY: Reduced shadow
+    shadowRadius: 6, // TERTIARY: Smaller glow
+    elevation: 2, // TERTIARY: Lower elevation
+    opacity: 0.9, // TERTIARY: Slightly muted
   },
   toggleOption: {
-    borderWidth: 2,
-    borderRadius: 16,
+    borderWidth: 1, // TERTIARY: Thinner border
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -324,17 +326,17 @@ const enhancedStyles = StyleSheet.create({
   toggleContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 12, // TERTIARY: Reduced padding
+    paddingHorizontal: 12,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36, // TERTIARY: Smaller icon container
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
-    borderWidth: 2,
+    marginRight: 10, // TERTIARY: Reduced margin
+    borderWidth: 1, // TERTIARY: Thinner border
     borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   toggleTextContainer: {
@@ -346,14 +348,15 @@ const enhancedStyles = StyleSheet.create({
     marginBottom: 4,
   },
   toggleTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 13, // TERTIARY: Smaller title
+    fontWeight: '500', // TERTIARY: Lighter weight
     marginRight: 6,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   toggleDescription: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 11, // TERTIARY: Smaller description
+    lineHeight: 15,
+    opacity: 0.7, // TERTIARY: Muted
   },
   chevron: {
     marginLeft: 8,
