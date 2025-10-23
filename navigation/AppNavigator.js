@@ -4,7 +4,7 @@ import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
-import { View, Image, Animated, ActivityIndicator, Alert, Vibration } from 'react-native';
+import { View, Image, Animated, ActivityIndicator, Alert, Vibration, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
@@ -651,9 +651,24 @@ const NavigationStackWrapper = ({ user, userState }) => {
 
             <Stack.Screen
               name="FlashcardStudy"
-              options={{
-                ...getScreenOptions('Study Session', { gestureEnabled: true })
-              }}
+              options={({ navigation }) => ({
+                ...getScreenOptions('Study Session', { gestureEnabled: true }),
+                headerLeft: () => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Go back to FlashcardScreen (dashboard)
+                      if (navigation.canGoBack()) {
+                        navigation.goBack();
+                      } else {
+                        navigation.navigate('FlashcardScreen');
+                      }
+                    }}
+                    style={{ marginLeft: 15, padding: 5 }}
+                  >
+                    <FontAwesome5 name="arrow-left" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                ),
+              })}
               component={FlashcardStudyScreen}
             />
 
@@ -1032,9 +1047,24 @@ const NavigationStackWrapper = ({ user, userState }) => {
 
             <Stack.Screen
               name="FlashcardStudy"
-              options={{
-                ...getScreenOptions('Study Session', { gestureEnabled: true })
-              }}
+              options={({ navigation }) => ({
+                ...getScreenOptions('Study Session', { gestureEnabled: true }),
+                headerLeft: () => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Go back to FlashcardScreen (dashboard)
+                      if (navigation.canGoBack()) {
+                        navigation.goBack();
+                      } else {
+                        navigation.navigate('FlashcardScreen');
+                      }
+                    }}
+                    style={{ marginLeft: 15, padding: 5 }}
+                  >
+                    <FontAwesome5 name="arrow-left" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                ),
+              })}
               component={FlashcardStudyScreen}
             />
 
