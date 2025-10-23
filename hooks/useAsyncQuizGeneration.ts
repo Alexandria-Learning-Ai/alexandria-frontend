@@ -141,6 +141,112 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
     }, [closeEventSource]);
 
     /**
+     * Fallback polling mechanism when SSE connection fails
+     */
+    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    const startFallbackPolling = useCallback(async (job_id: string) => {
+        logger.info('Starting fallback polling for job:', job_id);
+
+        let pollAttempts = 0;
+        const maxPollAttempts = 60; // Poll for up to 5 minutes (60 * 5s = 300s)
+        const pollInterval = 5000; // Poll every 5 seconds
+
+        const pollStatus = async () => {
+            try {
+                pollAttempts++;
+
+                if (pollAttempts > maxPollAttempts) {
+                    logger.error('Polling timeout: exceeded max attempts');
+                    setError('Quiz generation timed out. Please try again.');
+                    setIsGenerating(false);
+                    if (pollingIntervalRef.current) {
+                        clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                    return;
+                }
+
+                // Check job status via API
+                const statusUrl = `${API_BASE_URL}/async/quiz/status/${job_id}`;
+                logger.debug(`Polling attempt ${pollAttempts}: ${statusUrl}`);
+
+                const response = await axios.get(statusUrl);
+                const data = response.data;
+
+                logger.info('Poll response:', data);
+
+                // Update progress based on response
+                if ((data.status === 'finished' || data.is_finished) && data.quiz_id) {
+                    logger.info('Quiz generation completed! Quiz ID:', data.quiz_id);
+                    setQuizId(data.quiz_id);
+                    setProgress(100);
+                    setStage('complete');
+                    setMessage('Quiz generation complete!');
+                    setIsGenerating(false);
+
+                    // Stop polling
+                    if (pollingIntervalRef.current) {
+                        clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                } else if (data.status === 'failed' || data.is_failed) {
+                    logger.error('Quiz generation failed:', data.error);
+                    setError(data.error || 'Quiz generation failed');
+                    setIsGenerating(false);
+
+                    // Stop polling
+                    if (pollingIntervalRef.current) {
+                        clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                } else if (data.status === 'started' || data.status === 'queued' || data.status === 'processing') {
+                    // Update progress
+                    const progressPercent = Math.round((data.progress || 0) * 100);
+                    setProgress(progressPercent);
+                    setStage(data.stage || 'processing');
+                    setMessage(data.message || 'Processing...');
+                }
+
+            } catch (error: any) {
+                logger.error('Polling error:', error);
+
+                // If we get a 404, the job might be done but result was deleted
+                // Or the job never existed
+                if (error.response?.status === 404) {
+                    logger.warn('Job not found, stopping polling');
+                    setError('Quiz generation status not found');
+                    setIsGenerating(false);
+
+                    if (pollingIntervalRef.current) {
+                        clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                }
+                // For other errors, continue polling (network issues, etc.)
+            }
+        };
+
+        // Start polling immediately
+        await pollStatus();
+
+        // Then poll every 5 seconds
+        pollingIntervalRef.current = setInterval(pollStatus, pollInterval);
+
+    }, []);
+
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+        };
+    }, []);
+
+
+    /**
      * Subscribe to SSE progress updates
      */
     const subscribeToProgress = useCallback((jobId: string) => {
@@ -180,7 +286,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                     }
 
                     // Handle completion
-                    if (data.status === 'completed' && data.quiz_id) {
+                    if ((data.status === 'finished' || data.is_finished) && data.quiz_id) {
                         logger.info('✅ Quiz generation complete! Quiz ID:', data.quiz_id);
                         setQuizId(data.quiz_id);
                         setIsGenerating(false);
@@ -212,13 +318,15 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
 
                 if (!isMountedRef.current) return;
 
-                // Only set error if we haven't completed successfully
-                if (!quizId) {
-                    setError('Lost connection to server. Please try again.');
-                    setIsGenerating(false);
-                }
-
+                // Close the SSE connection
                 closeEventSource();
+
+                // If we haven't completed successfully, start fallback polling
+                if (!quizId) {
+                    logger.warn('📡 SSE connection lost, starting fallback polling...');
+                    setMessage('Connection interrupted, checking status...');
+                    startFallbackPolling(job_id);
+                }
             });
 
         } catch (error) {
@@ -226,7 +334,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
             setError('Failed to connect to progress stream');
             setIsGenerating(false);
         }
-    }, [closeEventSource, quizId]);
+    }, [closeEventSource, quizId, startFallbackPolling]);
 
     /**
      * Generate quiz asynchronously
