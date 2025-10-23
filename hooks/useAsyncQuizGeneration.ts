@@ -177,7 +177,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 logger.info('Poll response:', data);
 
                 // Update progress based on response
-                if ((data.status === 'finished' || data.is_finished) && data.quiz_id) {
+                if ((data.status === 'completed' || data.status === 'finished' || data.is_finished) && data.quiz_id) {
                     logger.info('Quiz generation completed! Quiz ID:', data.quiz_id);
                     setQuizId(data.quiz_id);
                     setProgress(100);
@@ -286,7 +286,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                     }
 
                     // Handle completion
-                    if ((data.status === 'finished' || data.is_finished) && data.quiz_id) {
+                    if ((data.status === 'completed' || data.status === 'finished' || data.is_finished) && data.quiz_id) {
                         logger.info('✅ Quiz generation complete! Quiz ID:', data.quiz_id);
                         setQuizId(data.quiz_id);
                         setIsGenerating(false);
