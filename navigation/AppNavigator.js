@@ -15,8 +15,11 @@ import { FirebaseMigration } from '../utils/FirebaseMigration';
 
 // Existing screens
 import HomeScreen from '../screens/HomeScreen';
+import HomeScreenV2 from '../screens-experimental/HomeScreenV2'; // ⭐ EXPERIMENTAL: New design system
+import BottomTabNavigator from './BottomTabNavigator'; // ✅ NEW: Bottom tab navigation
 import UploadScreen from '../screens/UploadScreen';
 import QuizScreen from '../screens/QuizScreen';
+import ExplanationScreen from '../screens/ExplanationScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -43,6 +46,12 @@ import PlaylistDetailsScreen from '../screens/PlaylistDetailsScreen';
 // New subscription screens
 import SubscriptionScreen from '../screens/SubscriptionScreen';
 import SubscriptionManagementScreen from '../screens/SubscriptionManagementScreen';
+
+// Book Study Mode screens (Phase A)
+import MaterialLibraryScreen from '../screens/MaterialLibraryScreen';
+import BookDetailScreen from '../screens/BookDetailScreen';
+import ChapterReaderScreen from '../screens/ChapterReaderScreen';
+import UploadModalScreen from '../screens/UploadModalScreen';
 
 // Subscription context and services
 import { SubscriptionProvider, useSubscription } from '../contexts/SubscriptionContext';
@@ -434,16 +443,41 @@ const NavigationStackWrapper = ({ user, userState }) => {
         // User is fully authenticated and has completed profile
         return (
           <>
+            {/* ✅ NEW: Bottom Tab Navigation as main home */}
             <Stack.Screen
               name="Home"
               options={{
-                ...getScreenOptions('Alexandria', { 
-                  gestureEnabled: false,
+                headerShown: false,
+                gestureEnabled: false,
+              }}
+            >
+              {(props) => <BottomTabNavigator {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Legacy HomeScreen (keep for backward compatibility) */}
+            <Stack.Screen
+              name="HomeLegacy"
+              options={{
+                ...getScreenOptions('Alexandria (Legacy)', {
+                  gestureEnabled: true,
                   headerRight: () => <PremiumBadge tier={currentTier} />
                 })
               }}
             >
               {(props) => <HomeScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* ⭐ EXPERIMENTAL: HomeScreenV2 with new design system */}
+            <Stack.Screen
+              name="HomeV2"
+              options={{
+                ...getScreenOptions('Alexandria V2 (Experimental)', {
+                  gestureEnabled: true,
+                  headerRight: () => <PremiumBadge tier={currentTier} />
+                })
+              }}
+            >
+              {(props) => <HomeScreenV2 {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             <Stack.Screen
@@ -489,6 +523,49 @@ const NavigationStackWrapper = ({ user, userState }) => {
               }}
             >
               {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Material Library */}
+            <Stack.Screen
+              name="MaterialLibrary"
+              options={{
+                ...getScreenOptions('Study Materials', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <MaterialLibraryScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Book Detail */}
+            <Stack.Screen
+              name="BookDetail"
+              options={{
+                ...getScreenOptions('Book Details', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <BookDetailScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Chapter Reader */}
+            <Stack.Screen
+              name="ChapterReader"
+              options={{
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <ChapterReaderScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Upload Modal */}
+            <Stack.Screen
+              name="UploadModal"
+              options={{
+                presentation: 'modal',
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <UploadModalScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             <Stack.Screen
@@ -839,6 +916,49 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
+            {/* Book Study Mode - Material Library */}
+            <Stack.Screen
+              name="MaterialLibrary"
+              options={{
+                ...getScreenOptions('Study Materials', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <MaterialLibraryScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Book Detail */}
+            <Stack.Screen
+              name="BookDetail"
+              options={{
+                ...getScreenOptions('Book Details', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <BookDetailScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Chapter Reader */}
+            <Stack.Screen
+              name="ChapterReader"
+              options={{
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <ChapterReaderScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Book Study Mode - Upload Modal */}
+            <Stack.Screen
+              name="UploadModal"
+              options={{
+                presentation: 'modal',
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <UploadModalScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
             <Stack.Screen
               name="QuizScreen"
               options={{
@@ -848,8 +968,8 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <QuizScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="Quiz" 
+            <Stack.Screen
+              name="Quiz"
               options={{
                 ...getScreenOptions('Challenge Quiz', { gestureEnabled: false })
               }}
@@ -857,7 +977,7 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <QuizScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
+            <Stack.Screen
               name="ResultsScreen" 
               options={{
                 ...getScreenOptions('Results', { gestureEnabled: true })
@@ -1452,16 +1572,32 @@ const AppNavigator = forwardRef((props, ref) => {
         Profile: 'profile',
         ProfileSetup: 'profile/setup',
         ProfileView: 'profile/view',
-        
+
+        // Book Study Mode
+        MaterialLibrary: 'materials',
+        BookDetail: {
+          path: 'materials/:materialId',
+          parse: {
+            materialId: (materialId) => materialId,
+          },
+        },
+        ChapterReader: {
+          path: 'materials/:materialId/chapters/:chapterId',
+          parse: {
+            materialId: (materialId) => materialId,
+            chapterId: (chapterId) => chapterId,
+          },
+        },
+
         // Subscription screens
         Subscription: 'subscription',
         SubscriptionManagement: 'subscription/manage',
-        
+
         // Authentication screens
         SignUp: 'signup',
         Login: 'login',
         ForgotPassword: 'forgot-password',
-        
+
         // Special deep link routes
         SharedQuiz: {
           path: 'quiz/:quizId',

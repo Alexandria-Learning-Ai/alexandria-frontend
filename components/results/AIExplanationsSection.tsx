@@ -46,6 +46,8 @@ const AIExplanationsSection: React.FC<AIExplanationsSectionProps> = React.memo((
   userAnswers,
   themeStyles,
 }) => {
+  const navigation = useNavigation<StackNavigationProp<any>>();
+
   if (!showExplanations || Object.keys(explanations).length === 0) {
     return null;
   }
@@ -246,9 +248,26 @@ const styles = StyleSheet.create({
   },
   tipItem: {
     fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
-    paddingLeft: 8,
+    lineHeight: 20,
+  },
+  viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  viewDetailsText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366F1',
   },
 });
 
