@@ -228,7 +228,9 @@ const ResultsScreen = ({ route, navigation }) => {
   // Get incorrect questions for explanations
   const incorrectQuestions = questions.filter(q => {
     const userAns = userAnswers[q?.id];
-    return !q?.isCorrect || userAns !== q?.correctAnswer;
+    // Use normalized comparison as a fallback check
+    const normalizedMatch = normalizeAnswer(userAns) === normalizeAnswer(q?.correctAnswer);
+    return !q?.isCorrect && !normalizedMatch;
   });
 
   // Helper functions
