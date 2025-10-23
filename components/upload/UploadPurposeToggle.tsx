@@ -247,12 +247,12 @@ const enhancedStyles = StyleSheet.create({
   },
   toggleContainer: {
     position: 'relative',
-    backgroundColor: 'rgba(44, 70, 125, 0.4)',
+    backgroundColor: 'rgba(44, 70, 125, 0.3)', // Lighter background
     padding: 4,
     borderRadius: 16,
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: 'rgba(212, 175, 55, 0.15)', // Subtle border
   },
   slidingIndicator: {
     position: 'absolute',
@@ -266,11 +266,7 @@ const enhancedStyles = StyleSheet.create({
   slidingIndicatorGradient: {
     flex: 1,
     borderRadius: 12,
-    shadowColor: '#D4AF37',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
+    // Removed shadow for cleaner look
   },
   toggleButton: {
     zIndex: 1,

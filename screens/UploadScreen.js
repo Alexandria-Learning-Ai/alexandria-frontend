@@ -31,7 +31,6 @@ import FileUploadButton from '../components/upload/FileUploadButton';
 import UploadPurposeToggle from '../components/upload/UploadPurposeToggle';
 import QuizConfiguration from '../components/upload/QuizConfiguration';
 import StudyModeToggle from '../components/upload/StudyModeToggle';
-import UploadSummary from '../components/upload/UploadSummary';
 import GenerateButton from '../components/upload/GenerateButton';
 import UploadProgressBar from '../components/upload/UploadProgressBar';
 import AsyncQuizProgress from '../components/upload/AsyncQuizProgress';
@@ -474,148 +473,136 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                     t={safeT}
                 />
 
-                <UploadPurposeToggle
-                    uploadPurpose={uploadPurpose}
-                    setUploadPurpose={setUploadPurpose}
-                    styles={styles}
-                />
-
-                {/* Course Selection Section - Same as Ask Alexandria */}
-                <CourseSelectionToggle
-                    mode={courseSelectionMode}
-                    onModeChange={(mode) => {
-                        setCourseSelectionMode(mode);
-                        if (mode === 'profile') {
-                            setSelectedHierarchicalSubject(null);
-                            setSelectedHierarchicalCourse(null);
-                        } else {
-                            setSelectedSubject(null);
-                        }
-                    }}
-                    userCoursesCount={userCourses.length}
-                    availableSubjectsCount={availableSubjects.length}
-                    hasProfileCourses={hasProfileCourses}
-                    styles={styles}
-                />
-
-                {/* Profile Course Selector */}
-                {courseSelectionMode === 'profile' && hasProfileCourses && (
-                    <ProfileCourseSelector
-                        userCourses={userCourses}
-                        selectedValue={selectedSubject?.name || ""}
-                        onSelect={(course) => {
-                            setSelectedSubject({
-                                key: course.key,
-                                name: course.name,
-                                type: 'profile_course',
-                                icon: course.icon,
-                                color: course.color,
-                                source: 'user_profile'
-                            });
-                            setSelectedCourse({
-                                name: course.name,
-                                code: course.code || course.key,
-                                icon: course.icon,
-                                color: course.color,
-                                source: 'profile'
-                            });
-                        }}
-                        modalVisible={courseModalVisible}
-                        setModalVisible={setCourseModalVisible}
-                        styles={styles}
-                    />
-                )}
-
-                {/* Hierarchical Course Selector */}
-                {courseSelectionMode === 'hierarchical' && (
-                    <HierarchicalCourseSelector
-                        availableSubjects={availableSubjects}
-                        selectedSubject={selectedHierarchicalSubject}
-                        availableCourses={availableCourses}
-                        selectedCourse={selectedHierarchicalCourse}
-                        onSubjectSelect={handleHierarchicalSubjectSelect}
-                        onCourseSelect={handleHierarchicalCourseSelect}
-                        subjectModalVisible={courseModalVisible}
-                        setSubjectModalVisible={setCourseModalVisible}
-                        courseModalVisible={hierarchicalCourseModalVisible}
-                        setCourseModalVisible={setHierarchicalCourseModalVisible}
-                        HierarchicalSubjectService={HierarchicalSubjectService}
-                        styles={styles}
-                    />
-                )}
-
-                {/* No Profile Courses Message */}
-                {courseSelectionMode === 'profile' && !hasProfileCourses && (
-                    <View style={styles.noCoursesMessage}>
-                        <FontAwesome5 name="info-circle" size={16} color="#F39C12" />
-                        <Text style={styles.noCoursesText}>
-                            No courses from your profile. Switch to "All Subjects" to explore courses.
-                        </Text>
-                    </View>
-                )}
-
-                {/* Exam Details Input */}
-                {!selectedSubject && files.length === 0 && (
-                    <View style={styles.detailsWindow}>
-                        <Text style={styles.detailsLabel}>Exam Description</Text>
-                        <TextInput
-                            style={styles.detailsInput}
-                            placeholder="Describe your exam or study session (optional)..."
-                            placeholderTextColor="#CBD5E0"
-                            value={details}
-                            onChangeText={setDetails}
-                            multiline
-                            numberOfLines={3}
-                            maxLength={400}
+                {/* ✅ Progressive Disclosure: Only show configuration after files are uploaded */}
+                {files.length > 0 && (
+                    <>
+                        <UploadPurposeToggle
+                            uploadPurpose={uploadPurpose}
+                            setUploadPurpose={setUploadPurpose}
+                            styles={styles}
                         />
-                    </View>
-                )}
 
-                {/* ✅ Subject Selector Section - Only show when files are selected */}
-                <SubjectSelectorSection
-                    isVisible={files.length > 0}
-                    selectedSubject={selectedSubject}
-                    userCourses={userCourses}
-                    hasProfileCourses={hasProfileCourses}
-                    predefinedSubjects={predefinedSubjects}
-                    onSubjectSelect={setSelectedSubject}
-                    onOpenFullSelector={() => setSubjectSelectorVisible(true)}
-                    isDisabled={uiState.isTransitioning}
-                    themeColors={themeColors}
-                    styles={styles}
-                    t={t}
-                />
+                        {/* Course Selection Section - Same as Ask Alexandria */}
+                        <CourseSelectionToggle
+                            mode={courseSelectionMode}
+                            onModeChange={(mode) => {
+                                setCourseSelectionMode(mode);
+                                if (mode === 'profile') {
+                                    setSelectedHierarchicalSubject(null);
+                                    setSelectedHierarchicalCourse(null);
+                                } else {
+                                    setSelectedSubject(null);
+                                }
+                            }}
+                            userCoursesCount={userCourses.length}
+                            availableSubjectsCount={availableSubjects.length}
+                            hasProfileCourses={hasProfileCourses}
+                            styles={styles}
+                        />
 
-                {/* ✅ Quiz Configuration - Only show when purpose is 'quiz' */}
-                {uploadPurpose === 'quiz' && (
-                    <QuizConfiguration
-                        quizTypes={quizTypes}
-                        setQuizTypes={setQuizTypes}
-                        difficulty={difficulty}
-                        setDifficulty={setDifficulty}
-                        numQuestions={numQuestions}
-                        setNumQuestions={setNumQuestions}
-                        quizTypeModalVisible={quizTypeModalVisible}
-                        setQuizTypeModalVisible={setQuizTypeModalVisible}
-                        difficultyModalVisible={difficultyModalVisible}
-                        setDifficultyModalVisible={setDifficultyModalVisible}
-                        styles={styles}
-                    />
-                )}
+                        {/* Profile Course Selector */}
+                        {courseSelectionMode === 'profile' && hasProfileCourses && (
+                            <ProfileCourseSelector
+                                userCourses={userCourses}
+                                selectedValue={selectedSubject?.name || ""}
+                                onSelect={(course) => {
+                                    setSelectedSubject({
+                                        key: course.key,
+                                        name: course.name,
+                                        type: 'profile_course',
+                                        icon: course.icon,
+                                        color: course.color,
+                                        source: 'user_profile'
+                                    });
+                                    setSelectedCourse({
+                                        name: course.name,
+                                        code: course.code || course.key,
+                                        icon: course.icon,
+                                        color: course.color,
+                                        source: 'profile'
+                                    });
+                                }}
+                                modalVisible={courseModalVisible}
+                                setModalVisible={setCourseModalVisible}
+                                styles={styles}
+                            />
+                        )}
 
-                {/* ✅ Study Mode Toggle - Only show when purpose is 'study' */}
-                {uploadPurpose === 'study' && (
-                    <StudyModeToggle
-                        enableStudyMode={enableStudyMode}
-                        setEnableStudyMode={setEnableStudyMode}
-                        styles={styles}
-                    />
+                        {/* Hierarchical Course Selector */}
+                        {courseSelectionMode === 'hierarchical' && (
+                            <HierarchicalCourseSelector
+                                availableSubjects={availableSubjects}
+                                selectedSubject={selectedHierarchicalSubject}
+                                availableCourses={availableCourses}
+                                selectedCourse={selectedHierarchicalCourse}
+                                onSubjectSelect={handleHierarchicalSubjectSelect}
+                                onCourseSelect={handleHierarchicalCourseSelect}
+                                subjectModalVisible={courseModalVisible}
+                                setSubjectModalVisible={setCourseModalVisible}
+                                courseModalVisible={hierarchicalCourseModalVisible}
+                                setCourseModalVisible={setHierarchicalCourseModalVisible}
+                                HierarchicalSubjectService={HierarchicalSubjectService}
+                                styles={styles}
+                            />
+                        )}
+
+                        {/* No Profile Courses Message */}
+                        {courseSelectionMode === 'profile' && !hasProfileCourses && (
+                            <View style={styles.noCoursesMessage}>
+                                <FontAwesome5 name="info-circle" size={16} color="#F39C12" />
+                                <Text style={styles.noCoursesText}>
+                                    No courses from your profile. Switch to "All Subjects" to explore courses.
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* ✅ Subject Selector Section - Only show when files are selected */}
+                        <SubjectSelectorSection
+                            isVisible={files.length > 0}
+                            selectedSubject={selectedSubject}
+                            userCourses={userCourses}
+                            hasProfileCourses={hasProfileCourses}
+                            predefinedSubjects={predefinedSubjects}
+                            onSubjectSelect={setSelectedSubject}
+                            onOpenFullSelector={() => setSubjectSelectorVisible(true)}
+                            isDisabled={uiState.isTransitioning}
+                            themeColors={themeColors}
+                            styles={styles}
+                            t={t}
+                        />
+
+                        {/* ✅ Quiz Configuration - Only show when purpose is 'quiz' */}
+                        {uploadPurpose === 'quiz' && (
+                            <QuizConfiguration
+                                quizTypes={quizTypes}
+                                setQuizTypes={setQuizTypes}
+                                difficulty={difficulty}
+                                setDifficulty={setDifficulty}
+                                numQuestions={numQuestions}
+                                setNumQuestions={setNumQuestions}
+                                quizTypeModalVisible={quizTypeModalVisible}
+                                setQuizTypeModalVisible={setQuizTypeModalVisible}
+                                difficultyModalVisible={difficultyModalVisible}
+                                setDifficultyModalVisible={setDifficultyModalVisible}
+                                styles={styles}
+                            />
+                        )}
+
+                        {/* ✅ Study Mode Toggle - Only show when purpose is 'study' */}
+                        {uploadPurpose === 'study' && (
+                            <StudyModeToggle
+                                enableStudyMode={enableStudyMode}
+                                setEnableStudyMode={setEnableStudyMode}
+                                styles={styles}
+                            />
+                        )}
+                    </>
                 )}
             </View>
         </View>
     );
 
-    // Enhanced footer with smooth animations
+    // Enhanced footer with progress indicators only
     const ListFooter = () => (
         <Animated.View
             style={[
@@ -623,28 +610,6 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                 { opacity: containerAnim }
             ]}
         >
-            <UploadSummary
-                uploadPurpose={uploadPurpose}
-                selectedSubject={selectedSubject}
-                quizTypes={quizTypes}
-                difficulty={difficulty}
-                numQuestions={numQuestions}
-                themeColors={themeColors}
-                styles={styles}
-                t={safeT}
-            />
-
-            <GenerateButton
-                uploadPurpose={uploadPurpose}
-                isUploading={uiState.uploading}
-                isDisabled={uiState.isTransitioning}
-                filesCount={files.length}
-                onPress={handleUploadAndGenerateQuiz}
-                themeColors={themeColors}
-                styles={styles}
-                t={safeT}
-            />
-
             {/* ✅ Show async progress for quiz generation in async mode */}
             {isAsyncGenerating && uploadPurpose === 'quiz' && useAsyncMode && (
                 <AsyncQuizProgress
@@ -673,6 +638,9 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                 themeColors={themeColors}
                 styles={styles}
             />
+
+            {/* Extra padding at bottom to account for sticky button */}
+            <View style={{ height: 120 }} />
         </Animated.View>
     );
 
@@ -725,6 +693,20 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                     index,
                 })}
             />
+
+            {/* ✅ Sticky Generate Button at bottom */}
+            <View style={styles.stickyFooter}>
+                <GenerateButton
+                    uploadPurpose={uploadPurpose}
+                    isUploading={uiState.uploading}
+                    isDisabled={uiState.isTransitioning}
+                    filesCount={files.length}
+                    onPress={handleUploadAndGenerateQuiz}
+                    themeColors={themeColors}
+                    styles={styles}
+                    t={safeT}
+                />
+            </View>
             </LinearGradient>
             
             {/* ✅ NEW: Subject Selector Modal */}
