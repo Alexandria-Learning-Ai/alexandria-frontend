@@ -452,19 +452,11 @@ const ExamListScreen: React.FC<ExamListScreenProps> = ({ navigation }) => {
         />
         <Text style={styles.headerTitle}>My Exams</Text>
         <View style={styles.headerActions}>
-          {exams.length > 0 && (
-            <TouchableOpacity
-              onPress={handleBulkSchedule}
-              style={styles.bulkButton}
-            >
-              <FontAwesome5 name="calendar-week" size={16} color="#F8F4E3" />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             onPress={() => navigation.navigate('ScheduleExamScreen' as any)}
             style={styles.addButton}
           >
-            <FontAwesome5 name="plus" size={20} color="#F8F4E3" />
+            <FontAwesome5 name="calendar-plus" size={20} color="#F8F4E3" />
           </TouchableOpacity>
         </View>
       </View>
