@@ -118,7 +118,30 @@ export default function AskAlexandriaScreen({ navigation, route }) {
     if (route?.params?.course) {
       setSelectedCourse(route.params.course);
     }
-  }, [route?.params]);
+
+    // Auto-generate quiz if requested (from exam practice or recommendations)
+    if (route?.params?.autoGenerate) {
+      // Set all parameters from route
+      if (route.params.difficulty) {
+        setDifficulty(route.params.difficulty);
+      }
+      if (route.params.numQuestions) {
+        setNumQuestions(route.params.numQuestions);
+      }
+      if (route.params.details) {
+        // Store details for quiz context
+        logger.info('Auto-generating quiz with context:', route.params.details);
+      }
+
+      // Small delay to ensure state is updated before generating
+      setTimeout(() => {
+        if (handleGenerateQuiz) {
+          logger.info('🚀 Auto-starting quiz generation from route params');
+          handleGenerateQuiz();
+        }
+      }, 800); // 800ms delay for state to settle
+    }
+  }, [route?.params, handleGenerateQuiz]);
   // ✅ REMOVED: quizTypeOptions and difficultyOptions moved to respective components
 
 
