@@ -323,6 +323,7 @@ export class HybridDataService {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            'X-User-ID': data.userId, // Include user ID for proper data isolation
                         },
                         body: JSON.stringify(data.quizData)
                     });
