@@ -91,7 +91,7 @@ import {
   showShareOptionsWithChallenge
 } from '../utils/shareUtilities';
 import { useQuizAnalytics } from '../hooks/useQuizAnalytics';
-import { useQuizSaving } from '../hooks/useQuizSaving';
+import { useSaveQuiz } from '../hooks/api/useSaveQuiz'; // ✅ NEW: React Query-based save hook
 import { useResultsState } from '../hooks/useResultsState';
 import { useSubjectClassification } from '../hooks/useSubjectClassification';
 import { useExplanations } from '../hooks/useExplanations';
@@ -150,7 +150,7 @@ const ResultsScreen = ({ route, navigation }) => {
   }
   // Validate route params
   if (!route?.params) {
-    Alert.alert('Error', 'Quiz data not found');
+    Alert.alert('Quiz Not Found', 'We couldn\'t load your quiz results. Please try again.');
     navigation.navigate('Home');
     return null;
   }
@@ -218,7 +218,7 @@ const ResultsScreen = ({ route, navigation }) => {
     requestCoachingTip,
   } = useResultsActions();
 
-  // Helper function for normalizing true/false answers
+  // Helper function for normalizing answers (used throughout component)
   const normalizeAnswer = (answer) => {
     if (answer === null || answer === undefined) return '';
     if (typeof answer === 'boolean') return answer ? 'true' : 'false';
@@ -268,20 +268,15 @@ const ResultsScreen = ({ route, navigation }) => {
     metadata,
   });
 
+  // ✅ NEW: React Query-based quiz saving with automatic offline queue
   const {
-    savingQuiz,
-    saveQuizToHistory: saveQuizToHistoryFromHook,
-  } = useQuizSaving({
-    questions,
-    userAnswers,
-    score,
-    totalQuestions,
-    correctCount,
-    incorrectCount,
-    percentage,
-    metadata,
-    CONFIG,
-  });
+    saveQuiz: saveQuizMutation,
+    saveQuizAsync,
+    isSaving: savingQuiz,
+    isError: saveError,
+    error: saveErrorDetails,
+    isSuccess: saveSuccess,
+  } = useSaveQuiz();
 
   // ✅ REMOVED: Individual explanation modal functions - now using unified AI Analysis section
 
@@ -345,10 +340,63 @@ const ResultsScreen = ({ route, navigation }) => {
   // ✅ REMOVED: Inline handleQuizCompletion logic moved to useQuizAnalytics hook
   // The following 120+ lines were extracted to hooks/useQuizAnalytics.ts
 
-  // ✅ NEW: Wrapper function that uses the hook's logic
+  // ✅ NEW: Save quiz using React Query mutation
   const saveQuizToHistory = async () => {
-    const formattedResults = await formatQuizResultsForSubjectProgress();
-    await saveQuizToHistoryFromHook(formattedResults, isMountedRef);
+    try {
+      if (!isMountedRef.current) return;
+
+      logger.info('💾 Saving quiz with React Query...');
+
+      const formattedResults = await formatQuizResultsForSubjectProgress();
+
+      // Prepare quiz data for the new API
+      const quizData = {
+        questions: questions,
+        userAnswers: userAnswers,
+        score: score,
+        totalQuestions: totalQuestions,
+        percentage: percentage,
+        metadata: {
+          ...metadata,
+          ...formattedResults.metadata,
+          subject: formattedResults.subject,
+          course: formattedResults.course,
+          topic: formattedResults.topic,
+        },
+      };
+
+      // Use async mutation for better error handling
+      await saveQuizAsync(quizData);
+
+      logger.info('✅ Quiz saved successfully via React Query');
+
+      // Show success notification
+      if (isMountedRef.current) {
+        const incorrectQuestions = questions.filter(q => {
+          const userAns = userAnswers[q?.id];
+          const normalizedMatch = normalizeAnswer(userAns) === normalizeAnswer(q?.correctAnswer);
+          return !q?.isCorrect && !normalizedMatch;
+        });
+
+        if (incorrectQuestions.length > 0) {
+          Alert.alert(
+            'Quiz Saved! 📊📚',
+            `Your results have been saved and will sync automatically. ${incorrectQuestions.length} flashcards will be created from your mistakes!`
+          );
+        } else {
+          Alert.alert('Quiz Saved! 📊', 'Perfect score! Your results have been saved.');
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error saving quiz:', error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          'Save Error',
+          'Failed to save quiz. Your results are queued and will sync when online.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
   };
 
   // ✅ REMOVED: Inline saveQuizToHistory logic moved to useQuizSaving hook
@@ -517,21 +565,58 @@ const ResultsScreen = ({ route, navigation }) => {
   const currentThemeStyles = isDarkMode ? darkStyles : lightStyles;
   const statusBarStyle = isDarkMode ? 'light-content' : 'dark-content';
 
-  // ✅ WRAPPER: Action handlers with proper parameters
+  // ✅ MIGRATED: Save quiz for later using React Query (same as main save)
   const handleSaveQuizForLater = async () => {
-    await saveQuizForLater({
-      questions,
-      userAnswers,
-      score,
-      totalQuestions,
-      percentage,
-      correctCount,
-      incorrectCount,
-      metadata,
-      weaknessAnalysis,
-      determineCategorySync,
-      navigation,
-    });
+    try {
+      if (!isMountedRef.current) return;
+
+      logger.info('💾 Saving quiz for later review with React Query...');
+
+      const formattedResults = await formatQuizResultsForSubjectProgress();
+
+      // Prepare quiz data for the new API
+      const quizData = {
+        questions: questions,
+        userAnswers: userAnswers,
+        score: score,
+        totalQuestions: totalQuestions,
+        percentage: percentage,
+        metadata: {
+          ...metadata,
+          ...formattedResults.metadata,
+          subject: formattedResults.subject,
+          course: formattedResults.course,
+          topic: formattedResults.topic,
+          savedForLater: true, // Mark as "saved for later"
+        },
+      };
+
+      // Use async mutation for better error handling
+      await saveQuizAsync(quizData);
+
+      logger.info('✅ Quiz saved for later via React Query');
+
+      // Show success with navigation option
+      if (isMountedRef.current) {
+        Alert.alert(
+          '✅ Quiz Saved!',
+          'This quiz has been saved to your collection. You can view all your saved quizzes from the home screen.',
+          [
+            { text: 'View Saved Quizzes', onPress: () => navigation.navigate('QuizHistory') },
+            { text: 'OK' },
+          ]
+        );
+      }
+    } catch (error) {
+      logger.error('❌ Error saving quiz for later:', error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          'Save Error',
+          'Failed to save quiz. Your results are queued and will sync when online.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
   };
 
   const handleRequestFocusQuiz = async (weakness) => {
