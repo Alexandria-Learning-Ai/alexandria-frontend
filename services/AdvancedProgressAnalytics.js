@@ -110,15 +110,67 @@ export class AdvancedProgressAnalytics {
   static forecastStreak(currentStreak, likelihood, averageGap) {
     const probabilityMultiplier = likelihood / 100;
     const gapPenalty = Math.max(0.5, 1 - (averageGap - 1) * 0.2);
-    
+
     const nextWeekGrowth = Math.round(7 * probabilityMultiplier * gapPenalty);
     const nextMonthGrowth = Math.round(30 * probabilityMultiplier * gapPenalty * 0.8); // Slightly pessimistic for longer term
-    
+
     return {
       nextWeek: currentStreak + nextWeekGrowth,
       nextMonth: currentStreak + nextMonthGrowth,
       confidence: Math.round(likelihood * 0.8) // Slightly lower confidence for forecasts
     };
+  }
+
+  /**
+   * Get streak prediction for a user (wrapper method that loads quiz history)
+   * This is a convenience method that handles data loading and calls predictStreakContinuation
+   *
+   * @param {string} userId - The user ID to get predictions for
+   * @returns {Promise<Object>} Streak prediction with likelihood, confidence, and forecast
+   */
+  static async getStreakPrediction(userId) {
+    try {
+      // Load user's quiz history from AsyncStorage
+      const quizHistoryData = await AsyncStorage.getItem(`quizHistory_${userId}`);
+      const quizHistory = quizHistoryData ? JSON.parse(quizHistoryData) : [];
+
+      // Handle case with no quiz history
+      if (quizHistory.length === 0) {
+        logger.info('No quiz history found for streak prediction');
+        return {
+          likelihood: 50,
+          confidence: 'low',
+          recommendation: 'Take your first quiz to start tracking your streak!',
+          streakForecast: {
+            nextWeek: 0,
+            nextMonth: 0,
+            confidence: 0
+          }
+        };
+      }
+
+      // Calculate current streak from quiz history
+      const { currentStreak } = this.calculateStreaks(quizHistory);
+
+      logger.info(`Generating streak prediction for user ${userId}: ${quizHistory.length} quizzes, current streak: ${currentStreak}`);
+
+      // Use existing predictStreakContinuation method
+      return this.predictStreakContinuation(quizHistory, currentStreak);
+
+    } catch (error) {
+      logger.error('Error getting streak prediction:', error);
+      // Return safe default values on error
+      return {
+        likelihood: 50,
+        confidence: 'low',
+        recommendation: 'Unable to load streak prediction. Please try again.',
+        streakForecast: {
+          nextWeek: 0,
+          nextMonth: 0,
+          confidence: 0
+        }
+      };
+    }
   }
 
   // =============================

@@ -13,6 +13,8 @@ import {
     Modal,
     TextInput,
     ScrollView,
+    Platform,
+    Vibration,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,6 +30,7 @@ import CustomDropdown from '../components/shared/CustomDropdown';
 import { predefinedSubjects, quizTypeOptions, difficultyOptions } from '../constants/uploadOptions';
 import UploadHeader from '../components/upload/UploadHeader';
 import FileUploadButton from '../components/upload/FileUploadButton';
+import DragDropZone from '../components/upload/DragDropZone';
 import UploadPurposeToggle from '../components/upload/UploadPurposeToggle';
 import QuizConfiguration from '../components/upload/QuizConfiguration';
 import StudyModeToggle from '../components/upload/StudyModeToggle';
@@ -42,12 +45,16 @@ import SubjectSelectorSection from '../components/upload/SubjectSelectorSection'
 import CourseSelectionToggle from '../components/ask-alexandria/CourseSelectionToggle';
 import ProfileCourseSelector from '../components/ask-alexandria/ProfileCourseSelector';
 import HierarchicalCourseSelector from '../components/ask-alexandria/HierarchicalCourseSelector';
+import QuickQuizButton from '../components/upload/QuickQuizButton';
 import { useFileUpload } from '../hooks/useFileUpload';
 import { useUploadHandler } from '../hooks/useUploadHandler';
 import { useQuizGeneration } from '../hooks/useQuizGeneration';
 import { useAsyncQuizGeneration } from '../hooks/useAsyncQuizGeneration';
 import { useSubjectValidation } from '../hooks/useSubjectValidation';
 import { useHierarchicalCourses } from '../hooks/useHierarchicalCourses';
+import { useFileAnalysis } from '../hooks/useFileAnalysis';
+import { useOnboarding } from '../contexts/OnboardingContext';
+import OnboardingTooltip from '../components/onboarding/OnboardingTooltip';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -73,7 +80,22 @@ export default function UploadScreen({ navigation }) {
         handleSelectFiles,
         removeFile,
         getFileIcon
-    } = useFileUpload(t);
+    } = useFileUpload(t, async (newFiles) => {
+        // Analyze files after mobile selection
+        if (uploadPurpose === 'quiz' && newFiles.length > 0) {
+            if (!auth.currentUser?.uid) {
+                Alert.alert('Sign In Required', 'Sign in to generate personalized quizzes');
+                return;
+            }
+            logger.info('🔍 Analyzing file for Smart Defaults (mobile)...');
+            try {
+                await analyzeFile(newFiles[0], auth.currentUser.uid);
+                setShowQuickQuiz(true);
+            } catch (error) {
+                logger.error('❌ Analysis failed:', error);
+            }
+        }
+    });
 
     const {
         isUploading: uploadingFromHook,
@@ -128,6 +150,19 @@ export default function UploadScreen({ navigation }) {
         handleHierarchicalCourseSelect
     } = useHierarchicalCourses();
 
+    // ✅ NEW: Smart Defaults / Quick Quiz hook
+    const {
+        defaults: smartDefaults,
+        loading: analyzingFile,
+        error: analysisError,
+        analyzeFile,
+        resetAnalysis,
+        hasHighConfidence
+    } = useFileAnalysis();
+
+    // ✅ NEW: Onboarding hook
+    const { isFirstTime, markAsComplete } = useOnboarding();
+
     // Consolidated state to prevent flashing
     const [uiState, setUiState] = useState({
         uploading: false,
@@ -174,6 +209,9 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
 
     // ✅ NEW: Async mode toggle (default to async for better UX)
     const [useAsyncMode, setUseAsyncMode] = useState(true);
+
+    // ✅ NEW: Quick Quiz flow state
+    const [showQuickQuiz, setShowQuickQuiz] = useState(false);
 
     // Smooth animation refs
     const uploadProgress = useRef(new Animated.Value(0)).current;
@@ -257,7 +295,7 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
 
                         // Show success message after navigation
                         setTimeout(() => {
-                            Alert.alert('🧠 Quiz Generated!', 'Your practice quiz is ready. Test your knowledge!');
+                            Alert.alert('Your Quiz is Ready! 🎓', 'Your personalized quiz is ready. Ready to test your knowledge?');
                         }, 300);
                     } catch (navError) {
                         logger.error('❌ Navigation error:', navError);
@@ -271,7 +309,7 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
     useEffect(() => {
         if (asyncError) {
             Alert.alert(
-                '❌ Quiz Generation Failed',
+                'Quiz Generation Failed',
                 asyncError,
                 [
                     {
@@ -281,7 +319,7 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                         }
                     },
                     {
-                        text: 'OK',
+                        text: 'Got It',
                         style: 'cancel'
                     }
                 ]
@@ -331,7 +369,149 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
 
     // ✅ REMOVED: File picker functions moved to useFileUpload hook
 
+    // ✅ NEW: Handle file dropped from DragDropZone for when I make website for Tee (web only)
+    const handleFileDropped = useCallback(async (file) => {
+        logger.info('File dropped via drag & drop:', { name: file.name, size: file.size, type: file.type });
+
+        // Convert File object to our internal file format
+        const fileObject = {
+            uri: URL.createObjectURL(file),
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+            // Store the actual File object for upload
+            webFile: file,
+        };
+
+        // Add to files array
+        setFiles([fileObject]);
+        Vibration.vibrate(50);
+
+        logger.info('File added successfully via drag & drop');
+
+        // ✅ NEW: Analyze file for Smart Defaults (only for quiz purpose)
+        if (uploadPurpose === 'quiz') {
+            // ✅ FIX: Check authentication before analyzing file
+            if (!auth.currentUser?.uid) {
+                Alert.alert(
+                    'Sign In Required',
+                    'Sign in to generate personalized quizzes and track your progress',
+                    [
+                        { text: 'Not Now', style: 'cancel' },
+                        { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                    ]
+                );
+                return;
+            }
+
+            logger.info('🔍 Analyzing file for Smart Defaults...');
+            await analyzeFile(file, auth.currentUser.uid); // No optional chaining needed now
+            setShowQuickQuiz(true);
+        }
+    }, [setFiles, uploadPurpose, analyzeFile]);
+
+    // ✅ FIX: Cleanup blob URLs to prevent memory leaks
+    useEffect(() => {
+        // Cleanup function to revoke object URLs when files change or component unmounts
+        return () => {
+            files.forEach(file => {
+                if (file.uri && file.uri.startsWith('blob:')) {
+                    URL.revokeObjectURL(file.uri);
+                    logger.debug('Revoked blob URL:', file.uri);
+                }
+            });
+        };
+    }, [files]);
+
     // ✅ REMOVED: No longer needed - backend /study/extract-text endpoint now handles both extraction AND storage
+
+    // ✅ NEW: Handle Quick Quiz generation (one-tap with smart defaults)
+    const handleQuickQuiz = useCallback(async () => {
+        if (!smartDefaults || !files.length) {
+            logger.warn('Quick Quiz attempted without smart defaults or files');
+            return;
+        }
+
+        logger.info('🚀 Quick Quiz: Generating with smart defaults', {
+            subject: smartDefaults.subject.name,
+            difficulty: smartDefaults.difficulty,
+            numQuestions: smartDefaults.num_questions,
+        });
+
+        // Hide Quick Quiz button
+        setShowQuickQuiz(false);
+
+        // Apply smart defaults to form
+        setQuizTypes(smartDefaults.question_types);
+        setDifficulty(smartDefaults.difficulty);
+        setNumQuestions(smartDefaults.num_questions);
+
+        // Set subject if high confidence
+        if (hasHighConfidence()) {
+            setSelectedSubject({
+                key: smartDefaults.subject.value,
+                name: smartDefaults.subject.name,
+                type: 'smart_default',
+                confidence: smartDefaults.subject.confidence,
+            });
+        }
+
+        // Generate quiz using async mode
+        // ✅ FIX: Check authentication before generating quiz
+        if (!auth.currentUser?.uid) {
+            Alert.alert(
+                'Authentication Required',
+                'Please sign in to generate quizzes'
+            );
+            return;
+        }
+
+        try {
+            await generateQuizAsync(files[0], {
+                quizTypes: smartDefaults.question_types,
+                numQuestions: smartDefaults.num_questions,
+                difficulty: smartDefaults.difficulty,
+                language: i18n.language,
+                visualEnhancement,
+                subjectContext: hasHighConfidence() ? {
+                    manual_subject: smartDefaults.subject.name,
+                    subject_key: smartDefaults.subject.value,
+                    subject_type: 'smart_default'
+                } : null,
+            }, auth.currentUser.uid); // No fallback to anonymous
+        } catch (error) {
+            logger.error('❌ Quick Quiz generation failed:', error);
+            // Error already handled by the hook
+        }
+    }, [smartDefaults, files, hasHighConfidence, generateQuizAsync, i18n.language, visualEnhancement]);
+
+    // ✅ NEW: Handle Customize action (show full configuration)
+    const handleCustomize = useCallback(() => {
+        logger.info('📝 User chose to customize quiz settings');
+
+        // Hide Quick Quiz button
+        setShowQuickQuiz(false);
+
+        // Pre-fill form with smart defaults (if available)
+        if (smartDefaults) {
+            setQuizTypes(smartDefaults.question_types);
+            setDifficulty(smartDefaults.difficulty);
+            setNumQuestions(smartDefaults.num_questions);
+
+            // Only set subject if high confidence
+            if (hasHighConfidence()) {
+                setSelectedSubject({
+                    key: smartDefaults.subject.value,
+                    name: smartDefaults.subject.name,
+                    type: 'smart_default',
+                    confidence: smartDefaults.subject.confidence,
+                });
+            }
+        }
+
+        // User will now manually review and modify settings
+        logger.info('Quiz configuration pre-filled with smart defaults, user can now customize');
+    }, [smartDefaults, hasHighConfidence]);
 
     // ✅ ENHANCED: Upload with dual purpose (Study or Quiz) - supports both sync and async modes
     const handleUploadAndGenerateQuiz = async () => {
@@ -385,6 +565,15 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
             // ✅ Use async mode with SSE
             logger.info('🚀 Using ASYNC quiz generation mode');
 
+            // ✅ FIX: Check authentication before generating quiz
+            if (!auth.currentUser?.uid) {
+                Alert.alert(
+                    'Sign In Required',
+                    'Sign in to generate personalized quizzes and track your progress'
+                );
+                return;
+            }
+
             try {
                 await generateQuizAsync(files[0], {
                     quizTypes,
@@ -397,7 +586,7 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                         subject_key: selectedSubject.key,
                         subject_type: selectedSubject.type
                     } : null,
-                }, auth.currentUser?.uid || 'anonymous');
+                }, auth.currentUser.uid); // No fallback to anonymous
             } catch (error) {
                 logger.error('❌ Async quiz generation failed:', error);
                 // Error already handled by the hook
@@ -465,43 +654,101 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
 
             {/* Form Container */}
             <View style={styles.formContainer}>
-                <FileUploadButton
-                    files={files}
-                    onPress={handleSelectFiles}
-                    isDisabled={uiState.isTransitioning}
-                    styles={styles}
-                    t={safeT}
-                />
+                {/* ✅ Drag & Drop Zone for Web, FileUploadButton for Mobile */}
+                {Platform.OS === 'web' ? (
+                    <DragDropZone
+                        onFileSelected={handleFileDropped}
+                        acceptedTypes={['.pdf', '.txt', '.png', '.jpg', '.jpeg']}
+                        maxSizeMB={50}
+                        disabled={uiState.isTransitioning}
+                        onError={(error) => {
+                            Alert.alert('Upload Error', error);
+                        }}
+                    />
+                ) : (
+                    <FileUploadButton
+                        files={files}
+                        onPress={handleSelectFiles}
+                        isDisabled={uiState.isTransitioning}
+                        styles={styles}
+                        t={safeT}
+                    />
+                )}
 
                 {/* ✅ Progressive Disclosure: Only show configuration after files are uploaded */}
                 {files.length > 0 && (
                     <>
                         <UploadPurposeToggle
                             uploadPurpose={uploadPurpose}
-                            setUploadPurpose={setUploadPurpose}
-                            styles={styles}
-                        />
+                            setUploadPurpose={async (purpose) => {
+                                setUploadPurpose(purpose);
 
-                        {/* Course Selection Section - Same as Ask Alexandria */}
-                        <CourseSelectionToggle
-                            mode={courseSelectionMode}
-                            onModeChange={(mode) => {
-                                setCourseSelectionMode(mode);
-                                if (mode === 'profile') {
-                                    setSelectedHierarchicalSubject(null);
-                                    setSelectedHierarchicalCourse(null);
+                                // If switching TO quiz mode and files exist, analyze them
+                                if (purpose === 'quiz' && files.length > 0) {
+                                    if (!auth.currentUser?.uid) {
+                                        Alert.alert(
+                                            'Sign In Required',
+                                            'Sign in to generate personalized quizzes and track your progress',
+                                            [
+                                                { text: 'Not Now', style: 'cancel' },
+                                                { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                                            ]
+                                        );
+                                        return;
+                                    }
+
+                                    logger.info('🔄 Re-analyzing file after switching to quiz mode...', {
+                                        filename: files[0].name
+                                    });
+                                    try {
+                                        await analyzeFile(files[0], auth.currentUser.uid);
+                                        setShowQuickQuiz(true);
+                                        logger.info('✅ Smart Defaults analysis complete');
+                                    } catch (error) {
+                                        logger.error('❌ Re-analysis failed:', error);
+                                    }
                                 } else {
-                                    setSelectedSubject(null);
+                                    // Reset Quick Quiz when switching to study mode
+                                    setShowQuickQuiz(false);
+                                    resetAnalysis();
                                 }
                             }}
-                            userCoursesCount={userCourses.length}
-                            availableSubjectsCount={availableSubjects.length}
-                            hasProfileCourses={hasProfileCourses}
                             styles={styles}
                         />
 
-                        {/* Profile Course Selector */}
-                        {courseSelectionMode === 'profile' && hasProfileCourses && (
+                        {/* ✅ NEW: Quick Quiz Button - Show after file upload for quiz mode */}
+                        {uploadPurpose === 'quiz' && showQuickQuiz && smartDefaults && !isAsyncGenerating && (
+                            <QuickQuizButton
+                                defaults={smartDefaults}
+                                onQuickQuiz={handleQuickQuiz}
+                                onCustomize={handleCustomize}
+                                disabled={uiState.isTransitioning}
+                                analyzing={analyzingFile}
+                            />
+                        )}
+
+                        {/* Course Selection Section - Same as Ask Alexandria (hide when Quick Quiz active) */}
+                        {!showQuickQuiz && (
+                            <CourseSelectionToggle
+                                mode={courseSelectionMode}
+                                onModeChange={(mode) => {
+                                    setCourseSelectionMode(mode);
+                                    if (mode === 'profile') {
+                                        setSelectedHierarchicalSubject(null);
+                                        setSelectedHierarchicalCourse(null);
+                                    } else {
+                                        setSelectedSubject(null);
+                                    }
+                                }}
+                                userCoursesCount={userCourses.length}
+                                availableSubjectsCount={availableSubjects.length}
+                                hasProfileCourses={hasProfileCourses}
+                                styles={styles}
+                            />
+                        )}
+
+                        {/* Profile Course Selector (hide when Quick Quiz active) */}
+                        {!showQuickQuiz && courseSelectionMode === 'profile' && hasProfileCourses && (
                             <ProfileCourseSelector
                                 userCourses={userCourses}
                                 selectedValue={selectedSubject?.name || ""}
@@ -528,8 +775,8 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                             />
                         )}
 
-                        {/* Hierarchical Course Selector */}
-                        {courseSelectionMode === 'hierarchical' && (
+                        {/* Hierarchical Course Selector (hide when Quick Quiz active) */}
+                        {!showQuickQuiz && courseSelectionMode === 'hierarchical' && (
                             <HierarchicalCourseSelector
                                 availableSubjects={availableSubjects}
                                 selectedSubject={selectedHierarchicalSubject}
@@ -546,8 +793,8 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                             />
                         )}
 
-                        {/* No Profile Courses Message */}
-                        {courseSelectionMode === 'profile' && !hasProfileCourses && (
+                        {/* No Profile Courses Message (hide when Quick Quiz active) */}
+                        {!showQuickQuiz && courseSelectionMode === 'profile' && !hasProfileCourses && (
                             <View style={styles.noCoursesMessage}>
                                 <FontAwesome5 name="info-circle" size={16} color="#F39C12" />
                                 <Text style={styles.noCoursesText}>
@@ -556,23 +803,25 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                             </View>
                         )}
 
-                        {/* ✅ Subject Selector Section - Only show when files are selected */}
-                        <SubjectSelectorSection
-                            isVisible={files.length > 0}
-                            selectedSubject={selectedSubject}
-                            userCourses={userCourses}
-                            hasProfileCourses={hasProfileCourses}
-                            predefinedSubjects={predefinedSubjects}
-                            onSubjectSelect={setSelectedSubject}
-                            onOpenFullSelector={() => setSubjectSelectorVisible(true)}
-                            isDisabled={uiState.isTransitioning}
-                            themeColors={themeColors}
-                            styles={styles}
-                            t={t}
-                        />
+                        {/* ✅ Subject Selector Section - Only show when files are selected AND Quick Quiz not active */}
+                        {!showQuickQuiz && (
+                            <SubjectSelectorSection
+                                isVisible={files.length > 0}
+                                selectedSubject={selectedSubject}
+                                userCourses={userCourses}
+                                hasProfileCourses={hasProfileCourses}
+                                predefinedSubjects={predefinedSubjects}
+                                onSubjectSelect={setSelectedSubject}
+                                onOpenFullSelector={() => setSubjectSelectorVisible(true)}
+                                isDisabled={uiState.isTransitioning}
+                                themeColors={themeColors}
+                                styles={styles}
+                                t={t}
+                            />
+                        )}
 
-                        {/* ✅ Quiz Configuration - Only show when purpose is 'quiz' */}
-                        {uploadPurpose === 'quiz' && (
+                        {/* ✅ Quiz Configuration - Only show when purpose is 'quiz' AND Quick Quiz not active */}
+                        {uploadPurpose === 'quiz' && !showQuickQuiz && (
                             <QuizConfiguration
                                 quizTypes={quizTypes}
                                 setQuizTypes={setQuizTypes}
@@ -801,6 +1050,15 @@ logger.info('🔧 Direct config check - API_BASE_URL:', API_BASE_URL);
                     "📚 Enhanced PDF Processing: Analyzing text, images, charts, and diagrams..." :
                     "Analyzing your content and generating questions"
                 }
+            />
+
+            {/* ✅ NEW: First-time user onboarding tooltip */}
+            <OnboardingTooltip
+                visible={isFirstTime('firstUpload')}
+                message="Upload your study materials - PDFs, text files, or images - and I'll create personalized quizzes to help you master the content"
+                position="top"
+                icon="upload"
+                onDismiss={() => markAsComplete('firstUpload')}
             />
         </SafeAreaView>
     );
