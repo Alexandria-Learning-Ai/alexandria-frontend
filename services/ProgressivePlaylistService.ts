@@ -28,6 +28,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { ProgressivePlaylist, AudioTrack, TrackStatusSummary } from '../types/progressiveAudio.types';
 import logger from '../utils/logger';
+import { auth } from '../firebaseConfig';
 
 interface GenerationOptions {
   voice?: string;
@@ -59,6 +60,11 @@ class ProgressivePlaylistService {
     } = options;
 
     try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const formData = new FormData();
       formData.append('voice', voice);
       formData.append('speed', speed.toString());
@@ -70,6 +76,10 @@ class ProgressivePlaylistService {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'X-User-ID': user.uid,
+          },
+          params: {
+            user_id: user.uid,
           },
         }
       );
@@ -106,8 +116,21 @@ class ProgressivePlaylistService {
    */
   static async getPlaylistStatus(materialId: string): Promise<ProgressivePlaylist | null> {
     try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const response = await axios.get<ProgressivePlaylist>(
-        `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`
+        `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`,
+        {
+          headers: {
+            'X-User-ID': user.uid,
+          },
+          params: {
+            user_id: user.uid,
+          },
+        }
       );
 
       return response.data;
@@ -221,6 +244,11 @@ class ProgressivePlaylistService {
    */
   static async retryFailedTrack(trackId: string): Promise<AudioTrack> {
     try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const formData = new FormData();
 
       const response = await axios.post<AudioTrack>(
@@ -229,6 +257,10 @@ class ProgressivePlaylistService {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'X-User-ID': user.uid,
+          },
+          params: {
+            user_id: user.uid,
           },
         }
       );
