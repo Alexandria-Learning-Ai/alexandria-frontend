@@ -5,7 +5,7 @@
  * Users start listening to Track 1 within seconds while others generate.
  *
  * @example
- * ```javascript
+ * ```typescript
  * import ProgressivePlaylistService from './services/ProgressivePlaylistService';
  *
  * // Start generation
@@ -15,10 +15,10 @@
  * ProgressivePlaylistService.pollPlaylistStatus(
  *   materialId,
  *   (updatedPlaylist) => {
- *     console.log(`${updatedPlaylist.completed_tracks}/${updatedPlaylist.total_tracks} ready`);
+ *     logger.info(`${updatedPlaylist.completed_tracks}/${updatedPlaylist.total_tracks} ready`);
  *   },
  *   (finalPlaylist) => {
- *     console.log('All tracks ready!');
+ *     logger.info('All tracks ready!');
  *   }
  * );
  * ```
@@ -26,19 +26,32 @@
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+import { ProgressivePlaylist, AudioTrack, TrackStatusSummary } from '../types/progressiveAudio.types';
+import logger from '../utils/logger';
+
+interface GenerationOptions {
+  voice?: string;
+  speed?: number;
+  language?: string;
+}
+
+interface PollingOptions {
+  pollInterval?: number;
+  maxAttempts?: number;
+}
 
 class ProgressivePlaylistService {
   /**
    * Start chunked audio generation
    *
-   * @param {string} materialId - Study material ID
-   * @param {object} options - Generation options
-   * @param {string} options.voice - Voice to use (default, male, female)
-   * @param {number} options.speed - Speech speed (0.5 - 2.0)
-   * @param {string} options.language - Language code (en, es, fr, etc.)
-   * @returns {Promise<object>} Playlist data with tracks
+   * @param materialId - Study material ID
+   * @param options - Generation options
+   * @returns Playlist data with tracks
    */
-  static async startChunkedGeneration(materialId, options = {}) {
+  static async startChunkedGeneration(
+    materialId: string,
+    options: GenerationOptions = {}
+  ): Promise<ProgressivePlaylist> {
     const {
       voice = 'default',
       speed = 1.0,
@@ -51,7 +64,7 @@ class ProgressivePlaylistService {
       formData.append('speed', speed.toString());
       formData.append('language', language);
 
-      const response = await axios.post(
+      const response = await axios.post<ProgressivePlaylist>(
         `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`,
         formData,
         {
@@ -63,13 +76,15 @@ class ProgressivePlaylistService {
 
       const playlist = response.data;
 
-      console.log(`🎵 Chunked playlist created: ${playlist.title}`);
-      console.log(`   Total tracks: ${playlist.total_tracks}`);
-      console.log(`   Estimated duration: ${Math.round(playlist.estimated_total_duration / 60)} minutes`);
+      logger.info('🎵 Chunked playlist created', {
+        title: playlist.title,
+        totalTracks: playlist.total_tracks,
+        estimatedDuration: Math.round((playlist.estimated_total_duration || 0) / 60),
+      });
 
       return playlist;
-    } catch (error) {
-      console.error('❌ Failed to start chunked generation:', error);
+    } catch (error: any) {
+      logger.error('❌ Failed to start chunked generation', { error, materialId });
 
       if (error.response) {
         throw new Error(
@@ -86,23 +101,23 @@ class ProgressivePlaylistService {
   /**
    * Get current playlist status
    *
-   * @param {string} materialId - Study material ID
-   * @returns {Promise<object>} Current playlist with track statuses
+   * @param materialId - Study material ID
+   * @returns Current playlist with track statuses
    */
-  static async getPlaylistStatus(materialId) {
+  static async getPlaylistStatus(materialId: string): Promise<ProgressivePlaylist | null> {
     try {
-      const response = await axios.get(
+      const response = await axios.get<ProgressivePlaylist>(
         `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`
       );
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       if (error.response && error.response.status === 404) {
         // Playlist doesn't exist yet
         return null;
       }
 
-      console.error('Failed to get playlist status:', error);
+      logger.error('Failed to get playlist status', { error, materialId });
       throw error;
     }
   }
@@ -110,33 +125,31 @@ class ProgressivePlaylistService {
   /**
    * Poll playlist status until all tracks complete
    *
-   * @param {string} materialId - Material ID
-   * @param {function} onUpdate - Callback for status updates: (playlist) => void
-   * @param {function} onComplete - Callback when all tracks complete: (playlist) => void
-   * @param {object} options - Polling options
-   * @param {number} options.pollInterval - Interval in ms (default: 10000)
-   * @param {number} options.maxAttempts - Max attempts (default: 120)
-   * @returns {function} Stop polling function
+   * @param materialId - Material ID
+   * @param onUpdate - Callback for status updates: (playlist) => void
+   * @param onComplete - Callback when all tracks complete: (playlist) => void
+   * @param options - Polling options
+   * @returns Stop polling function
    */
   static pollPlaylistStatus(
-    materialId,
-    onUpdate,
-    onComplete,
-    options = {}
-  ) {
+    materialId: string,
+    onUpdate: (playlist: ProgressivePlaylist) => void,
+    onComplete: (playlist: ProgressivePlaylist | { error: string }) => void,
+    options: PollingOptions = {}
+  ): () => void {
     const {
       pollInterval = 10000, // 10 seconds
       maxAttempts = 120,    // 20 minutes max
     } = options;
 
     let attempts = 0;
-    let timeoutId = null;
+    let timeoutId: NodeJS.Timeout | null = null;
     let stopped = false;
 
-    const poll = async () => {
+    const poll = async (): Promise<void> => {
       if (stopped || attempts >= maxAttempts) {
         if (attempts >= maxAttempts) {
-          console.warn('⏱️ Polling timeout reached');
+          logger.warn('⏱️ Polling timeout reached', { materialId, attempts });
           onComplete({ error: 'Timeout' });
         }
         return;
@@ -146,7 +159,7 @@ class ProgressivePlaylistService {
         const playlist = await this.getPlaylistStatus(materialId);
 
         if (!playlist) {
-          console.warn('Playlist not found, stopping poll');
+          logger.warn('Playlist not found, stopping poll', { materialId });
           return;
         }
 
@@ -160,7 +173,11 @@ class ProgressivePlaylistService {
         const hasFailed = playlist.status === 'failed';
 
         if (allComplete || hasFailed) {
-          console.log(`🎉 Playlist polling complete: ${playlist.completed_tracks}/${playlist.total_tracks} tracks`);
+          logger.info('🎉 Playlist polling complete', {
+            completedTracks: playlist.completed_tracks,
+            totalTracks: playlist.total_tracks,
+            status: playlist.status,
+          });
           if (onComplete) {
             onComplete(playlist);
           }
@@ -174,7 +191,7 @@ class ProgressivePlaylistService {
         }
 
       } catch (error) {
-        console.error('Polling error:', error);
+        logger.error('Polling error', { error, materialId, attempts });
 
         // Continue polling despite errors
         attempts++;
@@ -199,14 +216,14 @@ class ProgressivePlaylistService {
   /**
    * Retry a failed track
    *
-   * @param {string} trackId - Track ID to retry
-   * @returns {Promise<object>} Retry status
+   * @param trackId - Track ID to retry
+   * @returns Retry status
    */
-  static async retryFailedTrack(trackId) {
+  static async retryFailedTrack(trackId: string): Promise<AudioTrack> {
     try {
       const formData = new FormData();
 
-      const response = await axios.post(
+      const response = await axios.post<AudioTrack>(
         `${API_BASE_URL}/api/study/audio/tracks/${trackId}/retry`,
         formData,
         {
@@ -216,10 +233,10 @@ class ProgressivePlaylistService {
         }
       );
 
-      console.log(`🔄 Retrying track: ${trackId}`);
+      logger.info('🔄 Retrying track', { trackId });
       return response.data;
     } catch (error) {
-      console.error('Failed to retry track:', error);
+      logger.error('Failed to retry track', { error, trackId });
       throw error;
     }
   }
@@ -227,10 +244,10 @@ class ProgressivePlaylistService {
   /**
    * Get track status summary
    *
-   * @param {object} playlist - Playlist object
-   * @returns {object} Status summary
+   * @param playlist - Playlist object
+   * @returns Status summary
    */
-  static getTrackStatusSummary(playlist) {
+  static getTrackStatusSummary(playlist: ProgressivePlaylist | null): TrackStatusSummary {
     if (!playlist || !playlist.tracks) {
       return {
         complete: 0,
@@ -241,7 +258,7 @@ class ProgressivePlaylistService {
       };
     }
 
-    const summary = {
+    const summary: TrackStatusSummary = {
       complete: 0,
       processing: 0,
       queued: 0,
@@ -259,24 +276,24 @@ class ProgressivePlaylistService {
   /**
    * Get first playable track
    *
-   * @param {object} playlist - Playlist object
-   * @returns {object|null} First complete track, or null
+   * @param playlist - Playlist object
+   * @returns First complete track, or null
    */
-  static getFirstPlayableTrack(playlist) {
+  static getFirstPlayableTrack(playlist: ProgressivePlaylist | null): AudioTrack | null {
     if (!playlist || !playlist.tracks) {
       return null;
     }
 
-    return playlist.tracks.find((track) => track.status === 'complete');
+    return playlist.tracks.find((track) => track.status === 'complete') || null;
   }
 
   /**
    * Format duration from seconds
    *
-   * @param {number} seconds - Duration in seconds
-   * @returns {string} Formatted duration (e.g., "5:43")
+   * @param seconds - Duration in seconds
+   * @returns Formatted duration (e.g., "5:43")
    */
-  static formatDuration(seconds) {
+  static formatDuration(seconds: number | null): string {
     if (!seconds) return '--:--';
 
     const mins = Math.floor(seconds / 60);
@@ -288,10 +305,10 @@ class ProgressivePlaylistService {
   /**
    * Calculate progress percentage
    *
-   * @param {object} playlist - Playlist object
-   * @returns {number} Progress 0-100
+   * @param playlist - Playlist object
+   * @returns Progress 0-100
    */
-  static calculateProgress(playlist) {
+  static calculateProgress(playlist: ProgressivePlaylist | null): number {
     if (!playlist || !playlist.total_tracks) {
       return 0;
     }

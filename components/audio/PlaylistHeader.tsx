@@ -14,7 +14,19 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { PlaylistHeaderProps } from '../../types/progressiveAudio.types';
-import Colors from '../../constants/Colors';
+
+// Alexandria theme colors
+const themeColors = {
+  background: '#1A2C5B',
+  backgroundSecondary: '#2C467D',
+  alexandriaGold: '#D4AF37',
+  alexandriaBronze: '#B8941F',
+  text: '#F8F4E3',
+  textSecondary: '#CBD5E0',
+  success: '#28a745',
+  error: '#dc3545',
+  warning: '#FF9500',
+};
 
 const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
   playlist,
@@ -52,7 +64,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
       return {
         icon: '🎉',
         text: 'All tracks ready!',
-        color: Colors.success || '#4CAF50',
+        color: themeColors.success,
       };
     }
 
@@ -60,7 +72,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
       return {
         icon: '❌',
         text: 'Generation failed',
-        color: Colors.error || '#FF3B30',
+        color: themeColors.error,
       };
     }
 
@@ -68,7 +80,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
       return {
         icon: '⚠️',
         text: 'Some tracks failed',
-        color: Colors.warning || '#FF9500',
+        color: themeColors.warning,
       };
     }
 
@@ -77,14 +89,14 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
       return {
         icon: '⏳',
         text: 'Starting generation...',
-        color: Colors.primary || '#007AFF',
+        color: themeColors.alexandriaGold,
       };
     }
 
     return {
       icon: '⏳',
       text: 'Generating tracks...',
-      color: Colors.primary || '#007AFF',
+      color: themeColors.alexandriaGold,
     };
   };
 
@@ -161,7 +173,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
 
         {statusSummary.failed > 0 && (
           <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: Colors.error }]}>
+            <Text style={[styles.statValue, { color: '#dc3545' }]}>
               {statusSummary.failed}
             </Text>
             <Text style={styles.statLabel}>Failed</Text>
@@ -188,7 +200,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
       {/* Time Remaining */}
       {estimateTimeRemaining() && (
         <View style={styles.timeRemainingRow}>
-          <ActivityIndicator size="small" color={Colors.primary} />
+          <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
           <Text style={styles.timeRemainingText}>
             {estimateTimeRemaining()}
           </Text>
@@ -218,7 +230,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2C467D', // Alexandria Navy Secondary
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
@@ -237,7 +249,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text || '#000000',
+    color: '#F8F4E3', // Alexandria Cream
     flex: 1,
     marginRight: 12,
   },
@@ -265,7 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     marginBottom: 16,
     paddingVertical: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)', // Alexandria Gold tint
     borderRadius: 12,
   },
   statItem: {
@@ -274,12 +286,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.primary || '#007AFF',
+    color: '#D4AF37', // Alexandria Gold
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.textSecondary || '#666',
+    color: '#CBD5E0', // Alexandria Secondary Text
     fontWeight: '500',
   },
   progressContainer: {
@@ -290,7 +302,7 @@ const styles = StyleSheet.create({
   progressBarBackground: {
     flex: 1,
     height: 12,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'rgba(248, 244, 227, 0.2)', // Alexandria Cream tint
     borderRadius: 6,
     overflow: 'hidden',
     marginRight: 12,
@@ -302,7 +314,7 @@ const styles = StyleSheet.create({
   progressPercentage: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text || '#000000',
+    color: '#F8F4E3', // Alexandria Cream
     minWidth: 45,
     textAlign: 'right',
   },
@@ -314,34 +326,34 @@ const styles = StyleSheet.create({
   },
   timeRemainingText: {
     fontSize: 14,
-    color: Colors.textSecondary || '#666',
+    color: '#CBD5E0', // Alexandria Secondary Text
     marginLeft: 8,
     fontStyle: 'italic',
   },
   completeMessageContainer: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: 'rgba(40, 167, 69, 0.15)', // Success tint
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.success || '#4CAF50',
+    borderLeftColor: '#28a745',
   },
   completeMessage: {
     fontSize: 14,
-    color: Colors.success || '#4CAF50',
+    color: '#28a745',
     fontWeight: '500',
   },
   warningMessageContainer: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#FFF3E0',
+    backgroundColor: 'rgba(255, 149, 0, 0.15)', // Warning tint
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.warning || '#FF9500',
+    borderLeftColor: '#FF9500',
   },
   warningMessage: {
     fontSize: 14,
-    color: Colors.warning || '#FF9500',
+    color: '#FF9500',
     fontWeight: '500',
   },
 });

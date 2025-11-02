@@ -30,6 +30,7 @@ const themeColors = {
 const TrackListItem: React.FC<TrackListItemProps> = ({
   track,
   onPlay,
+  onRetry,
   isPlaying,
   isDisabled = false,
 }) => {
@@ -194,9 +195,11 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => {
-                  // TODO: Implement retry
-                  console.log('Retry track:', track.id);
+                  if (onRetry) {
+                    onRetry(track.id);
+                  }
                 }}
+                disabled={!onRetry}
               >
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>

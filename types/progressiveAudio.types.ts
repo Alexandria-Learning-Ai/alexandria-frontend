@@ -62,6 +62,7 @@ export interface ProgressivePlaylistProps {
 export interface TrackListItemProps {
   track: AudioTrack;
   onPlay: () => void;
+  onRetry?: (trackId: string) => void;
   isPlaying: boolean;
   isDisabled?: boolean;
 }

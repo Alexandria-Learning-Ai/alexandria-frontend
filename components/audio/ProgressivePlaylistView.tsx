@@ -125,6 +125,24 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   }, [materialId, onRefresh]);
 
   /**
+   * Handle track retry
+   */
+  const handleRetry = useCallback(async (trackId: string) => {
+    try {
+      logger.info('Retrying failed track', { trackId });
+      await ProgressivePlaylistService.retryFailedTrack(trackId);
+
+      // Refresh playlist to get updated status
+      const updatedPlaylist = await ProgressivePlaylistService.getPlaylistStatus(materialId);
+      if (updatedPlaylist && isMountedRef.current) {
+        setPlaylist(updatedPlaylist);
+      }
+    } catch (error) {
+      logger.error('Failed to retry track', { error, trackId });
+    }
+  }, [materialId]);
+
+  /**
    * Render individual track
    */
   const renderTrack = useCallback(
@@ -136,12 +154,13 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
         <TrackListItem
           track={item}
           onPlay={() => onTrackPlay(item)}
+          onRetry={handleRetry}
           isPlaying={isPlaying}
           isDisabled={isDisabled}
         />
       );
     },
-    [onTrackPlay, currentlyPlayingTrackId]
+    [onTrackPlay, currentlyPlayingTrackId, handleRetry]
   );
 
   /**
