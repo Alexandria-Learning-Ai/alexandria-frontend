@@ -49,8 +49,7 @@ export default function ProgressivePlaylistScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Polling control
-  const stopPollingRef = useRef<(() => void) | null>(null);
+  // Mounted ref for cleanup
   const isMountedRef = useRef(true);
 
   // Audio player integration
@@ -62,31 +61,15 @@ export default function ProgressivePlaylistScreen() {
   } = useAudioPlayer();
 
   /**
-   * Load playlist on mount and start polling
+   * Load playlist on mount
    */
   useEffect(() => {
     loadPlaylist();
 
     return () => {
       isMountedRef.current = false;
-      stopPolling();
     };
   }, [materialId]);
-
-  /**
-   * Resume polling when screen comes into focus
-   */
-  useFocusEffect(
-    useCallback(() => {
-      if (playlist && playlist.status === 'generating') {
-        startPolling();
-      }
-
-      return () => {
-        stopPolling();
-      };
-    }, [playlist])
-  );
 
   /**
    * Load playlist from API
@@ -104,12 +87,7 @@ export default function ProgressivePlaylistScreen() {
 
       if (playlistData) {
         setPlaylist(playlistData);
-
-        // Start polling if still generating
-        if (playlistData.status === 'generating' &&
-            playlistData.completed_tracks < playlistData.total_tracks) {
-          startPolling();
-        }
+        // Note: ProgressivePlaylistView handles polling
       } else {
         setError('Playlist not found. Please generate audio first.');
       }
@@ -134,80 +112,12 @@ export default function ProgressivePlaylistScreen() {
   };
 
   /**
-   * Start polling for playlist updates
+   * Handle playlist updates from child component
    */
-  const startPolling = useCallback(() => {
-    if (stopPollingRef.current) return; // Already polling
-
-    logger.info('🔄 Starting playlist polling in screen');
-
-    const stopPolling = ProgressivePlaylistService.pollPlaylistStatus(
-      materialId,
-      (updatedPlaylist) => {
-        if (!isMountedRef.current) return;
-
-        logger.info(`📊 Playlist update: ${updatedPlaylist.completed_tracks}/${updatedPlaylist.total_tracks} ready`);
-        setPlaylist(updatedPlaylist);
-
-        // Show notification for first completed track
-        if (updatedPlaylist.completed_tracks === 1 && !currentTrack) {
-          const firstTrack = ProgressivePlaylistService.getFirstPlayableTrack(updatedPlaylist);
-          if (firstTrack) {
-            showTrackReadyNotification(firstTrack);
-          }
-        }
-      },
-      (finalPlaylist) => {
-        if (!isMountedRef.current) return;
-
-        logger.info('🎉 Playlist generation complete!');
-        setPlaylist(finalPlaylist);
-        stopPollingRef.current = null;
-
-        // Show completion notification
-        Alert.alert(
-          '🎉 Playlist Ready!',
-          `All ${finalPlaylist.total_tracks} tracks have been generated and are ready to play.`,
-          [{ text: 'Great!', style: 'default' }]
-        );
-      },
-      {
-        pollInterval: 10000, // 10 seconds
-        maxAttempts: 120,    // 20 minutes max
-      }
-    );
-
-    stopPollingRef.current = stopPolling;
-  }, [materialId, currentTrack]);
-
-  /**
-   * Stop polling
-   */
-  const stopPolling = useCallback(() => {
-    if (stopPollingRef.current) {
-      logger.info('⏹️ Stopping playlist polling in screen');
-      stopPollingRef.current();
-      stopPollingRef.current = null;
-    }
+  const handlePlaylistUpdate = useCallback((updatedPlaylist: ProgressivePlaylist) => {
+    if (!isMountedRef.current) return;
+    setPlaylist(updatedPlaylist);
   }, []);
-
-  /**
-   * Show notification when first track is ready
-   */
-  const showTrackReadyNotification = (track: AudioTrack) => {
-    Alert.alert(
-      '🎵 First Track Ready!',
-      `"${track.title}" is ready to play. Start listening while we generate the rest!`,
-      [
-        { text: 'Later', style: 'cancel' },
-        {
-          text: 'Play Now',
-          style: 'default',
-          onPress: () => handleTrackPlay(track),
-        },
-      ]
-    );
-  };
 
   /**
    * Handle track selection - play in context of playlist
@@ -234,16 +144,32 @@ export default function ProgressivePlaylistScreen() {
         return;
       }
 
-      // Convert to AudioPlayerService format
-      const audioTracks = completeTracks.map(t => ({
-        id: t.id,
-        title: t.title,
-        audio_url: t.audio_url!,
-        duration: t.duration || 0,
-      }));
+      // Convert to AudioPlayerService format - filter out invalid URLs
+      const audioTracks = completeTracks
+        .filter(t => t.audio_url && t.audio_url.trim() !== '')
+        .map(t => ({
+          id: t.id,
+          title: t.title,
+          audio_url: t.audio_url as string,
+          duration: t.duration || 0,
+        }));
+
+      // Validate we have valid tracks
+      if (audioTracks.length === 0) {
+        Alert.alert('Playback Error', 'No valid audio tracks found. Please try refreshing the playlist.');
+        logger.error('No valid audio URLs found in complete tracks');
+        return;
+      }
+
+      // Recalculate start index after filtering
+      const filteredStartIndex = audioTracks.findIndex(t => t.id === track.id);
+      if (filteredStartIndex === -1) {
+        Alert.alert('Playback Error', 'The selected track has an invalid audio URL.');
+        return;
+      }
 
       // Play playlist starting from selected track
-      await playPlaylist(audioTracks, startIndex);
+      await playPlaylist(audioTracks, filteredStartIndex);
 
       logger.info(`✅ Started playlist playback from track ${startIndex + 1}`);
     } catch (err) {

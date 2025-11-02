@@ -201,12 +201,14 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
 
     // Cleanup on unmount
     return () => {
-      // Use ref directly to avoid stale closures
+      // Set unmounted flag FIRST to prevent callbacks from executing
+      isMountedRef.current = false;
+
+      // Then stop polling
       if (stopPollingRef.current) {
         stopPollingRef.current();
         stopPollingRef.current = null;
       }
-      isMountedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlist.status, playlist.completed_tracks, playlist.total_tracks, isPolling]);

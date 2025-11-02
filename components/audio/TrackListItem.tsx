@@ -37,10 +37,19 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
    * Format duration from seconds to MM:SS
    */
   const formatDuration = (seconds: number | null): string => {
-    if (!seconds) return '--:--';
+    if (!seconds || seconds <= 0) return '--:--';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  /**
+   * Estimate duration from character count
+   * TTS typically processes ~12.5 characters per second
+   */
+  const getEstimatedDuration = (characterCount: number | null): number => {
+    if (!characterCount || characterCount <= 0) return 0;
+    return characterCount / 12.5;
   };
 
   /**
@@ -112,7 +121,7 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                     {track.title}
                   </Text>
                   <Text style={styles.trackDuration}>
-                    ~{formatDuration(track.character_count / 12.5)} estimated
+                    ~{formatDuration(getEstimatedDuration(track.character_count))} estimated
                   </Text>
                 </View>
               </View>
@@ -149,7 +158,7 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                     {track.title}
                   </Text>
                   <Text style={styles.trackDuration}>
-                    ~{formatDuration(track.character_count / 12.5)} estimated
+                    ~{formatDuration(getEstimatedDuration(track.character_count))} estimated
                   </Text>
                 </View>
               </View>
