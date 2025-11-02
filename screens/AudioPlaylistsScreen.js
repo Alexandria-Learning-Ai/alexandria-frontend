@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import * as DocumentPicker from 'expo-document-picker';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +34,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [uploadingForAudio, setUploadingForAudio] = useState(false);
 
   // Theme colors
   const themeColors = useMemo(() => ({
@@ -152,6 +154,94 @@ export default function AudioPlaylistsScreen({ navigation }) {
         },
       ]
     );
+  };
+
+  // Upload material for audio playlist
+  const handleUploadForAudio = async () => {
+    try {
+      setUploadingForAudio(true);
+      logger.info('📤 Starting audio-focused upload flow');
+
+      // Pick document
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.type === 'cancel' || result.canceled) {
+        logger.info('Upload cancelled by user');
+        setUploadingForAudio(false);
+        return;
+      }
+
+      const file = result.assets ? result.assets[0] : result;
+      const user = auth.currentUser;
+
+      if (!user) {
+        Alert.alert('Error', 'Please log in to upload materials.');
+        setUploadingForAudio(false);
+        return;
+      }
+
+      logger.info(`📄 Selected file: ${file.name} (${file.size} bytes)`);
+
+      // Step 1: Extract text
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mimeType || 'application/pdf',
+        name: file.name,
+      });
+      formData.append('user_id', user.uid);
+
+      logger.info('🔄 Extracting text from document...');
+
+      const extractResponse = await axios.post(
+        `${API_BASE_URL}/api/study/extract-text`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'X-User-ID': user.uid,
+          },
+          timeout: 120000, // 2 minutes for text extraction
+        }
+      );
+
+      if (!extractResponse.data || !extractResponse.data.material_id) {
+        throw new Error('Failed to extract text from document');
+      }
+
+      const materialId = extractResponse.data.material_id;
+      const materialTitle = extractResponse.data.title || file.name;
+
+      logger.info(`✅ Material uploaded successfully: ${materialId}`);
+
+      setUploadingForAudio(false);
+
+      // Step 2: Navigate to Progressive Playlist Screen
+      // It will auto-create the playlist
+      navigation.navigate('ProgressivePlaylist', {
+        materialId,
+        materialTitle,
+      });
+
+      Alert.alert(
+        'Upload Successful!',
+        `"${materialTitle}" uploaded. Generating audio playlist...`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      logger.error('❌ Error uploading for audio:', error);
+      setUploadingForAudio(false);
+
+      let errorMessage = 'Failed to upload document. Please try again.';
+      if (error.response) {
+        errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+      }
+
+      Alert.alert('Upload Error', errorMessage);
+    }
   };
 
   // Filter playlists by search query
@@ -279,13 +369,31 @@ export default function AudioPlaylistsScreen({ navigation }) {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setCreateModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <FontAwesome5 name="plus" size={20} color={themeColors.alexandriaGold} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.uploadButton]}
+              onPress={handleUploadForAudio}
+              activeOpacity={0.8}
+              disabled={uploadingForAudio}
+            >
+              {uploadingForAudio ? (
+                <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
+              ) : (
+                <>
+                  <FontAwesome5 name="upload" size={16} color={themeColors.alexandriaGold} />
+                  <Text style={styles.uploadButtonText}>Upload</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setCreateModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <FontAwesome5 name="plus" size={20} color={themeColors.alexandriaGold} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -366,6 +474,29 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: '#CBD5E0',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#D4AF37',
   },
   addButton: {
     padding: 8,
