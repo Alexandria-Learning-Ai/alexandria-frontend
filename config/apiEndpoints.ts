@@ -53,6 +53,15 @@ export const API_ENDPOINTS = {
     /** GET - Get existing audio for material (cached) */
     getAudio: (materialId: string) => `${API_BASE_URL}/api/study/materials/${materialId}/audio`,
 
+    /** POST - Generate chunked audio playlist (progressive delivery - RECOMMENDED) */
+    generateAudioPlaylist: (materialId: string) => `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`,
+
+    /** GET - Get chunked audio playlist status */
+    getAudioPlaylist: (materialId: string) => `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist`,
+
+    /** POST - Retry failed track */
+    retryTrack: (trackId: string) => `${API_BASE_URL}/api/study/audio/tracks/${trackId}/retry`,
+
     /** DELETE - Delete study material */
     deleteMaterial: (materialId: string) => `${API_BASE_URL}/api/study/materials/${materialId}`,
   },
