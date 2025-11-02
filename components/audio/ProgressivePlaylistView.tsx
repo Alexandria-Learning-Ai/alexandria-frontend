@@ -5,7 +5,7 @@
  * Polls for track status and provides smooth UX during generation.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -14,11 +14,11 @@ import {
   Text,
   ActivityIndicator,
 } from 'react-native';
-import { ProgressivePlaylistProps, AudioTrack, TrackStatusSummary } from '../../types/progressiveAudio.types';
+import { ProgressivePlaylistProps, AudioTrack, TrackStatusSummary, ProgressivePlaylist } from '../../types/progressiveAudio.types';
 import TrackListItem from './TrackListItem';
 import PlaylistHeader from './PlaylistHeader';
 import ProgressivePlaylistService from '../../services/ProgressivePlaylistService';
-import Colors from '../../constants/Colors';
+import logger from '../../utils/logger';
 
 const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   materialId,
@@ -31,6 +31,19 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const stopPollingRef = useRef<(() => void) | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Alexandria theme colors
+  const themeColors = useMemo(() => ({
+    background: '#1A2C5B',
+    backgroundSecondary: '#2C467D',
+    alexandriaGold: '#D4AF37',
+    alexandriaBronze: '#B8941F',
+    text: '#F8F4E3',
+    textSecondary: '#CBD5E0',
+    success: '#28a745',
+    error: '#dc3545',
+  }), []);
 
   /**
    * Calculate track status summary
@@ -43,19 +56,24 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
    * Start polling for updates
    */
   const startPolling = useCallback(() => {
-    if (isPolling) return;
+    if (isPolling || !isMountedRef.current) return;
 
-    console.log('🔄 Starting playlist polling');
+    logger.info('Starting playlist polling', { materialId });
     setIsPolling(true);
 
     const stopPolling = ProgressivePlaylistService.pollPlaylistStatus(
       materialId,
-      (updatedPlaylist) => {
-        console.log(`📊 Playlist update: ${updatedPlaylist.completed_tracks}/${updatedPlaylist.total_tracks} tracks ready`);
+      (updatedPlaylist: ProgressivePlaylist) => {
+        if (!isMountedRef.current) return;
+        logger.info('Playlist update received', {
+          completed: updatedPlaylist.completed_tracks,
+          total: updatedPlaylist.total_tracks
+        });
         setPlaylist(updatedPlaylist);
       },
-      (finalPlaylist) => {
-        console.log('🎉 Playlist polling complete');
+      (finalPlaylist: ProgressivePlaylist) => {
+        if (!isMountedRef.current) return;
+        logger.info('Playlist polling complete', { playlistId: finalPlaylist.chunked_playlist_id });
         setPlaylist(finalPlaylist);
         setIsPolling(false);
       },
@@ -63,7 +81,7 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
         pollInterval: 10000, // 10 seconds
         maxAttempts: 120,    // 20 minutes max
       }
-    );
+    ) as () => void;
 
     stopPollingRef.current = stopPolling;
   }, [materialId, isPolling]);
@@ -73,32 +91,36 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
    */
   const stopPolling = useCallback(() => {
     if (stopPollingRef.current) {
-      console.log('⏹️ Stopping playlist polling');
+      logger.info('Stopping playlist polling', { materialId });
       stopPollingRef.current();
       stopPollingRef.current = null;
       setIsPolling(false);
     }
-  }, []);
+  }, [materialId]);
 
   /**
    * Handle manual refresh
    */
   const handleRefresh = useCallback(async () => {
+    if (!isMountedRef.current) return;
+
     setIsRefreshing(true);
 
     try {
       const updatedPlaylist = await ProgressivePlaylistService.getPlaylistStatus(materialId);
-      if (updatedPlaylist) {
+      if (updatedPlaylist && isMountedRef.current) {
         setPlaylist(updatedPlaylist);
       }
 
-      if (onRefresh) {
+      if (onRefresh && isMountedRef.current) {
         onRefresh();
       }
     } catch (error) {
-      console.error('Failed to refresh playlist:', error);
+      logger.error('Failed to refresh playlist', { error, materialId });
     } finally {
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setIsRefreshing(false);
+      }
     }
   }, [materialId, onRefresh]);
 
@@ -156,7 +178,7 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
 
     return (
       <View style={styles.footerContainer}>
-        <ActivityIndicator size="small" color={Colors.primary} />
+        <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
         <Text style={styles.footerText}>Checking for updates...</Text>
       </View>
     );
@@ -164,6 +186,7 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
 
   /**
    * Start polling when component mounts or when playlist is generating
+   * FIX: Remove callback functions from dependencies to prevent infinite re-renders
    */
   useEffect(() => {
     const shouldPoll =
@@ -178,9 +201,16 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
 
     // Cleanup on unmount
     return () => {
-      stopPolling();
+      // Use ref directly to avoid stale closures
+      if (stopPollingRef.current) {
+        stopPollingRef.current();
+        stopPollingRef.current = null;
+      }
+      isMountedRef.current = false;
     };
-  }, [playlist.status, playlist.completed_tracks, playlist.total_tracks, isPolling, startPolling, stopPolling]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist.status, playlist.completed_tracks, playlist.total_tracks, isPolling]);
+  // Only depend on primitive values, not callback functions
 
   /**
    * Auto-scroll to first playable track when it becomes available
@@ -222,13 +252,13 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={Colors.primary}
-            colors={[Colors.primary || '#007AFF']}
+            tintColor={themeColors.alexandriaGold}
+            colors={[themeColors.alexandriaGold]}
           />
         }
         onScrollToIndexFailed={(info) => {
           // Handle scroll failure gracefully
-          console.warn('Scroll to index failed:', info);
+          logger.warn('Scroll to index failed', { info });
         }}
         showsVerticalScrollIndicator={true}
       />
@@ -239,7 +269,7 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#1A2C5B', // Alexandria Navy
   },
   listContent: {
     padding: 16,
@@ -257,12 +287,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text || '#000000',
+    color: '#F8F4E3', // Alexandria Cream
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: Colors.textSecondary || '#666',
+    color: '#CBD5E0', // Alexandria Secondary Text
     textAlign: 'center',
     paddingHorizontal: 32,
   },
@@ -274,7 +304,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: Colors.textSecondary || '#666',
+    color: '#CBD5E0', // Alexandria Secondary Text
     marginLeft: 8,
     fontStyle: 'italic',
   },

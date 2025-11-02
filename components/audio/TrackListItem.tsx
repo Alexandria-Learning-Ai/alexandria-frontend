@@ -14,7 +14,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { AudioTrack, TrackListItemProps } from '../../types/progressiveAudio.types';
-import Colors from '../../constants/Colors';
+
+// Alexandria theme colors
+const themeColors = {
+  background: '#1A2C5B',
+  backgroundSecondary: '#2C467D',
+  alexandriaGold: '#D4AF37',
+  alexandriaBronze: '#B8941F',
+  text: '#F8F4E3',
+  textSecondary: '#CBD5E0',
+  success: '#28a745',
+  error: '#dc3545',
+};
 
 const TrackListItem: React.FC<TrackListItemProps> = ({
   track,
@@ -105,7 +116,7 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                   </Text>
                 </View>
               </View>
-              <ActivityIndicator size="small" color={Colors.primary} />
+              <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
             </View>
             <View style={styles.progressContainer}>
               <View style={styles.progressBarBackground}>
@@ -201,31 +212,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   trackCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2C467D', // Alexandria Navy Secondary
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   completeTrack: {
     borderLeftWidth: 4,
-    borderLeftColor: Colors.success || '#4CAF50',
+    borderLeftColor: themeColors.success,
   },
   processingTrack: {
     borderLeftWidth: 4,
-    borderLeftColor: Colors.primary || '#007AFF',
+    borderLeftColor: themeColors.alexandriaGold,
   },
   queuedTrack: {
     borderLeftWidth: 4,
-    borderLeftColor: Colors.textSecondary || '#999',
+    borderLeftColor: themeColors.textSecondary,
     opacity: 0.8,
   },
   failedTrack: {
     borderLeftWidth: 4,
-    borderLeftColor: Colors.error || '#FF3B30',
+    borderLeftColor: themeColors.error,
   },
   trackHeader: {
     flexDirection: 'row',
@@ -242,19 +253,19 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.success || '#4CAF50',
+    backgroundColor: themeColors.success,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   processingBadge: {
-    backgroundColor: Colors.primary || '#007AFF',
+    backgroundColor: themeColors.alexandriaGold,
   },
   queuedBadge: {
-    backgroundColor: Colors.textSecondary || '#999',
+    backgroundColor: themeColors.textSecondary,
   },
   failedBadge: {
-    backgroundColor: Colors.error || '#FF3B30',
+    backgroundColor: themeColors.error,
   },
   trackNumberText: {
     color: '#FFFFFF',
@@ -267,15 +278,15 @@ const styles = StyleSheet.create({
   trackTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text || '#000000',
+    color: themeColors.text,
     marginBottom: 4,
   },
   queuedTitle: {
-    color: Colors.textSecondary || '#999',
+    color: themeColors.textSecondary,
   },
   trackDuration: {
     fontSize: 13,
-    color: Colors.textSecondary || '#666',
+    color: themeColors.textSecondary,
   },
   playButtonContainer: {
     marginLeft: 12,
@@ -284,15 +295,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.primary || '#007AFF',
+    backgroundColor: themeColors.alexandriaGold,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nowPlaying: {
-    backgroundColor: Colors.success || '#4CAF50',
+    backgroundColor: themeColors.success,
   },
   playIcon: {
-    color: '#FFFFFF',
+    color: '#1A2C5B',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -301,7 +312,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: 'rgba(212, 175, 55, 0.2)',
   },
   completeIcon: {
     fontSize: 16,
@@ -309,7 +320,7 @@ const styles = StyleSheet.create({
   },
   completeText: {
     fontSize: 13,
-    color: Colors.success || '#4CAF50',
+    color: themeColors.success,
     fontWeight: '500',
   },
   processingIcon: {
@@ -318,7 +329,7 @@ const styles = StyleSheet.create({
   },
   processingText: {
     fontSize: 13,
-    color: Colors.primary || '#007AFF',
+    color: themeColors.alexandriaGold,
   },
   queuedIcon: {
     marginLeft: 12,
@@ -328,7 +339,7 @@ const styles = StyleSheet.create({
   },
   queuedText: {
     fontSize: 13,
-    color: Colors.textSecondary || '#999',
+    color: themeColors.textSecondary,
   },
   failedIcon: {
     fontSize: 16,
@@ -336,22 +347,22 @@ const styles = StyleSheet.create({
   },
   failedText: {
     fontSize: 13,
-    color: Colors.error || '#FF3B30',
+    color: themeColors.error,
   },
   errorMessage: {
     fontSize: 12,
-    color: Colors.error || '#FF3B30',
+    color: themeColors.error,
     marginTop: 2,
   },
   retryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: Colors.primary || '#007AFF',
+    backgroundColor: themeColors.alexandriaGold,
     borderRadius: 8,
     marginLeft: 12,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: '#1A2C5B',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -363,23 +374,32 @@ const styles = StyleSheet.create({
   progressBarBackground: {
     flex: 1,
     height: 8,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'rgba(248, 244, 227, 0.2)',
     borderRadius: 4,
     overflow: 'hidden',
     marginRight: 12,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: Colors.primary || '#007AFF',
+    backgroundColor: themeColors.alexandriaGold,
     borderRadius: 4,
   },
   progressText: {
     fontSize: 13,
-    color: Colors.textSecondary || '#666',
+    color: themeColors.textSecondary,
     fontWeight: '600',
     minWidth: 40,
     textAlign: 'right',
   },
 });
 
-export default TrackListItem;
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(TrackListItem, (prevProps, nextProps) => {
+  return (
+    prevProps.track.id === nextProps.track.id &&
+    prevProps.track.status === nextProps.track.status &&
+    prevProps.track.progress === nextProps.track.progress &&
+    prevProps.isPlaying === nextProps.isPlaying &&
+    prevProps.isDisabled === nextProps.isDisabled
+  );
+});
