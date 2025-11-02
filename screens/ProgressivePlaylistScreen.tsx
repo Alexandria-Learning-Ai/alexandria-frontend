@@ -72,7 +72,7 @@ export default function ProgressivePlaylistScreen() {
   }, [materialId]);
 
   /**
-   * Load playlist from API
+   * Load playlist from API (or create if doesn't exist)
    */
   const loadPlaylist = async () => {
     try {
@@ -81,18 +81,28 @@ export default function ProgressivePlaylistScreen() {
 
       logger.info(`📋 Loading progressive playlist for material: ${materialId}`);
 
-      const playlistData = await ProgressivePlaylistService.getPlaylistStatus(materialId);
+      // Try to get existing playlist
+      let playlistData = await ProgressivePlaylistService.getPlaylistStatus(materialId);
 
       if (!isMountedRef.current) return;
 
-      if (playlistData) {
-        setPlaylist(playlistData);
-        // Note: ProgressivePlaylistView handles polling
-      } else {
-        setError('Playlist not found. Please generate audio first.');
+      // If playlist doesn't exist, create it
+      if (!playlistData) {
+        logger.info(`🎵 Playlist not found, creating new progressive playlist for material: ${materialId}`);
+
+        playlistData = await ProgressivePlaylistService.startChunkedGeneration(materialId, {
+          voice: 'default',
+          speed: 1.0,
+          language: 'en',
+        });
+
+        if (!isMountedRef.current) return;
       }
+
+      setPlaylist(playlistData);
+      // Note: ProgressivePlaylistView handles polling
     } catch (err) {
-      logger.error('❌ Error loading playlist:', err);
+      logger.error('❌ Error loading/creating playlist:', err);
       if (!isMountedRef.current) return;
 
       setError('Failed to load playlist. Please try again.');

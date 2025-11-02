@@ -10,13 +10,14 @@ import {
     Dimensions,
     Alert,
     TextInput,
+    useColorScheme,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
 import { Colors } from '../constants/Colors';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
@@ -27,9 +28,221 @@ import AddToPlaylistModal from '../components/playlist/AddToPlaylistModal';
 
 const { width, height } = Dimensions.get('window');
 
+/**
+ * generateChapterHTML - Generates complete HTML document for WebView rendering
+ *
+ * Wraps chapter content with proper HTML structure, responsive CSS, and theme support.
+ * Handles images, typography, and dark mode styling.
+ *
+ * @param {string} chapterContent - Raw HTML content from backend (with full S3 URLs)
+ * @param {string} theme - Color scheme ('dark' or 'light')
+ * @returns {string} Complete HTML document ready for WebView
+ */
+const generateChapterHTML = (chapterContent, theme) => {
+    const isDark = theme === 'dark';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 18px;
+            line-height: 1.8;
+            color: ${isDark ? '#E5E5E5' : '#1A1A1A'};
+            background-color: ${isDark ? '#121212' : '#FFFFFF'};
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        p {
+            margin-bottom: 1em;
+            text-align: justify;
+            hyphens: auto;
+            -webkit-hyphens: auto;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+            line-height: 1.3;
+            color: ${isDark ? '#F8F4E3' : '#1A2C5B'};
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-top: 0.5em;
+        }
+        h2 { font-size: 1.5em; }
+        h3 { font-size: 1.25em; }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1.5em auto;
+            border-radius: 8px;
+            box-shadow: ${isDark ? '0 4px 8px rgba(0,0,0,0.4)' : '0 4px 8px rgba(0,0,0,0.1)'};
+        }
+
+        blockquote {
+            border-left: 4px solid ${isDark ? '#D4AF37' : '#4A90E2'};
+            padding-left: 1em;
+            margin: 1em 0;
+            font-style: italic;
+            color: ${isDark ? '#B0B0B0' : '#555555'};
+        }
+
+        ul, ol {
+            margin-left: 1.5em;
+            margin-bottom: 1em;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+
+        a {
+            color: ${isDark ? '#D4AF37' : '#4A90E2'};
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        code {
+            background-color: ${isDark ? '#1E1E1E' : '#F5F5F5'};
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Monaco, monospace;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: ${isDark ? '#1E1E1E' : '#F5F5F5'};
+            padding: 1em;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+        }
+
+        th, td {
+            border: 1px solid ${isDark ? '#333333' : '#DDDDDD'};
+            padding: 0.5em;
+            text-align: left;
+        }
+
+        th {
+            background-color: ${isDark ? '#1E1E1E' : '#F5F5F5'};
+            font-weight: 600;
+        }
+
+        strong, b {
+            font-weight: 700;
+            color: ${isDark ? '#F8F4E3' : '#1A2C5B'};
+        }
+
+        em, i {
+            font-style: italic;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid ${isDark ? '#333333' : '#E9ECEF'};
+            margin: 2em 0;
+        }
+
+        /* Accessibility: ensure tap targets are large enough */
+        a, button {
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        /* Image placeholder for broken images */
+        img.broken {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    ${chapterContent}
+
+    <script>
+        // Handle image load errors gracefully
+        document.querySelectorAll('img').forEach(img => {
+            img.onerror = function() {
+                this.classList.add('broken');
+                const placeholder = document.createElement('div');
+                placeholder.style.cssText = \`
+                    padding: 20px;
+                    background: ${isDark ? '#1E1E1E' : '#f0f0f0'};
+                    border-radius: 8px;
+                    text-align: center;
+                    color: ${isDark ? '#888' : '#666'};
+                    margin: 1.5em auto;
+                \`;
+                placeholder.textContent = 'Image unavailable';
+                this.parentNode.insertBefore(placeholder, this);
+            };
+
+            img.onload = function() {
+                // Notify React Native when image loads
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'imageLoaded',
+                        src: this.src
+                    }));
+                }
+            };
+        });
+
+        // Handle link clicks (prevent navigation)
+        document.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'linkClicked',
+                        href: this.href
+                    }));
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+    `.trim();
+};
+
 const MaterialViewerScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
+    const colorScheme = useColorScheme();
     const scrollViewRef = useRef(null);
 
     const { material, mode } = route.params || {};
@@ -79,126 +292,7 @@ const MaterialViewerScreen = () => {
         border: { borderColor: Colors.border },
     };
 
-    // Audio cache directory constants
-    const AUDIO_CACHE_DIR = `${FileSystem.documentDirectory}audio_cache/`;
-    const MAX_CACHED_FILES = 20;
-
-    // Helper function: Get cache file path for audio
-    const getAudioCachePath = (materialId, audioIdParam) => {
-        return `${AUDIO_CACHE_DIR}audio_${materialId}_${audioIdParam}.mp3`;
-    };
-
-    // Helper function: Check if audio is cached locally
-    const isAudioCached = async (materialId, audioIdParam) => {
-        try {
-            const cachePath = getAudioCachePath(materialId, audioIdParam);
-            const fileInfo = await FileSystem.getInfoAsync(cachePath);
-            return fileInfo.exists;
-        } catch (error) {
-            logger.error('Error checking audio cache:', error);
-            return false;
-        }
-    };
-
-    // Helper function: Download and cache audio file
-    const downloadAndCacheAudio = async (audioUrlPath, materialId, audioIdParam) => {
-        try {
-            // Ensure cache directory exists
-            const dirInfo = await FileSystem.getInfoAsync(AUDIO_CACHE_DIR);
-            if (!dirInfo.exists) {
-                logger.info('Creating audio cache directory...');
-                await FileSystem.makeDirectoryAsync(AUDIO_CACHE_DIR, { intermediates: true });
-            }
-
-            const cachePath = getAudioCachePath(materialId, audioIdParam);
-            const fullAudioUrl = `${API_BASE_URL}${audioUrlPath}`;
-
-            logger.info(`Downloading audio to cache: ${fullAudioUrl} -> ${cachePath}`);
-
-            // Download the audio file
-            const downloadResult = await FileSystem.downloadAsync(fullAudioUrl, cachePath);
-
-            if (downloadResult.status === 200) {
-                logger.info(`Audio cached successfully at: ${cachePath}`);
-
-                // Clean up old cache files if needed
-                await cleanupAudioCache();
-
-                return cachePath;
-            } else {
-                throw new Error(`Download failed with status: ${downloadResult.status}`);
-            }
-        } catch (error) {
-            logger.error('Error downloading and caching audio:', error);
-            throw error;
-        }
-    };
-
-    // Helper function: Get cached audio URI or download it
-    const getCachedAudioUri = async (audioUrlPath, materialId, audioIdParam) => {
-        try {
-            // Check if already cached
-            const cached = await isAudioCached(materialId, audioIdParam);
-
-            if (cached) {
-                const cachePath = getAudioCachePath(materialId, audioIdParam);
-                logger.info(`Using cached audio: ${cachePath}`);
-                return cachePath;
-            }
-
-            // Not cached, download it
-            logger.info('Audio not cached, downloading...');
-            const cachePath = await downloadAndCacheAudio(audioUrlPath, materialId, audioIdParam);
-            return cachePath;
-        } catch (error) {
-            logger.error('Error getting cached audio URI:', error);
-            // Fall back to backend URL if caching fails
-            return null;
-        }
-    };
-
-    // Helper function: Clean up old cached audio files
-    const cleanupAudioCache = async () => {
-        try {
-            const dirInfo = await FileSystem.getInfoAsync(AUDIO_CACHE_DIR);
-            if (!dirInfo.exists) return;
-
-            const files = await FileSystem.readDirectoryAsync(AUDIO_CACHE_DIR);
-
-            if (files.length <= MAX_CACHED_FILES) {
-                logger.info(`Cache size OK: ${files.length} files`);
-                return;
-            }
-
-            // Get file info with timestamps
-            const fileInfos = await Promise.all(
-                files.map(async (filename) => {
-                    const filePath = `${AUDIO_CACHE_DIR}${filename}`;
-                    const info = await FileSystem.getInfoAsync(filePath);
-                    return {
-                        path: filePath,
-                        modificationTime: info.modificationTime || 0,
-                        filename
-                    };
-                })
-            );
-
-            // Sort by modification time (oldest first)
-            fileInfos.sort((a, b) => a.modificationTime - b.modificationTime);
-
-            // Delete oldest files to keep only MAX_CACHED_FILES
-            const filesToDelete = fileInfos.slice(0, files.length - MAX_CACHED_FILES);
-
-            for (const file of filesToDelete) {
-                await FileSystem.deleteAsync(file.path, { idempotent: true });
-                logger.info(`Deleted old cached audio: ${file.filename}`);
-            }
-
-            logger.info(`Cache cleanup complete. Removed ${filesToDelete.length} files.`);
-        } catch (error) {
-            logger.error('Error cleaning up audio cache:', error);
-        }
-    };
+    // Audio URLs are now direct S3 URLs - no local caching needed
 
     useEffect(() => {
         if (!material) {
@@ -216,11 +310,6 @@ const MaterialViewerScreen = () => {
 
             // Check if material already has summary or audio
             checkExistingContent();
-
-            // Run cache cleanup on component mount
-            cleanupAudioCache().catch(err =>
-                logger.error('Error during cache cleanup:', err)
-            );
         }
     }, [material, navigation]);
 
@@ -263,45 +352,11 @@ const MaterialViewerScreen = () => {
                 if (response.data && response.data.audio_url) {
                     const serverAudioId = response.data.audio_id || 'default';
 
-                    // Check if audio is cached locally
-                    const cached = await isAudioCached(material.id, serverAudioId);
-
-                    if (cached) {
-                        // Use local cached version
-                        const localUri = getAudioCachePath(material.id, serverAudioId);
-                        logger.info('✅ Using locally cached audio:', localUri);
-                        setAudioUrl(localUri);
-                        setAudioDuration(response.data.duration || 0);
-                        setAudioId(serverAudioId);
-                    } else {
-                        // Not cached locally, try to download and cache it
-                        logger.info('📥 Audio not cached locally, downloading...');
-                        try {
-                            const localUri = await getCachedAudioUri(
-                                response.data.audio_url,
-                                material.id,
-                                serverAudioId
-                            );
-
-                            if (localUri) {
-                                logger.info('✅ Audio downloaded and cached:', localUri);
-                                setAudioUrl(localUri);
-                            } else {
-                                // Fall back to server URL if caching fails
-                                logger.warn('⚠️ Caching failed, using server URL');
-                                setAudioUrl(response.data.audio_url);
-                            }
-
-                            setAudioDuration(response.data.duration || 0);
-                            setAudioId(serverAudioId);
-                        } catch (cacheError) {
-                            // Fall back to server URL
-                            logger.error('❌ Error caching audio:', cacheError);
-                            setAudioUrl(response.data.audio_url);
-                            setAudioDuration(response.data.duration || 0);
-                            setAudioId(serverAudioId);
-                        }
-                    }
+                    // Use S3 URL directly - no local caching needed
+                    logger.info('✅ Using S3 audio URL:', response.data.audio_url);
+                    setAudioUrl(response.data.audio_url);
+                    setAudioDuration(response.data.duration || 0);
+                    setAudioId(serverAudioId);
                 }
             }
 
@@ -451,7 +506,7 @@ const MaterialViewerScreen = () => {
                 if (sound) {
                     await sound.playAsync();
                 } else {
-                    await loadAndPlaySound();
+                    await loadAndPlaySound(audioUrl);
                 }
                 setIsPlaying(true);
                 setViewMode('listen');
@@ -468,7 +523,7 @@ const MaterialViewerScreen = () => {
         // If audio already loaded, just play it
         if (audioUrl) {
             logger.info('▶️ Audio already available, starting playback...');
-            await loadAndPlaySound();
+            await loadAndPlaySound(audioUrl);
             setIsPlaying(true);
             setViewMode('listen');
             return;
@@ -522,29 +577,9 @@ const MaterialViewerScreen = () => {
                 const serverAudioId = response.data.audio_id || 'default';
                 const serverAudioUrl = response.data.audio_url;
 
-                // Download and cache the audio file locally
-                logger.info('📥 Downloading and caching generated audio...');
-                try {
-                    const localUri = await getCachedAudioUri(
-                        serverAudioUrl,
-                        material.id,
-                        serverAudioId
-                    );
-
-                    if (localUri) {
-                        logger.info('✅ Audio cached locally:', localUri);
-                        setAudioUrl(localUri);
-                    } else {
-                        // Fall back to server URL if caching fails
-                        logger.warn('⚠️ Caching failed, using server URL');
-                        setAudioUrl(serverAudioUrl);
-                    }
-                } catch (cacheError) {
-                    // Fall back to server URL
-                    logger.error('❌ Error caching audio:', cacheError);
-                    setAudioUrl(serverAudioUrl);
-                }
-
+                // Use S3 URL directly - no local caching needed
+                logger.info('✅ Audio ready from S3:', serverAudioUrl);
+                setAudioUrl(serverAudioUrl);
                 setAudioDuration(response.data.duration || 0);
                 setAudioId(serverAudioId);
                 setIsPlaying(true);
@@ -559,8 +594,8 @@ const MaterialViewerScreen = () => {
                     `Audio narration ready! Duration: ${Math.round(response.data.duration / 60)} minutes`
                 );
 
-                // Start actual audio playback
-                await loadAndPlaySound();
+                // Start actual audio playback - pass URL directly to avoid stale state
+                await loadAndPlaySound(serverAudioUrl);
 
             } else {
                 throw new Error('Invalid response format from server');
@@ -623,9 +658,17 @@ const MaterialViewerScreen = () => {
         }
     };
 
-    const loadAndPlaySound = async () => {
+    const loadAndPlaySound = async (uri = audioUrl) => {
         try {
-            logger.info(`🔊 Loading audio from: ${audioUrl}`);
+            logger.info(`🔊 Loading audio from: ${uri}`);
+
+            // Validate URI before attempting to load
+            if (!uri) {
+                logger.error('❌ No audio URI provided');
+                setAudioError('Audio URL not available');
+                setIsPlaying(false);
+                return;
+            }
 
             // Unload previous sound if exists
             if (sound) {
@@ -640,21 +683,9 @@ const MaterialViewerScreen = () => {
                 shouldDuckAndroid: true,
             });
 
-            // Determine if audioUrl is a local file path or remote URL
-            let audioUri;
-            if (audioUrl.startsWith('file://') || audioUrl.includes(FileSystem.documentDirectory)) {
-                // Local cached file
-                audioUri = audioUrl;
-                logger.info(`🔊 Playing from local cache: ${audioUri}`);
-            } else if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
-                // Full URL already provided
-                audioUri = audioUrl;
-                logger.info(`🔊 Playing from remote URL: ${audioUri}`);
-            } else {
-                // Relative path, construct full URL
-                audioUri = `${API_BASE_URL}${audioUrl}`;
-                logger.info(`🔊 Playing from backend: ${audioUri}`);
-            }
+            // Use S3 URL directly
+            let audioUri = uri;
+            logger.info(`🔊 Playing from S3: ${audioUri}`);
 
             // Load and play the sound
             const { sound: newSound } = await Audio.Sound.createAsync(
@@ -988,6 +1019,31 @@ const MaterialViewerScreen = () => {
                 <TouchableOpacity
                     style={[
                         styles.modeButton,
+                        themeStyles.buttonSecondary,
+                    ]}
+                    onPress={() => {
+                        navigation.navigate('ProgressivePlaylist', {
+                            materialId: material.id,
+                            materialTitle: material.title
+                        });
+                    }}
+                >
+                    <FontAwesome5
+                        name="list-music"
+                        size={14}
+                        color={themeStyles.textPrimary.color}
+                    />
+                    <Text style={[
+                        styles.modeButtonText,
+                        { color: themeStyles.textPrimary.color }
+                    ]}>
+                        Audio Playlist
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[
+                        styles.modeButton,
                         viewMode === 'hybrid' && styles.activeModeButton,
                         themeStyles.buttonSecondary,
                         viewMode === 'hybrid' && themeStyles.buttonPrimary
@@ -1034,22 +1090,83 @@ const MaterialViewerScreen = () => {
 
     const renderContent = () => {
         if (viewMode === 'read') {
+            // Check if content contains HTML tags (EPUB chapters)
+            const hasHTMLContent = material?.extractedText?.includes('<') && material?.extractedText?.includes('>');
+
             return (
                 <View style={styles.contentContainer}>
                     {renderReadingControls()}
-                    <ScrollView
-                        ref={scrollViewRef}
-                        style={styles.contentScroll}
-                        showsVerticalScrollIndicator={true}
-                    >
-                        <Text style={[
-                            styles.contentText,
-                            themeStyles.textPrimary,
-                            { fontSize: fontSize, lineHeight: fontSize * 1.6 }
-                        ]}>
-                            {material?.extractedText || "No content available. Please ensure the document was properly uploaded and text extraction was successful."}
-                        </Text>
-                    </ScrollView>
+
+                    {hasHTMLContent ? (
+                        // WebView rendering for HTML content (EPUB chapters with images)
+                        <WebView
+                            source={{
+                                html: generateChapterHTML(
+                                    material.extractedText,
+                                    colorScheme || 'light'
+                                )
+                            }}
+                            style={styles.webview}
+                            originWhitelist={['*']}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            startInLoadingState={true}
+                            renderLoading={() => (
+                                <View style={styles.webviewLoadingContainer}>
+                                    <ActivityIndicator size="large" color={Colors.primary} />
+                                    <Text style={[styles.webviewLoadingText, themeStyles.textSecondary]}>
+                                        Loading chapter...
+                                    </Text>
+                                </View>
+                            )}
+                            onError={(syntheticEvent) => {
+                                const { nativeEvent } = syntheticEvent;
+                                logger.error('WebView error:', nativeEvent);
+                                Alert.alert('Error', 'Failed to load chapter content. Please try again.');
+                            }}
+                            onLoad={() => {
+                                logger.info('Chapter loaded successfully in WebView');
+                            }}
+                            onMessage={(event) => {
+                                try {
+                                    const data = JSON.parse(event.nativeEvent.data);
+                                    if (data.type === 'imageLoaded') {
+                                        logger.info('Image loaded in chapter:', data.src);
+                                    } else if (data.type === 'linkClicked') {
+                                        logger.info('Link clicked:', data.href);
+                                        // Could open external browser or show alert
+                                        Alert.alert('Link', `Navigate to: ${data.href}?`, [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            { text: 'Open', onPress: () => logger.info('Open link:', data.href) }
+                                        ]);
+                                    }
+                                } catch (error) {
+                                    logger.error('Error parsing WebView message:', error);
+                                }
+                            }}
+                            scalesPageToFit={true}
+                            showsVerticalScrollIndicator={true}
+                            showsHorizontalScrollIndicator={false}
+                            // Allow user to zoom for accessibility
+                            scrollEnabled={true}
+                            bounces={true}
+                        />
+                    ) : (
+                        // Fallback: Plain text rendering for non-HTML content (PDFs, etc.)
+                        <ScrollView
+                            ref={scrollViewRef}
+                            style={styles.contentScroll}
+                            showsVerticalScrollIndicator={true}
+                        >
+                            <Text style={[
+                                styles.contentText,
+                                themeStyles.textPrimary,
+                                { fontSize: fontSize, lineHeight: fontSize * 1.6 }
+                            ]}>
+                                {material?.extractedText || "No content available. Please ensure the document was properly uploaded and text extraction was successful."}
+                            </Text>
+                        </ScrollView>
+                    )}
                 </View>
             );
         }
