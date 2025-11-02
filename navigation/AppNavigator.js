@@ -42,6 +42,7 @@ import StudyMaterialsScreen from '../screens/StudyMaterialsScreen';
 import MaterialViewerScreen from '../screens/MaterialViewerScreen';
 import AudioPlaylistsScreen from '../screens/AudioPlaylistsScreen';
 import PlaylistDetailsScreen from '../screens/PlaylistDetailsScreen';
+import ProgressivePlaylistScreen from '../screens/ProgressivePlaylistScreen';
 
 // New subscription screens
 import SubscriptionScreen from '../screens/SubscriptionScreen';
@@ -525,6 +526,17 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
+            {/* Progressive Audio Playlist */}
+            <Stack.Screen
+              name="ProgressivePlaylist"
+              options={{
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <ProgressivePlaylistScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
             {/* Book Study Mode - Material Library */}
             <Stack.Screen
               name="MaterialLibrary"
@@ -807,13 +819,11 @@ const NavigationStackWrapper = ({ user, userState }) => {
             <Stack.Screen
               name="Home"
               options={{
-                ...getScreenOptions('Alexandria', { 
-                  gestureEnabled: false,
-                  headerRight: () => <PremiumBadge tier={currentTier} />
-                })
+                headerShown: false,
+                gestureEnabled: false,
               }}
             >
-              {(props) => <HomeScreen {...props} user={user} subscription={subscription} />}
+              {(props) => <BottomTabNavigator {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
           </>
         );
@@ -877,13 +887,11 @@ const NavigationStackWrapper = ({ user, userState }) => {
             <Stack.Screen
               name="Home"
               options={{
-                ...getScreenOptions('Alexandria', { 
-                  gestureEnabled: false,
-                  headerRight: () => <PremiumBadge tier={currentTier} />
-                })
+                headerShown: false,
+                gestureEnabled: false,
               }}
             >
-              {(props) => <HomeScreen {...props} user={user} subscription={subscription} />}
+              {(props) => <BottomTabNavigator {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             <Stack.Screen
@@ -929,6 +937,17 @@ const NavigationStackWrapper = ({ user, userState }) => {
               }}
             >
               {(props) => <PlaylistDetailsScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Progressive Audio Playlist */}
+            <Stack.Screen
+              name="ProgressivePlaylist"
+              options={{
+                headerShown: false,
+                gestureEnabled: true,
+              }}
+            >
+              {(props) => <ProgressivePlaylistScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             {/* Book Study Mode - Material Library */}
