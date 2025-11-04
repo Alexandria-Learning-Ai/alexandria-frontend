@@ -100,6 +100,20 @@ export default function ProgressivePlaylistScreen() {
       }
 
       setPlaylist(playlistData);
+
+      logger.info('✅ Playlist loaded successfully', {
+        playlistId: playlistData.chunked_playlist_id,
+        status: playlistData.status,
+        totalTracks: playlistData.total_tracks,
+        completedTracks: playlistData.completed_tracks,
+        trackDetails: playlistData.tracks.map(t => ({
+          num: t.track_num,
+          status: t.status,
+          hasAudioUrl: !!t.audio_url,
+          audioUrl: t.audio_url,
+        })),
+      });
+
       // Note: ProgressivePlaylistView handles polling
     } catch (err) {
       logger.error('❌ Error loading/creating playlist:', err);

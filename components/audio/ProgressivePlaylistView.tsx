@@ -33,6 +33,19 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   const stopPollingRef = useRef<(() => void) | null>(null);
   const isMountedRef = useRef(true);
 
+  /**
+   * Update local state when parent passes new playlist data
+   * FIX: Sync with parent when initialPlaylist prop changes
+   */
+  useEffect(() => {
+    logger.info('📝 Parent playlist prop updated', {
+      newStatus: initialPlaylist.status,
+      newCompleted: initialPlaylist.completed_tracks,
+      newTotal: initialPlaylist.total_tracks,
+    });
+    setPlaylist(initialPlaylist);
+  }, [initialPlaylist]);
+
   // Alexandria theme colors
   const themeColors = useMemo(() => ({
     background: '#1A2C5B',
@@ -58,23 +71,47 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   const startPolling = useCallback(() => {
     if (isPolling || !isMountedRef.current) return;
 
-    logger.info('Starting playlist polling', { materialId });
+    logger.info('🔄 Starting playlist polling', {
+      materialId,
+      currentStatus: playlist?.status,
+      currentCompleted: playlist?.completed_tracks,
+      currentTotal: playlist?.total_tracks,
+    });
     setIsPolling(true);
 
     const stopPolling = ProgressivePlaylistService.pollPlaylistStatus(
       materialId,
       (updatedPlaylist: ProgressivePlaylist) => {
         if (!isMountedRef.current) return;
-        logger.info('Playlist update received', {
+
+        logger.info('📥 Playlist update received', {
+          status: updatedPlaylist.status,
           completed: updatedPlaylist.completed_tracks,
-          total: updatedPlaylist.total_tracks
+          total: updatedPlaylist.total_tracks,
+          trackStatuses: updatedPlaylist.tracks.map(t => ({
+            num: t.track_num,
+            status: t.status,
+            hasAudioUrl: !!t.audio_url,
+          })),
         });
+
         setPlaylist(updatedPlaylist);
       },
-      (finalPlaylist: ProgressivePlaylist) => {
+      (finalPlaylist: ProgressivePlaylist | { error: string }) => {
         if (!isMountedRef.current) return;
-        logger.info('Playlist polling complete', { playlistId: finalPlaylist.chunked_playlist_id });
-        setPlaylist(finalPlaylist);
+
+        if ('error' in finalPlaylist) {
+          logger.error('❌ Playlist polling failed', { error: finalPlaylist.error });
+        } else {
+          logger.info('✅ Playlist polling complete', {
+            playlistId: finalPlaylist.chunked_playlist_id,
+            status: finalPlaylist.status,
+            completed: finalPlaylist.completed_tracks,
+            total: finalPlaylist.total_tracks,
+          });
+          setPlaylist(finalPlaylist);
+        }
+
         setIsPolling(false);
       },
       {
@@ -204,17 +241,44 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   };
 
   /**
-   * Start polling when component mounts or when playlist is generating
-   * FIX: Remove callback functions from dependencies to prevent infinite re-renders
+   * Start polling when component mounts or when playlist is not fully complete
+   *
+   * FIX: Improved polling logic to handle all states correctly:
+   * - Polls when status is 'generating' OR 'complete' (backend might be complete but state not updated)
+   * - Continues until ALL tracks show status='complete' in the local state
+   * - Stops only when truly done: status='complete' AND all tracks are complete
+   * - Also stops for 'failed' status
    */
   useEffect(() => {
-    const shouldPoll =
-      playlist.status === 'generating' &&
+    // Poll if:
+    // 1. Playlist is actively generating, OR
+    // 2. Playlist status is 'complete' but not all tracks are marked complete yet (state sync issue)
+    // 3. NOT if status is 'failed' or 'partial' (error states)
+    const isGenerating = playlist.status === 'generating';
+    const isCompleteButNotAllTracks =
+      playlist.status === 'complete' &&
       playlist.completed_tracks < playlist.total_tracks;
+    const allTracksComplete = playlist.tracks.every(track => track.status === 'complete');
+
+    const shouldPoll =
+      (isGenerating || isCompleteButNotAllTracks) &&
+      !allTracksComplete &&
+      playlist.status !== 'failed';
+
+    logger.info('📊 Polling decision', {
+      shouldPoll,
+      playlistStatus: playlist.status,
+      completedTracks: playlist.completed_tracks,
+      totalTracks: playlist.total_tracks,
+      allTracksComplete,
+      isPolling,
+    });
 
     if (shouldPoll && !isPolling) {
+      logger.info('▶️ Starting polling');
       startPolling();
     } else if (!shouldPoll && isPolling) {
+      logger.info('⏹️ Stopping polling - all tracks complete');
       stopPolling();
     }
 
@@ -230,7 +294,7 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlist.status, playlist.completed_tracks, playlist.total_tracks, isPolling]);
+  }, [playlist.status, playlist.completed_tracks, playlist.total_tracks, playlist.tracks.length, isPolling]);
   // Only depend on primitive values, not callback functions
 
   /**

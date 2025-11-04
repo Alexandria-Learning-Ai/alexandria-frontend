@@ -133,6 +133,14 @@ class ProgressivePlaylistService {
         }
       );
 
+      logger.info('🎵 Playlist status fetched', {
+        materialId,
+        status: response.data.status,
+        completed: response.data.completed_tracks,
+        total: response.data.total_tracks,
+        trackCount: response.data.tracks.length,
+      });
+
       return response.data;
     } catch (error: any) {
       if (error.response && error.response.status === 404) {
