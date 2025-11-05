@@ -32,6 +32,8 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
   playlist,
   statusSummary,
   onRefresh,
+  onSavePlaylist,
+  isSaved = false,
 }) => {
   /**
    * Format duration from seconds to human readable
@@ -209,11 +211,35 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
 
       {/* Completion Message */}
       {playlist.status === 'complete' && (
-        <View style={styles.completeMessageContainer}>
-          <Text style={styles.completeMessage}>
-            🎧 Ready to listen! All tracks have been generated.
-          </Text>
-        </View>
+        <>
+          <View style={styles.completeMessageContainer}>
+            <Text style={styles.completeMessage}>
+              🎧 Ready to listen! All tracks have been generated.
+            </Text>
+          </View>
+
+          {/* Save Playlist Button */}
+          {onSavePlaylist && !isSaved && (
+            <TouchableOpacity
+              style={styles.savePlaylistButton}
+              onPress={onSavePlaylist}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.savePlaylistIcon}>💾</Text>
+              <Text style={styles.savePlaylistText}>Save to My Playlists</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Saved Confirmation */}
+          {isSaved && (
+            <View style={styles.savedMessageContainer}>
+              <Text style={styles.savedIcon}>✅</Text>
+              <Text style={styles.savedMessage}>
+                Playlist saved! You can find it under My Playlists.
+              </Text>
+            </View>
+          )}
+        </>
       )}
 
       {/* Partial Failure Message */}
@@ -354,6 +380,50 @@ const styles = StyleSheet.create({
   warningMessage: {
     fontSize: 14,
     color: '#FF9500',
+    fontWeight: '500',
+  },
+  savePlaylistButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D4AF37', // Alexandria Gold
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  savePlaylistIcon: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  savePlaylistText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A2C5B', // Alexandria Navy
+  },
+  savedMessageContainer: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(40, 167, 69, 0.15)', // Success tint
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#28a745',
+  },
+  savedIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  savedMessage: {
+    flex: 1,
+    fontSize: 14,
+    color: '#28a745',
     fontWeight: '500',
   },
 });

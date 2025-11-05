@@ -56,6 +56,7 @@ export interface ProgressivePlaylistProps {
   playlist: ProgressivePlaylist;
   onTrackPlay: (track: AudioTrack) => void;
   onRefresh?: () => void;
+  onPlaylistUpdate?: (playlist: ProgressivePlaylist) => void;
   currentlyPlayingTrackId?: string | null;
 }
 
@@ -71,4 +72,6 @@ export interface PlaylistHeaderProps {
   playlist: ProgressivePlaylist;
   statusSummary: TrackStatusSummary;
   onRefresh?: () => void;
+  onSavePlaylist?: () => void;
+  isSaved?: boolean;
 }
