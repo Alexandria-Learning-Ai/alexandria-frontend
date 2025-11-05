@@ -4,6 +4,9 @@ import axios from 'axios';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
 import logger from '../utils/logger';
+import { getUserFriendlyError } from '../utils/errorMessages';
+import { calculateFileHash, generateCacheKey } from '../utils/fileHash';
+import { uploadCache } from '../utils/uploadCache';
 
 interface QuizGenerationParams {
     files: any[];
@@ -82,6 +85,50 @@ export const useQuizGeneration = () => {
         try {
             const user = auth.currentUser;
             const firstFile = files[0];
+
+            // 🚀 PERFORMANCE: Check cache before uploading
+            let fileHash: string | null = null;
+            let cacheKey: string | null = null;
+
+            try {
+                logger.info('📊 Calculating file hash for cache check...');
+                fileHash = await calculateFileHash(firstFile.uri, firstFile.size);
+
+                // Generate cache key based on upload purpose and parameters
+                const cacheParams = uploadPurpose === 'quiz'
+                    ? {
+                        quizTypes: quizTypes.sort(), // Sort for consistent cache keys
+                        numQuestions,
+                        difficulty,
+                        visualEnhancement,
+                    }
+                    : {};
+
+                cacheKey = generateCacheKey(fileHash, uploadPurpose, cacheParams);
+
+                // Check if we have a cached result
+                const cachedResult = await uploadCache.get(cacheKey);
+
+                if (cachedResult) {
+                    logger.info('🎯 Cache HIT! Returning cached result (skipping upload)');
+
+                    // Return cached result with freshness indicator
+                    return {
+                        success: true,
+                        data: cachedResult,
+                        uploadPurpose,
+                        storedMaterialId: cachedResult.material_id,
+                        firstFile,
+                        showFreshnessIndicator: true, // Show indicator for cached results
+                        studyMaterial: uploadPurpose === 'study' ? cachedResult : undefined,
+                    };
+                }
+
+                logger.info('💨 Cache MISS - Proceeding with upload');
+            } catch (hashError) {
+                // If hash calculation fails, continue with upload (don't break the flow)
+                logger.warn('⚠️ File hash calculation failed, skipping cache:', hashError);
+            }
 
             let res = null;
             let storedMaterialId: string | null = null;
@@ -169,6 +216,17 @@ export const useQuizGeneration = () => {
                 result.showFreshnessIndicator = true;
             }
 
+            // 🚀 PERFORMANCE: Store successful result in cache
+            if (cacheKey && res.data) {
+                try {
+                    await uploadCache.set(cacheKey, res.data);
+                    logger.info('💾 Upload result cached successfully');
+                } catch (cacheError) {
+                    // Don't fail the upload if caching fails
+                    logger.warn('⚠️ Failed to cache upload result:', cacheError);
+                }
+            }
+
             // ✅ Handle navigation based on upload purpose
             if (uploadPurpose === 'study') {
                 const extractedText = res.data?.extracted_text || '';
@@ -211,60 +269,85 @@ export const useQuizGeneration = () => {
                     );
                 }
 
+                // Navigate with proper cleanup and race condition handling
+                let animationCompleted = false;
+
                 Animated.timing(containerAnim, {
                     toValue: 0,
                     duration: 300,
                     useNativeDriver: true,
-                }).start(() => {
-                    navigation.navigate('MaterialViewer', {
-                        material: studyMaterial,
-                        mode: 'read'
-                    });
-                });
+                }).start(({ finished }) => {
+                    animationCompleted = true;
+                    // Only navigate if animation completed successfully (not interrupted)
+                    if (finished) {
+                        try {
+                            navigation.navigate('MaterialViewer', {
+                                material: studyMaterial,
+                                mode: 'read'
+                            });
 
-                Alert.alert(
-                    '📚 Study Material Added!',
-                    `"${studyMaterial.title}" has been added to your study library. You can now read, listen, or use deep study modes!`,
-                    [
-                        { text: 'View Library', onPress: () => navigation.navigate('StudyMaterials') },
-                        { text: 'Start Reading', style: 'default' }
-                    ]
-                );
+                            // Show success alert AFTER navigation to avoid showing on wrong screen
+                            setTimeout(() => {
+                                Alert.alert(
+                                    '📚 Study Material Added!',
+                                    `"${studyMaterial.title}" has been added to your study library. You can now read, listen, or use deep study modes!`,
+                                    [
+                                        { text: 'View Library', onPress: () => navigation.navigate('StudyMaterials') },
+                                        { text: 'Start Reading', style: 'default' }
+                                    ]
+                                );
+                            }, 300);
+                        } catch (navError) {
+                            logger.error('Navigation error:', navError);
+                        }
+                    }
+                });
 
                 result.studyMaterial = studyMaterial;
 
             } else if (uploadPurpose === 'quiz' && res.data?.quiz) {
+                // Navigate with proper cleanup and race condition handling
                 Animated.timing(containerAnim, {
                     toValue: 0,
                     duration: 300,
                     useNativeDriver: true,
-                }).start(() => {
-                    navigation.navigate('QuizScreen', {
-                        quiz: res.data.quiz,
-                        source: 'Upload',
-                        metadata: {
-                            ...res.data.metadata,
-                            title: 'Alexandria Trial of Wisdom',
-                            category: selectedCourse?.name || selectedSubject?.name || 'Document Study',
-                            course: selectedCourse?.name,
-                            subject: selectedHierarchicalSubject || selectedCourse?.subject || selectedSubject?.name,
-                            topic: selectedHierarchicalCourse || selectedCourse?.name,
-                            manualSubject: selectedSubject,
-                            subjectKey: selectedSubject?.key,
-                            subjectType: selectedSubject?.type,
-                            subjectValidation: subjectValidation,
-                            fileName: firstFile.name,
-                            hierarchical: {
-                                enabled: courseSelectionMode === 'hierarchical',
-                                subject: selectedHierarchicalSubject,
-                                course: selectedHierarchicalCourse,
-                                source: selectedCourse?.source || 'profile'
-                            }
-                        }
-                    });
-                });
+                }).start(({ finished }) => {
+                    // Only navigate if animation completed successfully (not interrupted)
+                    if (finished) {
+                        try {
+                            navigation.navigate('QuizScreen', {
+                                quiz: res.data.quiz,
+                                source: 'Upload',
+                                metadata: {
+                                    ...res.data.metadata,
+                                    title: 'Alexandria Trial of Wisdom',
+                                    category: selectedCourse?.name || selectedSubject?.name || 'Document Study',
+                                    course: selectedCourse?.name,
+                                    subject: selectedHierarchicalSubject || selectedCourse?.subject || selectedSubject?.name,
+                                    topic: selectedHierarchicalCourse || selectedCourse?.name,
+                                    manualSubject: selectedSubject,
+                                    subjectKey: selectedSubject?.key,
+                                    subjectType: selectedSubject?.type,
+                                    subjectValidation: subjectValidation,
+                                    fileName: firstFile.name,
+                                    hierarchical: {
+                                        enabled: courseSelectionMode === 'hierarchical',
+                                        subject: selectedHierarchicalSubject,
+                                        course: selectedHierarchicalCourse,
+                                        source: selectedCourse?.source || 'profile'
+                                    }
+                                }
+                            });
 
-                Alert.alert('🧠 Quiz Generated!', 'Your practice quiz is ready. Test your knowledge!');
+                            // Show success alert AFTER navigation to avoid showing on wrong screen
+                            setTimeout(() => {
+                                Alert.alert('🧠 Quiz Generated!', 'Your practice quiz is ready. Test your knowledge!');
+                            }, 300);
+                        } catch (navError) {
+                            logger.error('Navigation error:', navError);
+                        }
+                    }
+                });
 
             } else if (res.data?.detail) {
                 Alert.alert("🏛️ Processing Error", res.data.detail);
@@ -284,10 +367,18 @@ export const useQuizGeneration = () => {
 
         } catch (error: any) {
             logger.error("Upload error: ", error.response ? error.response.data : error.message);
-            const errorDetail = error.response?.data?.detail || error.message || "Unknown error occurred";
+
+            // Get user-friendly error message
+            const friendlyError = getUserFriendlyError(error, {
+                operation: uploadPurpose === 'study' ? 'upload your study material' : 'generate your quiz',
+                resource: uploadPurpose === 'study' ? 'study material' : 'quiz',
+            });
+
+            // Ensure files array exists before accessing
+            const firstFile = files && files.length > 0 ? files[0] : null;
 
             // Special handling for study uploads when AI service fails
-            if (uploadPurpose === 'study' && errorDetail.includes('AI response format error')) {
+            if (uploadPurpose === 'study' && firstFile && (error.response?.data?.detail?.includes('AI') || error.message?.includes('AI'))) {
                 Alert.alert(
                     '🤖 AI Service Temporarily Unavailable',
                     'The AI processing service is currently having issues, but we can still add your material to the study library with basic functionality.',
@@ -297,9 +388,9 @@ export const useQuizGeneration = () => {
                             onPress: () => {
                                 const basicStudyMaterial = {
                                     id: `material_${Date.now()}`,
-                                    title: files[0].name.replace(/\.[^/.]+$/, ""),
-                                    fileName: files[0].name,
-                                    extractedText: `Material: ${files[0].name}\n\nThis document was added to your study library, but AI text extraction is temporarily unavailable. You can:\n\n• View the document title and details\n• Organize it by subject (${selectedSubject?.name || 'General'})\n• Try text extraction again later when the service is restored\n\nThe document is safely stored and ready for when full functionality returns.`,
+                                    title: firstFile.name.replace(/\.[^/.]+$/, ""),
+                                    fileName: firstFile.name,
+                                    extractedText: `Material: ${firstFile.name}\n\nThis document was added to your study library, but AI text extraction is temporarily unavailable. You can:\n\n• View the document title and details\n• Organize it by subject (${selectedSubject?.name || 'General'})\n• Try text extraction again later when the service is restored\n\nThe document is safely stored and ready for when full functionality returns.`,
                                     extractionQuality: 0,
                                     characterCount: 0,
                                     subject: selectedSubject?.name || 'General',
@@ -307,7 +398,7 @@ export const useQuizGeneration = () => {
                                     uploadDate: new Date().toISOString(),
                                     hasAudio: false,
                                     hasSummary: false,
-                                    type: getFileIcon(files[0].name),
+                                    type: getFileIcon(firstFile.name),
                                     isBasicMode: true,
                                 };
 
@@ -334,18 +425,15 @@ export const useQuizGeneration = () => {
                     ]
                 );
             } else {
-                const errorMessage = uploadPurpose === 'study'
-                    ? `Could not process study material: ${errorDetail}`
-                    : `The wisdom could not be forged: ${errorDetail}`;
-
+                // Show friendly error alert
                 Alert.alert(
-                    uploadPurpose === 'study' ? "📚 Study Upload Failed" : "🏛️ Quiz Creation Failed",
-                    errorMessage
+                    uploadPurpose === 'study' ? "Study Upload Failed" : "Quiz Creation Failed",
+                    friendlyError
                 );
-                setResponseText(`Error: ${errorDetail}`);
+                setResponseText(`Error: ${friendlyError}`);
             }
 
-            return { success: false, error: errorDetail };
+            return { success: false, error: friendlyError };
         }
     }, []);
 

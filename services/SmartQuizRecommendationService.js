@@ -109,33 +109,41 @@ export class SmartQuizRecommendationService {
         const focusAreas = [];
         
         // 1. Subject-based focus areas (struggling subjects)
-        userAnalysis.subjects.struggling.forEach(subject => {
-            focusAreas.push({
-                type: 'subject_weakness',
-                area: subject.name,
-                priority: this.calculateSubjectPriority(subject, context),
-                accuracy: subject.accuracy,
-                reason: `Low accuracy in ${subject.name} (${subject.accuracy}%)`,
-                recommendedDifficulty: this.getRecommendedDifficulty(subject.accuracy),
-                questionCount: this.getRecommendedQuestionCount(subject, context)
+        // ✅ FIXED: Add safety check for undefined arrays
+        if (userAnalysis.subjects?.struggling && Array.isArray(userAnalysis.subjects.struggling)) {
+            userAnalysis.subjects.struggling.forEach(subject => {
+                focusAreas.push({
+                    type: 'subject_weakness',
+                    area: subject.name,
+                    priority: this.calculateSubjectPriority(subject, context),
+                    accuracy: subject.accuracy,
+                    reason: `Low accuracy in ${subject.name} (${subject.accuracy}%)`,
+                    recommendedDifficulty: this.getRecommendedDifficulty(subject.accuracy),
+                    questionCount: this.getRecommendedQuestionCount(subject, context)
+                });
             });
-        });
+        }
 
         // 2. Question type focus areas
-        userAnalysis.questionTypes.weakAreas.forEach(questionType => {
-            focusAreas.push({
-                type: 'question_type_weakness',
-                area: questionType.type,
-                priority: this.calculateQuestionTypePriority(questionType, context),
-                accuracy: questionType.accuracy,
-                reason: `Struggles with ${questionType.type} questions (${questionType.accuracy}%)`,
-                recommendedDifficulty: this.getRecommendedDifficulty(questionType.accuracy),
-                questionCount: this.getRecommendedQuestionCount(questionType, context)
+        // ✅ FIXED: Add safety check for undefined arrays
+        if (userAnalysis.questionTypes?.weakAreas && Array.isArray(userAnalysis.questionTypes.weakAreas)) {
+            userAnalysis.questionTypes.weakAreas.forEach(questionType => {
+                focusAreas.push({
+                    type: 'question_type_weakness',
+                    area: questionType.type,
+                    priority: this.calculateQuestionTypePriority(questionType, context),
+                    accuracy: questionType.accuracy,
+                    reason: `Struggles with ${questionType.type} questions (${questionType.accuracy}%)`,
+                    recommendedDifficulty: this.getRecommendedDifficulty(questionType.accuracy),
+                    questionCount: this.getRecommendedQuestionCount(questionType, context)
+                });
             });
-        });
+        }
 
         // 3. Exam preparation focus areas
-        if (context === 'exam_prep' || userAnalysis.exams.urgent.length > 0) {
+        // ✅ FIXED: Add safety check for undefined arrays
+        if ((context === 'exam_prep' || (userAnalysis.exams?.urgent && userAnalysis.exams.urgent.length > 0)) &&
+            Array.isArray(userAnalysis.exams?.urgent)) {
             userAnalysis.exams.urgent.forEach(exam => {
                 focusAreas.push({
                     type: 'exam_preparation',
@@ -151,19 +159,22 @@ export class SmartQuizRecommendationService {
         }
 
         // 4. Consistency improvement areas
-        if (userAnalysis.performance.consistency < 60) {
+        // ✅ FIXED: Add safety check for undefined arrays
+        if (userAnalysis.performance?.consistency && userAnalysis.performance.consistency < 60) {
             const inconsistentAreas = this.identifyInconsistentAreas(userAnalysis);
-            inconsistentAreas.forEach(area => {
-                focusAreas.push({
-                    type: 'consistency_improvement',
-                    area: area.name,
-                    priority: 6,
-                    consistency: area.consistency,
-                    reason: `Inconsistent performance in ${area.name}`,
-                    recommendedDifficulty: 'easy', // Build confidence
-                    questionCount: 8
+            if (inconsistentAreas && Array.isArray(inconsistentAreas)) {
+                inconsistentAreas.forEach(area => {
+                    focusAreas.push({
+                        type: 'consistency_improvement',
+                        area: area.name,
+                        priority: 6,
+                        consistency: area.consistency,
+                        reason: `Inconsistent performance in ${area.name}`,
+                        recommendedDifficulty: 'easy', // Build confidence
+                        questionCount: 8
+                    });
                 });
-            });
+            }
         }
 
         // Sort by priority and return top focus areas
@@ -199,7 +210,7 @@ export class SmartQuizRecommendationService {
      */
     static buildQuizConfiguration(focusArea, userAnalysis) {
         const profile = userAnalysis.profile;
-        
+
         return {
             userId: userAnalysis.profile.userId,
             focusArea: {
@@ -214,14 +225,14 @@ export class SmartQuizRecommendationService {
                 avoidQuestionTypes: this.getWeakQuestionTypes(userAnalysis)
             },
             context: {
-                recentPerformance: userAnalysis.performance.average,
-                strongAreas: userAnalysis.subjects.strong.map(s => s.name),
-                weakAreas: userAnalysis.subjects.struggling.map(s => s.name),
-                upcomingExams: userAnalysis.exams.urgent.map(e => e.title)
+                recentPerformance: userAnalysis.performance?.average || 0,
+                strongAreas: userAnalysis.subjects?.strong?.map(s => s.name) || [],
+                weakAreas: userAnalysis.subjects?.struggling?.map(s => s.name) || [],
+                upcomingExams: userAnalysis.exams?.urgent?.map(e => e.title) || []
             },
             quizStyle: {
                 explanationLevel: this.getOptimalExplanationLevel(profile),
-                includeHints: userAnalysis.performance.average < 70,
+                includeHints: (userAnalysis.performance?.average || 0) < 70,
                 adaptiveDifficulty: true,
                 timeLimit: this.calculateOptimalTimeLimit(focusArea.questionCount, profile)
             }
@@ -537,6 +548,118 @@ export class SmartQuizRecommendationService {
         };
     }
 
+    /**
+     * Analyze question type strengths and weaknesses
+     */
+    static analyzeQuestionTypeStrengths(quizzes) {
+        const typeMap = new Map();
+
+        quizzes.forEach(quiz => {
+            const questions = quiz.questions || [];
+            questions.forEach(question => {
+                const type = question.type || 'unknown';
+                const isCorrect = question.isCorrect || false;
+
+                if (!typeMap.has(type)) {
+                    typeMap.set(type, { correct: 0, total: 0 });
+                }
+
+                typeMap.get(type).total++;
+                if (isCorrect) {
+                    typeMap.get(type).correct++;
+                }
+            });
+        });
+
+        const questionTypes = Array.from(typeMap.entries()).map(([type, data]) => ({
+            type,
+            accuracy: data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0,
+            attempts: data.total,
+            correct: data.correct
+        }));
+
+        return {
+            all: questionTypes,
+            strong: questionTypes.filter(qt => qt.accuracy >= 80),
+            struggling: questionTypes.filter(qt => qt.accuracy < 65 && qt.attempts >= 3),
+            weakAreas: questionTypes.filter(qt => qt.accuracy < 65 && qt.attempts >= 3)
+        };
+    }
+
+    /**
+     * Update user's recommendation history
+     */
+    static async updateRecommendationHistory(userId, recommendation) {
+        try {
+            const historyKey = `${this.HISTORY_KEY}_${userId}`;
+            const existing = await AsyncStorage.getItem(historyKey);
+            const history = existing ? JSON.parse(existing) : [];
+
+            // Add new recommendation to history
+            history.unshift({
+                ...recommendation,
+                recommendedAt: new Date().toISOString()
+            });
+
+            // Keep only last 50 recommendations
+            const trimmedHistory = history.slice(0, 50);
+
+            await AsyncStorage.setItem(historyKey, JSON.stringify(trimmedHistory));
+        } catch (error) {
+            logger.error('Error updating recommendation history:', error);
+        }
+    }
+
+    /**
+     * Get upcoming exam context for the user
+     */
+    static async getUpcomingExamContext(userId, profile) {
+        try {
+            // Check for upcoming exams in user profile
+            const exams = profile?.upcomingExams || [];
+
+            // Filter exams happening in the next 30 days
+            const now = Date.now();
+            const thirtyDaysFromNow = now + (30 * 24 * 60 * 60 * 1000);
+
+            const upcomingExams = exams.filter(exam => {
+                const examDate = new Date(exam.date).getTime();
+                return examDate >= now && examDate <= thirtyDaysFromNow;
+            }).map(exam => {
+                const examDate = new Date(exam.date).getTime();
+                const daysLeft = Math.ceil((examDate - now) / (24 * 60 * 60 * 1000));
+                return {
+                    ...exam,
+                    daysLeft,
+                    title: exam.title || exam.name || exam.subject
+                };
+            });
+
+            // Sort by date (earliest first)
+            upcomingExams.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // Identify urgent exams (within 7 days)
+            const urgentExams = upcomingExams.filter(exam => exam.daysLeft <= 7);
+
+            return {
+                hasUpcomingExams: upcomingExams.length > 0,
+                exams: upcomingExams,
+                urgent: urgentExams,
+                nextExam: upcomingExams[0] || null,
+                examSubjects: upcomingExams.map(exam => exam.subject).filter(Boolean)
+            };
+        } catch (error) {
+            logger.error('Error getting upcoming exam context:', error);
+            return {
+                hasUpcomingExams: false,
+                exams: [],
+                urgent: [],
+                nextExam: null,
+                examSubjects: []
+            };
+        }
+    }
+
     static calculateTrend(scores) {
         if (scores.length < 2) return 0;
         const midpoint = Math.floor(scores.length / 2);
@@ -569,19 +692,160 @@ export class SmartQuizRecommendationService {
 
     static calculateSubjectPriority(subject, context) {
         let priority = 5; // Base priority
-        
+
         // Higher priority for lower accuracy
         if (subject.accuracy < 40) priority += 4;
         else if (subject.accuracy < 60) priority += 2;
-        
+
         // Context-based adjustments
         if (context === 'exam_prep') priority += 3;
         if (context === 'notification') priority += 1;
-        
+
         // Trend adjustments
         if (subject.trend < -10) priority += 2; // Declining performance
-        
+
         return Math.min(10, priority);
+    }
+
+    /**
+     * 🎯 Select the highest priority focus area for quiz generation
+     */
+    static selectPriorityFocusArea(focusAreas, context) {
+        if (!focusAreas || focusAreas.length === 0) {
+            return null;
+        }
+
+        // Already sorted by priority in identifyFocusAreas
+        // Return the top priority area
+        return focusAreas[0];
+    }
+
+    static calculateQuestionTypePriority(questionType, context) {
+        let priority = 4; // Base priority (slightly lower than subject weaknesses)
+
+        // Higher priority for lower accuracy
+        if (questionType.accuracy < 40) priority += 3;
+        else if (questionType.accuracy < 60) priority += 2;
+
+        // Context-based adjustments
+        if (context === 'exam_prep') priority += 2;
+
+        return Math.min(10, priority);
+    }
+
+    static identifyInconsistentAreas(userAnalysis) {
+        const inconsistentAreas = [];
+
+        if (!userAnalysis.subjects || !userAnalysis.subjects.all) {
+            return inconsistentAreas;
+        }
+
+        // Find subjects with high variance in scores
+        userAnalysis.subjects.all.forEach(subject => {
+            if (subject.variance && subject.variance > 20) {
+                inconsistentAreas.push({
+                    name: subject.name,
+                    consistency: 100 - subject.variance
+                });
+            }
+        });
+
+        return inconsistentAreas;
+    }
+
+    /**
+     * ✅ Get preferred question types based on user performance
+     */
+    static getPreferredQuestionTypes(userAnalysis) {
+        if (!userAnalysis?.questionTypes?.strong) {
+            return ['multiple_choice', 'true_false']; // Default safe types
+        }
+        return userAnalysis.questionTypes.strong.map(qt => qt.type);
+    }
+
+    /**
+     * ✅ Get weak question types to avoid/target
+     */
+    static getWeakQuestionTypes(userAnalysis) {
+        if (!userAnalysis?.questionTypes?.weak) {
+            return []; // No types to avoid by default
+        }
+        return userAnalysis.questionTypes.weak.map(qt => qt.type);
+    }
+
+    /**
+     * ✅ Get optimal explanation level based on profile
+     */
+    static getOptimalExplanationLevel(profile) {
+        if (!profile) return 'medium';
+
+        const educationLevel = profile.educationLevel || 'college';
+
+        if (educationLevel === 'elementary' || educationLevel === 'middle_school') {
+            return 'detailed';
+        } else if (educationLevel === 'high_school') {
+            return 'medium';
+        } else {
+            return 'concise';
+        }
+    }
+
+    /**
+     * ✅ Calculate optimal time limit for quiz
+     */
+    static calculateOptimalTimeLimit(questionCount, profile) {
+        const baseTimePerQuestion = 1.5; // 1.5 minutes per question
+        const totalMinutes = questionCount * baseTimePerQuestion;
+
+        // Add buffer for reading/thinking time
+        const buffer = profile?.learningPace === 'slow' ? 0.5 : 0.3;
+        return Math.ceil(totalMinutes * (1 + buffer));
+    }
+
+    /**
+     * ✅ Get local question bank for fallback generation
+     */
+    static getLocalQuestionBank(focusArea) {
+        // Return empty array - backend should handle quiz generation
+        logger.info(`📚 Local question bank requested for: ${focusArea}`);
+        return [];
+    }
+
+    /**
+     * ✅ Select questions from question bank for focus area
+     */
+    static selectQuestionsForFocusArea(questionBank, focusArea) {
+        // Return empty array - backend should handle question selection
+        logger.info(`🎯 Selecting questions for focus area: ${focusArea.area}`);
+        return [];
+    }
+
+    /**
+     * ✅ Generate engaging quiz title
+     */
+    static generateQuizTitle(focusArea) {
+        const area = focusArea.area.replace(/_/g, ' ');
+        const titles = {
+            subject_weakness: `Master ${area} - Targeted Practice`,
+            question_type_weakness: `${area} Skills Builder`,
+            exam_preparation: `${area} Exam Preparation`,
+            consistency_improvement: `${area} Confidence Booster`
+        };
+        return titles[focusArea.type] || `${area} Practice Quiz`;
+    }
+
+
+    /**
+     * ✅ Get default weekly stats when none available
+     */
+    static getDefaultWeeklyStats() {
+        return {
+            quizzesCompleted: 0,
+            averageScore: 0,
+            totalQuestions: 0,
+            streak: 0,
+            studyTime: 0
+        };
     }
 
     /**

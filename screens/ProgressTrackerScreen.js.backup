@@ -1,0 +1,956 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+    View,
+    Text,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    StatusBar,
+    Animated,
+    Dimensions,
+    ActivityIndicator,
+    RefreshControl,
+    Alert,
+} from 'react-native';
+import * as Animatable from 'react-native-animatable';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import UnifiedNotificationService from '../utils/UnifiedNotificationService';
+import NotificationManager from '../utils/NotificationManager';
+import { auth } from '../firebaseConfig';
+import { SubjectProgressService } from '../services/SubjectProgressService';
+import { QuizHistoryManager } from '../services/QuizHistoryManager';
+import { UserCoursesService } from '../services/UserCoursesService'; // ✅ NEW: Import UserCoursesService
+import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Hierarchical subjects
+import AdvancedProgressAnalytics from '../services/AdvancedProgressAnalytics';
+import { BackendSyncService } from '../services/BackendSyncService'; // ✅ NEW: Backend API service
+import SafeBackButton from '../components/SafeBackButton';
+import logger from '../utils/logger';
+import { styles } from '../styles/ProgressTrackerScreenStyles';
+import {
+    getSubjectColor,
+    getSubjectIcon,
+    getSubjectChartColor,
+    getAccuracyColor,
+    getThemeProperty
+} from '../utils/progressHelpers';
+import StatCards from '../components/progress/StatCards';
+import ScoreChart from '../components/progress/ScoreChart';
+import CategoryStats from '../components/progress/CategoryStats';
+import DistributionChart from '../components/progress/DistributionChart';
+import WeeklyActivity from '../components/progress/WeeklyActivity';
+import NotificationInsightsCard from '../components/progress/NotificationInsightsCard';
+import PeriodSelector from '../components/progress/PeriodSelector';
+import SubjectOverviewCard from '../components/progress/SubjectOverviewCard';
+import HierarchicalCoursesView from '../components/progress/HierarchicalCoursesView';
+import TabSelector from '../components/progress/TabSelector';
+import Header from '../components/progress/Header';
+import SubjectProgressCards from '../components/progress/SubjectProgressCards';
+import SmartRecommendations from '../components/progress/SmartRecommendations';
+import StreakPredictionCard from '../components/progress/StreakPredictionCard';
+import GoalTrackingCard from '../components/progress/GoalTrackingCard';
+import LearningVelocityCard from '../components/progress/LearningVelocityCard';
+import DifficultyProgressionCard from '../components/progress/DifficultyProgressionCard';
+import TimeAnalyticsCard from '../components/progress/TimeAnalyticsCard';
+
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// ✅ REMOVED: Helper functions moved to utils/progressHelpers.ts
+
+const ProgressTrackerScreen = ({ navigation }) => {
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [selectedPeriod, setSelectedPeriod] = useState('week'); // week, month, all
+    const [refreshing, setRefreshing] = useState(false);
+    const [backendError, setBackendError] = useState(null);
+    const [dataSource, setDataSource] = useState('loading'); // 'backend', 'local', 'loading'
+    const [learningProfile, setLearningProfile] = useState(null);
+    const [streakInfo, setStreakInfo] = useState(null);
+    const [studyInsights, setStudyInsights] = useState(null);
+    const [notificationInsights, setNotificationInsights] = useState(null);
+    const [activeTab, setActiveTab] = useState('overall'); // 'overall', 'subjects', 'courses', or 'advanced'
+    const [subjectProgress, setSubjectProgress] = useState({});
+    const [subjectRecommendations, setSubjectRecommendations] = useState([]);
+    const [subjectSummary, setSubjectSummary] = useState(null);
+    const [pieChartMode, setPieChartMode] = useState('difficulty'); // 'difficulty' or 'subjects'
+    const [userCourses, setUserCourses] = useState([]); // ✅ NEW: User's profile courses
+    const [hasProfileCourses, setHasProfileCourses] = useState(false);
+
+    // ✅ NEW: Hierarchical progress state
+    const [hierarchicalProgress, setHierarchicalProgress] = useState({});
+    const [selectedSubject, setSelectedSubject] = useState(null);
+    const [hierarchicalRecommendations, setHierarchicalRecommendations] = useState([]);
+    
+    // 🚀 NEW: Advanced analytics state
+    const [streakPrediction, setStreakPrediction] = useState(null);
+    const [userGoals, setUserGoals] = useState(null);
+    const [learningVelocity, setLearningVelocity] = useState(null);
+    const [difficultyProgression, setDifficultyProgression] = useState(null);
+    const [timeAnalytics, setTimeAnalytics] = useState(null);
+    const [showGoalModal, setShowGoalModal] = useState(false);
+    
+    // Analytics data state
+    const [analytics, setAnalytics] = useState({
+        totalQuizzes: 0,
+        averageScore: 0,
+        bestScore: 0,
+        totalCorrect: 0,
+        totalQuestions: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        scoreHistory: [],
+        categoryStats: [],
+        weeklyProgress: [],
+        difficultyBreakdown: [],
+        subjectBreakdown: [],
+        recentActivity: []
+    });
+
+    // Animation refs
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(50)).current;
+    const containerAnim = useRef(new Animated.Value(1)).current;
+
+    // ✅ COMPLETE Light theme styles with all missing properties
+    const lightStyles = {
+        container: { backgroundColor: '#F8F4E3' },
+        backButton: { backgroundColor: 'rgba(255, 255, 255, 0.9)', shadowColor: '#1A2C5B' },
+        backButtonText: { color: '#1A2C5B' },
+        titleIcon: { backgroundColor: 'rgba(26, 44, 91, 0.1)', shadowColor: '#1A2C5B' },
+        titleIconColor: { color: '#1A2C5B' },
+        title: { color: '#1A2C5B' },
+        subtitle: { color: '#4A5568' },
+        dataSourceText: { color: '#4A5568' },
+        chartContainer: { backgroundColor: '#FFFFFF', shadowColor: '#1A2C5B' },
+        chartTitle: { color: '#2C3E50' },
+        chartSubtitle: { color: '#4A5568' },
+        categoryName: { color: '#2C3E50' },
+        categoryCount: { color: '#7F8C8D' },
+        statCard: { backgroundColor: 'rgba(255, 255, 255, 0.95)', shadowColor: '#1A2C5B' },
+        statNumber: { color: '#2C3E50' },
+        statLabel: { color: '#7F8C8D' },
+        noDataIcon: { color: '#7F8C8D' },
+        noDataText: { color: '#7F8C8D' },
+        refreshColor: { color: '#1A2C5B' },
+        periodSelector: { backgroundColor: 'rgba(255, 255, 255, 0.8)' },
+        periodButton: { backgroundColor: '#FFFFFF', borderColor: '#1A2C5B' },
+        periodButtonText: { color: '#1A2C5B' },
+        activePeriodButton: { backgroundColor: '#1A2C5B' },
+        activePeriodButtonText: { color: '#FFFFFF' },
+        // Tab styles
+        tabSelector: { backgroundColor: 'rgba(255, 255, 255, 0.8)' },
+        tab: { backgroundColor: 'transparent' },
+        activeTab: { backgroundColor: '#1A2C5B' },
+        tabText: { color: '#4A5568' },
+        activeTabText: { color: '#FFFFFF' },
+        // Loading and action styles
+        loadingColor: { color: '#1A2C5B' },
+        loadingText: { color: '#4A5568' },
+        quickProgressAction: { backgroundColor: 'rgba(26, 44, 91, 0.1)' },
+        quickProgressActionText: { color: '#1A2C5B' },
+    };
+
+    // ✅ COMPLETE Dark theme styles with all missing properties
+    const darkStyles = {
+        container: { backgroundColor: '#1A2C5B' },
+        backButton: { backgroundColor: 'rgba(44, 70, 125, 0.8)', shadowColor: '#D4AF37' },
+        backButtonText: { color: '#F8F4E3' },
+        titleIcon: { backgroundColor: 'rgba(212, 175, 55, 0.2)', shadowColor: '#D4AF37' },
+        titleIconColor: { color: '#D4AF37' },
+        title: { color: '#F8F4E3' },
+        subtitle: { color: '#CBD5E0' },
+        dataSourceText: { color: '#CBD5E0' },
+        chartContainer: { backgroundColor: '#2C3E50', shadowColor: '#D4AF37' },
+        chartTitle: { color: '#FFFFFF' },
+        chartSubtitle: { color: '#CBD5E0' },
+        categoryName: { color: '#FFFFFF' },
+        categoryCount: { color: '#BDC3C7' },
+        statCard: { backgroundColor: 'rgba(44, 62, 80, 0.95)', shadowColor: '#D4AF37' },
+        statNumber: { color: '#FFFFFF' },
+        statLabel: { color: '#BDC3C7' },
+        noDataIcon: { color: '#BDC3C7' },
+        noDataText: { color: '#BDC3C7' },
+        refreshColor: { color: '#D4AF37' },
+        periodSelector: { backgroundColor: 'rgba(44, 70, 125, 0.6)' },
+        periodButton: { backgroundColor: '#2C467D', borderColor: '#D4AF37' },
+        periodButtonText: { color: '#D4AF37' },
+        activePeriodButton: { backgroundColor: '#D4AF37' },
+        activePeriodButtonText: { color: '#1A2C5B' },
+        // Tab styles
+        tabSelector: { backgroundColor: 'rgba(44, 70, 125, 0.6)' },
+        tab: { backgroundColor: 'transparent' },
+        activeTab: { backgroundColor: '#D4AF37' },
+        tabText: { color: '#CBD5E0' },
+        activeTabText: { color: '#1A2C5B' },
+        // Loading and action styles
+        loadingColor: { color: '#D4AF37' },
+        loadingText: { color: '#CBD5E0' },
+        quickProgressAction: { backgroundColor: 'rgba(212, 175, 55, 0.2)' },
+        quickProgressActionText: { color: '#D4AF37' },
+    };
+
+    const currentTheme = isDarkMode ? darkStyles : lightStyles;
+
+    useEffect(() => {
+        const loadNotificationInsights = async () => {
+            try {
+                const user = auth.currentUser;
+                if (user) {
+                    const status = await NotificationManager.getNotificationStatus(user.uid);
+                    setNotificationInsights(status);
+                }
+            } catch (error) {
+                logger.error('Error loading notification insights:', error);
+            }
+        };
+        
+        loadNotificationInsights();
+    }, []);
+
+    useEffect(() => {
+        // Start animations
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            }),
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 800,
+                useNativeDriver: true,
+            }),
+            Animated.spring(containerAnim, {
+                toValue: 1,
+                tension: 80,
+                friction: 10,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, [selectedPeriod]);
+
+    // Refresh data whenever screen comes into focus (e.g., after profile updates)
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchAnalytics();
+            loadUserCourses(); // Reload user's profile courses
+            // loadHierarchicalProgress(); // TODO: Implement hierarchical progress loading
+        }, [])
+    );
+
+    // ✅ NEW: Load user's profile courses for progress tracking
+    const loadUserCourses = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const recommendations = await SubjectProgressService.getHierarchicalRecommendations(user.uid);
+            setHierarchicalRecommendations(recommendations);
+
+            logger.info('📊 Hierarchical progress loaded');
+
+        } catch (error) {
+            logger.error('❌ Error loading hierarchical progress:', error);
+        }
+    };
+
+    // ✅ NEW: Initialize progress tracking for user's profile courses
+    const initializeCourseProgress = async (courses) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Get existing quiz history to see if user has any activity in these courses
+            const quizHistory = await AsyncStorage.getItem(`quizHistory_${user.uid}`);
+            const quizzes = quizHistory ? JSON.parse(quizHistory) : [];
+
+            // Create progress entries for each user course
+            const courseProgressUpdates = {};
+            
+            courses.forEach(course => {
+                // Find quizzes related to this course
+                const courseQuizzes = quizzes.filter(quiz => 
+                    quiz.metadata?.category === course.name ||
+                    quiz.metadata?.manualSubject?.name === course.name ||
+                    quiz.metadata?.subjectKey === course.key ||
+                    (quiz.metadata?.category && quiz.metadata.category.toLowerCase().includes(course.name.toLowerCase()))
+                );
+
+                if (courseQuizzes.length === 0) {
+                    // Create initial progress entry for courses with no activity yet
+                    courseProgressUpdates[course.name] = {
+                        subject: course.name,
+                        subjectKey: course.key,
+                        icon: course.icon,
+                        color: course.color,
+                        totalQuizzes: 0,
+                        totalQuestions: 0,
+                        totalCorrect: 0,
+                        accuracy: 0,
+                        lastStudied: null,
+                        studySessions: 0,
+                        averageScore: 0,
+                        bestScore: 0,
+                        weakAreas: [],
+                        improvementTrend: 0,
+                        isFromProfile: true,
+                        source: 'user_profile'
+                    };
+                } else {
+                    // Calculate progress for courses with existing quiz activity
+                    const totalQuestions = courseQuizzes.reduce((sum, quiz) => sum + (quiz.results?.totalQuestions || 0), 0);
+                    const totalCorrect = courseQuizzes.reduce((sum, quiz) => sum + (quiz.results?.score || 0), 0);
+                    const scores = courseQuizzes.map(quiz => quiz.results?.score || 0);
+                    const lastQuiz = courseQuizzes.sort((a, b) => 
+                        new Date(b.metadata?.completedAt) - new Date(a.metadata?.completedAt)
+                    )[0];
+
+                    courseProgressUpdates[course.name] = {
+                        subject: course.name,
+                        subjectKey: course.key,
+                        icon: course.icon,
+                        color: course.color,
+                        totalQuizzes: courseQuizzes.length,
+                        totalQuestions: totalQuestions,
+                        totalCorrect: totalCorrect,
+                        accuracy: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
+                        lastStudied: lastQuiz?.metadata?.completedAt || null,
+                        studySessions: courseQuizzes.length,
+                        averageScore: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+                        bestScore: scores.length > 0 ? Math.max(...scores) : 0,
+                        weakAreas: [], // This would be calculated based on quiz results
+                        improvementTrend: 0, // This would be calculated based on recent performance
+                        isFromProfile: true,
+                        source: 'user_profile'
+                    };
+                }
+            });
+
+            // Update the subject progress state
+            setSubjectProgress(prevProgress => ({
+                ...prevProgress,
+                ...courseProgressUpdates
+            }));
+
+            logger.info(`📊 Initialized progress tracking for ${courses.length} profile courses`);
+        } catch (error) {
+            logger.error('❌ Error initializing course progress:', error);
+        }
+    };
+
+    const fetchAnalytics = async () => {
+        try {
+            setLoading(true);
+            setDataSource('loading');
+            const user = auth.currentUser;
+
+            if (!user) {
+                // Clear all data if no user
+                setAnalytics({
+                    totalQuizzes: 0,
+                    averageScore: 0,
+                    bestScore: 0,
+                    totalCorrect: 0,
+                    totalQuestions: 0,
+                    currentStreak: 0,
+                    longestStreak: 0,
+                    scoreHistory: [],
+                    categoryStats: [],
+                    weeklyProgress: [],
+                    difficultyBreakdown: [],
+                    subjectBreakdown: [],
+                    recentActivity: []
+                });
+                setSubjectProgress({});
+                setSubjectRecommendations([]);
+                setSubjectSummary(null);
+                setLearningProfile(null);
+                setStreakInfo(null);
+                setStudyInsights(null);
+                setDataSource('local');
+                setLoading(false);
+                return;
+            }
+
+            let quizzes = [];
+            let backendDataLoaded = false;
+
+            // ✅ PRIMARY: Try to load from backend APIs
+            try {
+                logger.info('📊 Loading progress data from backend...');
+                setBackendError(null);
+
+                // Load all backend data in parallel
+                const [
+                    backendProfile,
+                    backendStreak,
+                    backendInsights,
+                    backendSubjects,
+                    backendHistory
+                ] = await Promise.all([
+                    BackendSyncService.getLearningProfile(),
+                    BackendSyncService.getStreakInfo(),
+                    BackendSyncService.getStudyInsights(selectedPeriod === 'week' ? 7 : selectedPeriod === 'month' ? 30 : 365),
+                    BackendSyncService.getSubjectProgress(),
+                    BackendSyncService.getQuizHistory({
+                        page: 1,
+                        pageSize: 100,
+                        daysBack: selectedPeriod === 'week' ? 7 : selectedPeriod === 'month' ? 30 : undefined
+                    })
+                ]);
+
+                // Store backend data
+                setLearningProfile(backendProfile);
+                setStreakInfo(backendStreak);
+                setStudyInsights(backendInsights);
+
+                // Convert backend data to analytics format
+                const backendAnalytics = {
+                    totalQuizzes: backendProfile.total_quizzes_taken || 0,
+                    averageScore: backendProfile.overall_accuracy || 0,
+                    bestScore: backendProfile.best_accuracy || 0,
+                    totalCorrect: Math.round((backendProfile.total_questions_answered || 0) * (backendProfile.overall_accuracy || 0) / 100),
+                    totalQuestions: backendProfile.total_questions_answered || 0,
+                    currentStreak: backendStreak.current_streak || 0,
+                    longestStreak: backendStreak.longest_streak || 0,
+                    scoreHistory: [], // Will be populated from quiz history
+                    categoryStats: [], // Will be populated from subjects
+                    weeklyProgress: backendInsights.weekly_progress || {},
+                    difficultyBreakdown: [], // Will be calculated
+                    subjectBreakdown: [], // Will be populated from subjects
+                    recentActivity: [], // Will be populated from quiz history
+                    // Backend-specific data
+                    learningVelocity: backendInsights.learning_velocity || 0,
+                    consistencyScore: backendInsights.consistency_score || 0,
+                    performanceLevel: backendProfile.performance_level || 'beginner',
+                    studyTime: Math.round((backendProfile.total_study_time || 0) / 60), // Convert to minutes
+                };
+
+                // Process subject progress
+                const subjectProgressData = {};
+                const subjectBreakdown = [];
+                backendSubjects.forEach(subject => {
+                    subjectProgressData[subject.subject] = {
+                        accuracy: subject.accuracy,
+                        quizCount: subject.quiz_count,
+                        masteryLevel: subject.mastery_level,
+                        lastPracticed: subject.last_practiced,
+                        improvementTrend: subject.improvement_trend
+                    };
+
+                    subjectBreakdown.push({
+                        name: subject.subject,
+                        value: subject.quiz_count,
+                        accuracy: subject.accuracy,
+                        color: HierarchicalSubjectService.getSubjectColor(subject.subject)
+                    });
+                });
+
+                // Process quiz history for score history and recent activity
+                if (backendHistory.history) {
+                    const scoreHistory = backendHistory.history.map(quiz => ({
+                        score: quiz.accuracy,
+                        date: new Date(quiz.completion_date).toLocaleDateString(),
+                        subject: quiz.subject_key || 'Unknown'
+                    })).reverse(); // Most recent first for charts
+
+                    const recentActivity = backendHistory.history.slice(0, 10).map(quiz => ({
+                        id: quiz.id,
+                        title: quiz.topic,
+                        score: quiz.accuracy,
+                        date: quiz.completion_date,
+                        subject: quiz.subject_key
+                    }));
+
+                    backendAnalytics.scoreHistory = scoreHistory;
+                    backendAnalytics.recentActivity = recentActivity;
+                }
+
+                backendAnalytics.subjectBreakdown = subjectBreakdown;
+
+                setAnalytics(backendAnalytics);
+                setSubjectProgress(subjectProgressData);
+                setSubjectRecommendations(backendInsights.subject_recommendations || []);
+
+                backendDataLoaded = true;
+                setDataSource('backend');
+                logger.info('✅ Backend progress data loaded successfully');
+
+            } catch (backendError) {
+                logger.warn('⚠️ Backend loading failed, falling back to local data:', backendError);
+                setBackendError(backendError.message);
+
+                // ✅ FALLBACK: Load from local storage (existing logic)
+                try {
+                    const [quizHistory, subjectData] = await Promise.all([
+                        AsyncStorage.getItem(`quizHistory_${user.uid}`),
+                        Promise.all([
+                            SubjectProgressService.getSubjectProgress(user.uid),
+                            SubjectProgressService.getSubjectRecommendations(user.uid),
+                            SubjectProgressService.getSubjectSummary(user.uid)
+                        ])
+                    ]);
+
+                    quizzes = quizHistory ? JSON.parse(quizHistory) : [];
+
+                    if (quizzes.length > 0) {
+                        const filteredQuizzes = filterQuizzesByPeriod(quizzes, selectedPeriod);
+                        const calculatedAnalytics = calculateAnalytics(filteredQuizzes, quizzes);
+                        setAnalytics(calculatedAnalytics);
+                    }
+
+                    const [progress, recommendations, summary] = subjectData;
+                    setSubjectProgress(progress);
+                    setSubjectRecommendations(recommendations);
+                    setSubjectSummary(summary);
+
+                    // Load advanced analytics for local data
+                    if (quizzes.length > 0) {
+                        const filteredQuizzes = filterQuizzesByPeriod(quizzes, selectedPeriod);
+                        await loadAdvancedAnalytics(user.uid, quizzes, filteredQuizzes);
+                    }
+
+                    setDataSource('local');
+                    logger.info('📱 Local progress data loaded successfully');
+
+                } catch (localError) {
+                    logger.error('❌ Failed to load local data:', localError);
+                    setDataSource('local');
+                }
+            }
+
+            // Load additional data if we have backend data
+            if (backendDataLoaded && learningProfile) {
+                try {
+                    // Load advanced analytics with backend data
+                    const backendQuizzes = analytics.recentActivity || [];
+                    if (backendQuizzes.length > 0) {
+                        // Convert backend format for advanced analytics
+                        const formattedQuizzes = backendQuizzes.map(activity => ({
+                            results: { percentage: activity.score },
+                            metadata: { completedAt: activity.date, subject: activity.subject }
+                        }));
+                        await loadAdvancedAnalytics(user.uid, formattedQuizzes, formattedQuizzes);
+                    }
+                } catch (advancedError) {
+                    logger.warn('⚠️ Failed to load advanced analytics:', advancedError);
+                }
+            }
+
+        } catch (error) {
+            logger.error('❌ Error in fetchAnalytics:', error);
+            setBackendError(error.message);
+            setDataSource('local');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 🚀 NEW: Load advanced analytics
+    const loadAdvancedAnalytics = async (userId, allQuizzes, filteredQuizzes) => {
+        try {
+            // Streak prediction
+            const currentStreak = analytics.currentStreak || calculateStreaks(allQuizzes).currentStreak;
+            const prediction = AdvancedProgressAnalytics.predictStreakContinuation(allQuizzes, currentStreak);
+            setStreakPrediction(prediction);
+
+            // User goals
+            const goals = await AdvancedProgressAnalytics.getUserGoals(userId);
+            const updatedGoals = await AdvancedProgressAnalytics.updateGoalProgress(userId, allQuizzes, subjectProgress);
+            setUserGoals(updatedGoals);
+
+            // Learning velocity
+            const velocity = AdvancedProgressAnalytics.calculateLearningVelocity(allQuizzes);
+            setLearningVelocity(velocity);
+
+            // Difficulty progression
+            const progression = AdvancedProgressAnalytics.analyzeDifficultyProgression(allQuizzes);
+            setDifficultyProgression(progression);
+
+            // Time analytics
+            const timeStats = AdvancedProgressAnalytics.calculateStudySessionAnalytics(allQuizzes);
+            setTimeAnalytics(timeStats);
+
+        } catch (error) {
+            logger.error('Error loading advanced analytics:', error);
+        }
+    };
+
+    const filterQuizzesByPeriod = (quizzes, period) => {
+        const now = new Date();
+        const cutoffDate = new Date();
+        
+        switch (period) {
+            case 'week':
+                cutoffDate.setDate(now.getDate() - 7);
+                break;
+            case 'month':
+                cutoffDate.setMonth(now.getMonth() - 1);
+                break;
+            case 'all':
+                return quizzes;
+            default:
+                return quizzes;
+        }
+        
+        return quizzes.filter(quiz => {
+            const quizDate = new Date(quiz.metadata?.completedAt);
+            return quizDate >= cutoffDate;
+        });
+    };
+
+    const calculateAnalytics = (filteredQuizzes, allQuizzes) => {
+        const totalQuizzes = filteredQuizzes.length;
+        const totalCorrect = filteredQuizzes.reduce((sum, quiz) => sum + (quiz.results?.score || 0), 0);
+        const totalQuestions = filteredQuizzes.reduce((sum, quiz) => sum + (quiz.results?.totalQuestions || 0), 0);
+        const averageScore = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+        const bestScore = Math.max(...filteredQuizzes.map(quiz => quiz.results?.percentage || 0), 0);
+
+        // Score history for line chart (last 10 quizzes)
+        const scoreHistory = filteredQuizzes
+            .slice(-10)
+            .map((quiz, index) => ({
+                x: index + 1,
+                y: quiz.results?.percentage || 0,
+                date: new Date(quiz.metadata?.completedAt).toLocaleDateString()
+            }));
+
+        // Category statistics
+        const categoryMap = new Map();
+        filteredQuizzes.forEach(quiz => {
+            const category = quiz.metadata?.category || 'General';
+            if (!categoryMap.has(category)) {
+                categoryMap.set(category, { total: 0, correct: 0, count: 0 });
+            }
+            const stats = categoryMap.get(category);
+            stats.total += quiz.results?.totalQuestions || 0;
+            stats.correct += quiz.results?.score || 0;
+            stats.count += 1;
+        });
+
+        const categoryStats = Array.from(categoryMap.entries()).map(([category, stats]) => ({
+            category,
+            accuracy: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
+            count: stats.count,
+            total: stats.total
+        }));
+
+        // Weekly progress (last 7 days)
+        const weeklyProgress = generateWeeklyProgress(allQuizzes);
+
+        // Difficulty breakdown
+        const difficultyMap = new Map();
+        filteredQuizzes.forEach(quiz => {
+            const difficulty = quiz.metadata?.difficulty || 'medium';
+            if (!difficultyMap.has(difficulty)) {
+                difficultyMap.set(difficulty, 0);
+            }
+            difficultyMap.set(difficulty, difficultyMap.get(difficulty) + 1);
+        });
+
+        const difficultyBreakdown = Array.from(difficultyMap.entries()).map(([difficulty, count]) => ({
+            name: difficulty,
+            population: count,
+            color: getDifficultyColor(difficulty),
+            legendFontColor: isDarkMode ? '#F8F4E3' : '#1A2C5B',
+            legendFontSize: 12,
+        }));
+
+        // ✅ NEW: Subject breakdown for pie chart
+        const subjectMap = new Map();
+        filteredQuizzes.forEach(quiz => {
+            const category = quiz.metadata?.category || 'General';
+            if (!subjectMap.has(category)) {
+                subjectMap.set(category, 0);
+            }
+            subjectMap.set(category, subjectMap.get(category) + 1);
+        });
+
+        const subjectBreakdown = Array.from(subjectMap.entries()).map(([subject, count], index) => ({
+            name: subject,
+            population: count,
+            color: getSubjectChartColor(subject, index),
+            legendFontColor: isDarkMode ? '#F8F4E3' : '#1A2C5B',
+            legendFontSize: 12,
+        }));
+
+        // Calculate streaks
+        const { currentStreak, longestStreak } = calculateStreaks(allQuizzes);
+
+        return {
+            totalQuizzes,
+            averageScore,
+            bestScore,
+            totalCorrect,
+            totalQuestions,
+            currentStreak,
+            longestStreak,
+            scoreHistory,
+            categoryStats,
+            weeklyProgress,
+            difficultyBreakdown,
+            subjectBreakdown,
+            recentActivity: filteredQuizzes.slice(-5).reverse()
+        };
+    };
+
+    const generateWeeklyProgress = (quizzes) => {
+        const last7Days = Array.from({ length: 7 }, (_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() - (6 - i));
+            return {
+                date: date.toISOString().split('T')[0],
+                day: date.toLocaleDateString('en', { weekday: 'short' }),
+                quizzes: 0,
+                avgScore: 0
+            };
+        });
+
+        quizzes.forEach(quiz => {
+            const quizDate = new Date(quiz.metadata?.completedAt).toISOString().split('T')[0];
+            const dayData = last7Days.find(day => day.date === quizDate);
+            if (dayData) {
+                dayData.quizzes += 1;
+                dayData.avgScore = (dayData.avgScore + (quiz.results?.percentage || 0)) / dayData.quizzes;
+            }
+        });
+
+        return last7Days;
+    };
+
+    // Helper function for advanced analytics
+    const calculateStreaks = (quizzes) => {
+        return AdvancedProgressAnalytics.calculateStreaks(quizzes);
+    };
+
+    const getDifficultyColor = (difficulty) => {
+        switch (difficulty.toLowerCase()) {
+            case 'easy': return '#28a745';
+            case 'medium': return '#ffc107';
+            case 'hard': return '#dc3545';
+            default: return '#17a2b8';
+        }
+    };
+
+    const statusBarStyle = isDarkMode ? 'light-content' : 'dark-content';
+
+    // Chart configurations
+    const chartConfig = {
+        backgroundColor: 'transparent',
+        backgroundGradientFrom: isDarkMode ? '#1A2C5B' : '#F8F4E3',
+        backgroundGradientTo: isDarkMode ? '#2C467D' : '#FFFFFF',
+        decimalPlaces: 0,
+        color: (opacity = 1) => isDarkMode ? `rgba(212, 175, 55, ${opacity})` : `rgba(26, 44, 91, ${opacity})`,
+        labelColor: (opacity = 1) => isDarkMode ? `rgba(248, 244, 227, ${opacity})` : `rgba(26, 44, 91, ${opacity})`,
+        style: {
+            borderRadius: 16
+        },
+        propsForDots: {
+            r: "6",
+            strokeWidth: "2",
+            stroke: isDarkMode ? "#D4AF37" : "#1A2C5B"
+        }
+    };
+
+    // ✅ EXTRACTED: Header moved to components/progress/Header.tsx
+
+    // ✅ EXTRACTED: PeriodSelector moved to components/progress/PeriodSelector.tsx
+
+    // ✅ EXTRACTED: TabSelector moved to components/progress/TabSelector.tsx
+
+    // ✅ EXTRACTED: StatsCards moved to components/progress/StatCards.tsx
+
+    // ✅ EXTRACTED: ScoreChart moved to components/progress/ScoreChart.tsx
+
+    // ✅ EXTRACTED: CategoryStats moved to components/progress/CategoryStats.tsx
+
+    // ✅ EXTRACTED: DistributionChart moved to components/progress/DistributionChart.tsx
+
+    // ✅ EXTRACTED: WeeklyActivity moved to components/progress/WeeklyActivity.tsx
+
+    // ✅ EXTRACTED: StreakPredictionCard moved to components/progress/StreakPredictionCard.tsx
+
+    // ✅ EXTRACTED: GoalTrackingCard moved to components/progress/GoalTrackingCard.tsx
+
+    // ✅ EXTRACTED: LearningVelocityCard moved to components/progress/LearningVelocityCard.tsx
+
+    // ✅ EXTRACTED: DifficultyProgressionCard moved to components/progress/DifficultyProgressionCard.tsx
+
+    // ✅ EXTRACTED: TimeAnalyticsCard moved to components/progress/TimeAnalyticsCard.tsx
+
+    // ✅ EXTRACTED: NotificationInsightsCard moved to components/progress/NotificationInsightsCard.tsx
+
+    // ✅ EXTRACTED: SubjectOverviewCard moved to components/progress/SubjectOverviewCard.tsx
+
+    // ✅ EXTRACTED: SubjectProgressCards moved to components/progress/SubjectProgressCards.tsx
+
+    // ✅ EXTRACTED: SmartRecommendations moved to components/progress/SmartRecommendations.tsx
+
+    // ✅ NEW: Hierarchical Courses View Component
+    // ✅ EXTRACTED: HierarchicalCoursesView moved to components/progress/HierarchicalCoursesView.tsx
+
+
+    if (loading) {
+        return (
+            <View style={[styles.container, currentTheme.container, styles.centerContent]}>
+                <StatusBar barStyle={statusBarStyle} />
+                <ActivityIndicator size="large" color={getThemeProperty(currentTheme, 'loadingColor', '#1A2C5B')} />
+                <Text style={[styles.loadingText, currentTheme.loadingText]}>
+                    Analyzing your progress...
+                </Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={[styles.container, currentTheme.container]}>
+            <StatusBar barStyle={statusBarStyle} />
+            <Animated.View style={{ 
+                opacity: fadeAnim, 
+                transform: [
+                    { translateY: slideAnim },
+                    { scale: containerAnim }
+                ] 
+            }}>
+                <ScrollView 
+                    contentContainerStyle={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={() => {
+                                setRefreshing(true);
+                                fetchAnalytics().finally(() => setRefreshing(false));
+                            }}
+                            colors={[getThemeProperty(currentTheme, 'refreshColor', '#1A2C5B')]}
+                            tintColor={getThemeProperty(currentTheme, 'refreshColor', '#1A2C5B')}
+                        />
+                    }
+                >
+                    <Header
+                        navigation={navigation}
+                        containerAnim={containerAnim}
+                        dataSource={dataSource}
+                        backendError={backendError}
+                        styles={styles}
+                        currentTheme={currentTheme}
+                    />
+                    <TabSelector
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        styles={styles}
+                        currentTheme={currentTheme}
+                    />
+                    
+                    {activeTab === 'overall' ? (
+                        <>
+                            <PeriodSelector
+                                selectedPeriod={selectedPeriod}
+                                setSelectedPeriod={setSelectedPeriod}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <StatCards analytics={analytics} styles={styles} currentTheme={currentTheme} />
+                            <ScoreChart scoreHistory={analytics.scoreHistory} chartConfig={chartConfig} styles={styles} currentTheme={currentTheme} />
+                            <CategoryStats categoryStats={analytics.categoryStats} styles={styles} currentTheme={currentTheme} />
+                            <DistributionChart
+                                difficultyBreakdown={analytics.difficultyBreakdown}
+                                subjectBreakdown={analytics.subjectBreakdown}
+                                pieChartMode={pieChartMode}
+                                setPieChartMode={setPieChartMode}
+                                totalQuizzes={analytics.totalQuizzes}
+                                isDarkMode={isDarkMode}
+                                chartConfig={chartConfig}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <WeeklyActivity
+                                weeklyProgress={analytics.weeklyProgress}
+                                chartConfig={chartConfig}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <NotificationInsightsCard
+                                notificationInsights={notificationInsights}
+                                setNotificationInsights={setNotificationInsights}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                        </>
+                    ) : activeTab === 'subjects' ? (
+                        <>
+                            <SubjectOverviewCard
+                                subjectSummary={subjectSummary}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <SubjectProgressCards
+                                subjectProgress={subjectProgress}
+                                navigation={navigation}
+                                getSubjectColor={getSubjectColor}
+                                getSubjectIcon={getSubjectIcon}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <SmartRecommendations
+                                subjectRecommendations={subjectRecommendations}
+                                navigation={navigation}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                        </>
+                    ) : activeTab === 'courses' ? (
+                        <>
+                            <HierarchicalCoursesView
+                                hierarchicalProgress={hierarchicalProgress}
+                                selectedSubject={selectedSubject}
+                                setSelectedSubject={setSelectedSubject}
+                                hierarchicalRecommendations={hierarchicalRecommendations}
+                                navigation={navigation}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <StreakPredictionCard
+                                streakPrediction={streakPrediction}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <GoalTrackingCard
+                                userGoals={userGoals}
+                                isDarkMode={isDarkMode}
+                                setShowGoalModal={setShowGoalModal}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <LearningVelocityCard
+                                learningVelocity={learningVelocity}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <DifficultyProgressionCard
+                                difficultyProgression={difficultyProgression}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                            <TimeAnalyticsCard
+                                timeAnalytics={timeAnalytics}
+                                styles={styles}
+                                currentTheme={currentTheme}
+                            />
+                        </>
+                    )}
+                </ScrollView>
+            </Animated.View>
+        </View>
+    );
+};
+
+// ✅ REMOVED: Styles moved to styles/ProgressTrackerScreenStyles.ts
+
+export default ProgressTrackerScreen;

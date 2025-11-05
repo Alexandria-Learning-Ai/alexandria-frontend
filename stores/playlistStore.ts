@@ -79,9 +79,12 @@ export const usePlaylistStore = create<PlaylistStore>((set, get) => ({
       }
 
       const data = await response.json();
-      logger.info(`✅ Fetched ${data.length} playlists`);
 
-      set({ playlists: data, loading: false });
+      // API returns {playlists: [...], total_count, page, limit}
+      const playlistsArray = Array.isArray(data) ? data : data.playlists || [];
+      logger.info(`✅ Fetched ${playlistsArray.length} playlists`);
+
+      set({ playlists: playlistsArray, loading: false });
     } catch (error) {
       logger.error('❌ Error fetching playlists:', error);
       set({

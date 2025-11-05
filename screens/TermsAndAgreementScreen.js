@@ -17,9 +17,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from '../firebaseConfig';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useTranslation } from 'react-i18next';
-import { API_BASE_URL } from '../config/api';
 import { StudentProfileService } from '../services/StudentProfileService';
+import { API_BASE_URL } from '../config/api';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import logger from '../utils/logger';
@@ -27,7 +28,7 @@ import logger from '../utils/logger';
 
 const { width, height } = Dimensions.get('window');
 
-export default function TermsAndAgreementScreen({ navigation }) {
+export default function TermsAndAgreementScreen({ navigation, user, route }) {
   const { t, i18n } = useTranslation();
   const [isAccepting, setIsAccepting] = useState(false);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -81,104 +82,104 @@ export default function TermsAndAgreementScreen({ navigation }) {
     setIsAccepting(true);
 
     try {
-      const user = auth.currentUser;
-      if (user) {
-        // Store terms acceptance with timestamp and version
-        // Get user's language preference with fallback chain
-        const userLanguage =
-          (await AsyncStorage.getItem(`selectedLanguage_${user.uid}`)) ||
-          (await AsyncStorage.getItem(`userLanguage_${user.uid}`)) ||
-          (await AsyncStorage.getItem('selectedLanguage')) ||
-          i18n.language || 'en';
+      // 🔒 SECURE FLOW: Account must already exist - ONLY handle terms acceptance
+      const authenticatedUser = auth.currentUser;
+      if (!authenticatedUser) {
+        Alert.alert('Error', 'No authenticated user found. Please create your account first.');
+        setIsAccepting(false);
+        return;
+      }
 
-        // Load user's profile data for enhanced legal compliance
-        let userProfile = null;
-        try {
-          const profileStatus = await StudentProfileService.checkProfileStatus(user.uid);
-          if (profileStatus.exists) {
-            userProfile = await StudentProfileService.getProfile(user.uid);
-          }
-        } catch (error) {
-          logger.warn('Could not load profile for terms acceptance:', error);
-        }
+      logger.info('📋 User accepting terms for legal compliance:', authenticatedUser.uid);
 
-        // Generate comprehensive device and user agent information
-        const deviceInfo = `${Platform.OS}-${Device.osVersion || 'unknown'}`;
-        const userAgent = `Alexandria-Mobile-App/${Constants.expoConfig?.version || '1.0.0'} (${Platform.OS} ${Device.osVersion || 'unknown'}; ${Device.modelName || 'unknown'}) Expo/${Constants.expoConfig?.sdkVersion || 'unknown'}`;
+      // 1. Load user profile for legal compliance context
+      const userProfile = await StudentProfileService.getProfile(authenticatedUser.uid);
 
-        //  Comprehensive legal compliance data with profile information
-        const termsAcceptance = {
-          accepted: true,
-          timestamp: new Date().toISOString(),
-          version: '1.0.0-beta',
-          user_id: user.uid,
-          user_email: user.email,
-          device_info: deviceInfo,
-          user_agent: userAgent,
-          language_preference: userLanguage,
-          // Additional legal compliance metadata
-          app_version: Constants.expoConfig?.version || '1.0.0',
-          terms_display_language: userLanguage, // Language terms were displayed in
-          user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-          consent_method: 'explicit',  // How consent was obtained
+      // 2. Create comprehensive terms acceptance record
+      const termsAcceptance = {
+        accepted: true,
+        timestamp: new Date().toISOString(),
+        version: '1.0.0-beta',
+        user_id: authenticatedUser.uid,
+        user_email: authenticatedUser.email,
+        device_info: `${Platform.OS}-${Device.osVersion || 'unknown'}`,
+        language_preference: i18n.language || 'en',
+        consent_method: 'explicit',
+        terms_acceptance_context: 'post_account_creation',
+        // Include existing profile data for legal compliance
+        profile_data_context: userProfile ? {
+          full_name: userProfile.fullName,
+          education_level: userProfile.educationLevel,
+          program: userProfile.program,
+          creation_date: userProfile.createdAt
+        } : null
+      };
 
-          // Enhanced profile data for better legal compliance
-          ...(userProfile && {
-            full_name: userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim(),
-            birth_date: userProfile.birthDate,
-            education_level: userProfile.educationLevel,
-            academic_year: userProfile.year,
-            program: userProfile.program,
-            study_goals: userProfile.studyGoals,
-            profile_completion_date: userProfile.createdAt,
-            terms_acceptance_context: 'post_profile_setup'
-          })
-        };
-        
-        // Store locally (for app functionality)
-        await AsyncStorage.setItem(
-          `termsAccepted_${user.uid}`,
-          JSON.stringify(termsAcceptance)
+      // 3. Store terms acceptance locally (required for app access)
+      await AsyncStorage.setItem(`termsAccepted_${authenticatedUser.uid}`, JSON.stringify(termsAcceptance));
+
+      // 4. Send to legal compliance dashboard
+      try {
+        await fetch(`${API_BASE_URL}/api/legal/terms-acceptance`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Alexandria-Mobile-App',
+            'X-User-ID': authenticatedUser.uid,
+          },
+          body: JSON.stringify(termsAcceptance),
+        });
+        logger.info('✅ Terms acceptance sent to legal compliance dashboard');
+      } catch (error) {
+        logger.error('❌ Failed to send terms to legal dashboard (continuing anyway):', error);
+      }
+
+      // 5. 🔒 CRITICAL: Mark profile as fully completed (unlocks app access)
+      await AsyncStorage.setItem(`profileCompleted_${authenticatedUser.uid}`, 'true');
+
+      logger.info('✅ Terms accepted, user now has full app access');
+
+      // 6. Trigger AppNavigator state refresh - it will automatically navigate
+      setIsAccepting(false);
+
+      // Show welcome message with navigation trigger on button press
+      try {
+        Alert.alert(
+          '🎉 Welcome to Alexandria!',
+          'Terms accepted! You now have full access to all features.',
+          [{
+            text: 'Get Started',
+            onPress: () => {
+              logger.info('🚀 User clicked "Get Started" - navigating to Home');
+
+              try {
+                // Use direct navigation - this should work since Home is included in the needsTerms stack
+                navigation.navigate('Home');
+                logger.info('✅ Navigation to Home successful');
+              } catch (error) {
+                logger.error('❌ Direct navigation failed, trying reset:', error);
+                try {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Home' }],
+                  });
+                  logger.info('✅ Navigation reset to Home successful');
+                } catch (resetError) {
+                  logger.error('❌ Reset navigation also failed:', resetError);
+                }
+              }
+            }
+          }]
         );
 
-        // 🔥 IMPORTANT: Also store on backend for legal records
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/store-terms-acceptance`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'Alexandria-Mobile-App',
-              'X-User-ID': user.uid,
-            },
-            body: JSON.stringify(termsAcceptance),
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.text();
-            logger.error(`❌ Backend rejected terms acceptance (${response.status}):`, errorData);
-            throw new Error(`HTTP ${response.status}: ${errorData}`);
-          }
-          
-          const result = await response.json();
-          logger.info('✅ Terms acceptance stored on backend for legal records:', result);
-        } catch (error) {
-          logger.error('❌ Failed to store terms acceptance on backend:', error);
-          // Continue anyway - local storage is sufficient for app functionality
-        }
-
-        // Navigate to the app main interface after terms acceptance
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Home' }]
-        });
+      } catch (error) {
+        logger.error('❌ Error during terms completion:', error);
+        Alert.alert('Error', 'Terms were accepted but navigation failed. Please restart the app.');
       }
+
     } catch (error) {
-      logger.error('Error saving terms acceptance:', error);
-      Alert.alert(
-        t('alerts.error'),
-        t('terms.errorSavingAcceptance')
-      );
-    } finally {
+      logger.error('❌ Failed to process terms acceptance:', error);
+      Alert.alert('Error', 'Failed to process terms acceptance. Please try again.');
       setIsAccepting(false);
     }
   };
@@ -199,12 +200,8 @@ export default function TermsAndAgreementScreen({ navigation }) {
           text: t('terms.exitApp'),
           style: 'destructive',
           onPress: () => {
-            // Sign out and go back to authentication
+            // Sign out - AppNavigator will handle navigation automatically
             auth.signOut();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }]
-            });
           }
         }
       ]

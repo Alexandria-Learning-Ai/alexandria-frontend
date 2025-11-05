@@ -1,0 +1,213 @@
+/**
+ * useQuizSharing.ts
+ *
+ * Custom hook for managing quiz sharing functionality.
+ * Handles generating share links, managing privacy settings, and tracking shares.
+ *
+ * Features:
+ * - Generate shareable links
+ * - Manage privacy levels (public, friends, private)
+ * - Track share analytics
+ * - Clipboard integration
+ * - Social media sharing
+ * - Error handling
+ */
+
+import { useState, useCallback } from 'react';
+import * as Clipboard from 'expo-clipboard';
+import { Share as RNShare, Alert } from 'react-native';
+import logger from '../utils/logger';
+
+type SharePrivacy = 'public' | 'friends' | 'private';
+
+interface ShareQuizOptions {
+  quizId: number | string;
+  quizTitle: string;
+  privacy?: SharePrivacy;
+  score?: number;
+  totalQuestions?: number;
+}
+
+interface ShareData {
+  shareUrl: string;
+  shareCode: string;
+  privacy: SharePrivacy;
+  expiresAt?: Date;
+}
+
+interface UseQuizSharingReturn {
+  shareData: ShareData | null;
+  loading: boolean;
+  error: string | null;
+  generateShareLink: (options: ShareQuizOptions) => Promise<ShareData | null>;
+  copyToClipboard: (url: string) => Promise<boolean>;
+  shareToSocial: (message: string, url: string, title?: string) => Promise<boolean>;
+  clearShareData: () => void;
+}
+
+/**
+ * Generate a random share code (e.g., "DB4K2X9P")
+ */
+const generateShareCode = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
+/**
+ * Generate shareable URL
+ */
+const generateShareUrl = (quizId: number | string, shareCode: string): string => {
+  // In production, this would be your actual domain
+  const baseUrl = __DEV__ ? 'http://localhost:3000' : 'https://alexandria.app';
+  return `${baseUrl}/quiz/${shareCode}`;
+};
+
+/**
+ * Mock API call to create share link
+ * In production, replace with actual API call
+ */
+const createShareLinkAPI = async (
+  quizId: number | string,
+  privacy: SharePrivacy
+): Promise<ShareData> => {
+  // Simulate API delay
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  const shareCode = generateShareCode();
+  const shareUrl = generateShareUrl(quizId, shareCode);
+
+  // Calculate expiration (7 days from now)
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  return {
+    shareUrl,
+    shareCode,
+    privacy,
+    expiresAt,
+  };
+};
+
+/**
+ * useQuizSharing Hook
+ */
+export const useQuizSharing = (): UseQuizSharingReturn => {
+  const [shareData, setShareData] = useState<ShareData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Generate share link
+   */
+  const generateShareLink = useCallback(
+    async (options: ShareQuizOptions): Promise<ShareData | null> => {
+      const { quizId, quizTitle, privacy = 'public' } = options;
+
+      logger.info('Generating share link', { quizId, privacy });
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Call API to create share link
+        const result = await createShareLinkAPI(quizId, privacy);
+
+        setShareData(result);
+        logger.info('Share link generated successfully', {
+          shareCode: result.shareCode,
+          privacy: result.privacy,
+        });
+
+        // Track analytics
+        logger.info('Quiz shared', {
+          quizId,
+          quizTitle,
+          privacy,
+          shareCode: result.shareCode,
+        });
+
+        return result;
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to generate share link';
+        logger.error('Error generating share link', err);
+        setError(errorMessage);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * Copy URL to clipboard
+   */
+  const copyToClipboard = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      await Clipboard.setStringAsync(url);
+      Alert.alert('Success', 'Link copied to clipboard!');
+      logger.info('Share link copied to clipboard', { url });
+      return true;
+    } catch (err) {
+      logger.error('Failed to copy to clipboard', err);
+      Alert.alert('Error', 'Failed to copy link. Please try again.');
+      return false;
+    }
+  }, []);
+
+  /**
+   * Share to social media using native share sheet
+   */
+  const shareToSocial = useCallback(
+    async (message: string, url: string, title?: string): Promise<boolean> => {
+      try {
+        const result = await RNShare.share({
+          message,
+          url,
+          title: title || 'Alexandria Quiz',
+        });
+
+        if (result.action === RNShare.sharedAction) {
+          logger.info('Quiz shared via native sheet', {
+            activityType: result.activityType,
+          });
+          return true;
+        } else {
+          logger.info('Share dismissed');
+          return false;
+        }
+      } catch (err) {
+        logger.error('Failed to share', err);
+        Alert.alert('Error', 'Failed to share quiz. Please try again.');
+        return false;
+      }
+    },
+    []
+  );
+
+  /**
+   * Clear share data
+   */
+  const clearShareData = useCallback(() => {
+    setShareData(null);
+    setError(null);
+    logger.info('Share data cleared');
+  }, []);
+
+  return {
+    shareData,
+    loading,
+    error,
+    generateShareLink,
+    copyToClipboard,
+    shareToSocial,
+    clearShareData,
+  };
+};
+
+export default useQuizSharing;

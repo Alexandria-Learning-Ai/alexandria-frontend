@@ -1,0 +1,419 @@
+/**
+ * FillInBlankQuestion.tsx
+ *
+ * Displays fill-in-the-blank style questions with multiple input fields.
+ * Parses question text to identify blanks (marked as _____) and replaces them with TextInput fields.
+ * Supports hints, answer validation, and showing correct answers after submission.
+ *
+ * Features:
+ * - Multiple blanks per question
+ * - Optional hints for each blank
+ * - Real-time input validation
+ * - Answer feedback (correct/incorrect)
+ * - Alexandria theme styling
+ */
+
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Animatable from 'react-native-animatable';
+import { FontAwesome5 } from '@expo/vector-icons';
+import logger from '../../utils/logger';
+import type { ThemeColors } from '../../types';
+
+export interface BlankData {
+  position: number; // Position in the question text (0-indexed)
+  hint?: string; // Optional hint for the blank
+  answer?: string; // The correct answer for this blank
+}
+
+export interface FillInBlankQuestionProps {
+  questionText: string; // Question text with _____ placeholders
+  blanks: BlankData[]; // Array of blank definitions
+  correctAnswers: string[]; // Array of correct answers (in order of blanks)
+  userAnswers?: string[]; // User's current answers
+  onAnswerChange: (answers: string[]) => void; // Callback when any answer changes
+  showResults?: boolean; // Whether to show correct/incorrect feedback
+  themeColors: ThemeColors; // Alexandria theme colors
+  isSubmitted?: boolean; // Whether the question has been submitted
+}
+
+/**
+ * Parse question text and split it into segments
+ * Returns array of { text, isBlank } objects
+ */
+const parseQuestionSegments = (questionText: string) => {
+  const segments: Array<{ text: string; isBlank: boolean; blankIndex?: number }> = [];
+  const parts = questionText.split('_____');
+
+  let blankIndex = 0;
+  parts.forEach((part, index) => {
+    if (part) {
+      segments.push({ text: part, isBlank: false });
+    }
+    // Add blank placeholder (except after last part)
+    if (index < parts.length - 1) {
+      segments.push({ text: '', isBlank: true, blankIndex });
+      blankIndex++;
+    }
+  });
+
+  return segments;
+};
+
+/**
+ * Check if an answer is correct (case-insensitive, trimmed)
+ */
+const isAnswerCorrect = (userAnswer: string, correctAnswer: string): boolean => {
+  return userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+};
+
+export const FillInBlankQuestion: React.FC<FillInBlankQuestionProps> = ({
+  questionText,
+  blanks,
+  correctAnswers,
+  userAnswers = [],
+  onAnswerChange,
+  showResults = false,
+  themeColors,
+  isSubmitted = false,
+}) => {
+  const [showHints, setShowHints] = useState<boolean[]>(blanks.map(() => false));
+
+  // Parse question into segments
+  const questionSegments = useMemo(() => {
+    return parseQuestionSegments(questionText);
+  }, [questionText]);
+
+  /**
+   * Handle input change for a specific blank
+   */
+  const handleInputChange = (blankIndex: number, value: string) => {
+    const newAnswers = [...userAnswers];
+    newAnswers[blankIndex] = value;
+    onAnswerChange(newAnswers);
+  };
+
+  /**
+   * Toggle hint visibility for a specific blank
+   */
+  const toggleHint = (blankIndex: number) => {
+    const newShowHints = [...showHints];
+    newShowHints[blankIndex] = !newShowHints[blankIndex];
+    setShowHints(newShowHints);
+  };
+
+  /**
+   * Render a single blank input field
+   */
+  const renderBlankInput = (blankIndex: number) => {
+    const blank = blanks[blankIndex];
+    const userAnswer = userAnswers[blankIndex] || '';
+    const correctAnswer = correctAnswers[blankIndex] || '';
+    const isCorrect = isAnswerCorrect(userAnswer, correctAnswer);
+    const showingHint = showHints[blankIndex];
+
+    return (
+      <View key={blankIndex} style={styles.blankContainer}>
+        <View style={styles.blankInputWrapper}>
+          <TextInput
+            style={[
+              styles.blankInput,
+              {
+                borderColor: showResults
+                  ? isCorrect
+                    ? themeColors.success
+                    : themeColors.error
+                  : themeColors.alexandriaGold,
+                backgroundColor: showResults
+                  ? isCorrect
+                    ? themeColors.success + '10'
+                    : themeColors.error + '10'
+                  : themeColors.surface,
+                color: themeColors.text,
+              },
+            ]}
+            value={userAnswer}
+            onChangeText={(text) => handleInputChange(blankIndex, text)}
+            placeholder="Enter answer..."
+            placeholderTextColor={themeColors.textTertiary}
+            editable={!isSubmitted}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          {/* Show feedback icon after submission */}
+          {showResults && (
+            <View style={styles.feedbackIconContainer}>
+              <FontAwesome5
+                name={isCorrect ? 'check-circle' : 'times-circle'}
+                size={20}
+                color={isCorrect ? themeColors.success : themeColors.error}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Hint button */}
+        {blank?.hint && (
+          <TouchableOpacity
+            style={styles.hintButton}
+            onPress={() => toggleHint(blankIndex)}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5
+              name="lightbulb"
+              size={16}
+              color={themeColors.alexandriaGold}
+              solid={showingHint}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Hint text */}
+        {blank?.hint && showingHint && (
+          <Animatable.View
+            animation="fadeInDown"
+            duration={300}
+            style={[
+              styles.hintContainer,
+              {
+                backgroundColor: themeColors.alexandriaGold + '20',
+                borderColor: themeColors.alexandriaGold,
+              },
+            ]}
+          >
+            <FontAwesome5
+              name="lightbulb"
+              size={14}
+              color={themeColors.alexandriaGold}
+              style={styles.hintIcon}
+            />
+            <Text style={[styles.hintText, { color: themeColors.text }]}>
+              {blank.hint}
+            </Text>
+          </Animatable.View>
+        )}
+
+        {/* Show correct answer if wrong */}
+        {showResults && !isCorrect && (
+          <Animatable.View
+            animation="fadeIn"
+            duration={400}
+            style={[
+              styles.correctAnswerContainer,
+              {
+                backgroundColor: themeColors.success + '15',
+                borderColor: themeColors.success,
+              },
+            ]}
+          >
+            <Text style={[styles.correctAnswerLabel, { color: themeColors.textSecondary }]}>
+              Correct answer:{' '}
+              <Text style={[styles.correctAnswerText, { color: themeColors.success }]}>
+                {correctAnswer}
+              </Text>
+            </Text>
+          </Animatable.View>
+        )}
+      </View>
+    );
+  };
+
+  /**
+   * Render question text with blanks
+   */
+  const renderQuestionWithBlanks = () => {
+    return (
+      <View style={styles.questionTextContainer}>
+        {questionSegments.map((segment, index) => {
+          if (segment.isBlank) {
+            return renderBlankInput(segment.blankIndex!);
+          }
+          return (
+            <Text
+              key={index}
+              style={[styles.questionTextSegment, { color: themeColors.text }]}
+            >
+              {segment.text}
+            </Text>
+          );
+        })}
+      </View>
+    );
+  };
+
+  return (
+    <Animatable.View animation="fadeInUp" delay={200}>
+      <LinearGradient
+        colors={[themeColors.surface, themeColors.surfaceSecondary]}
+        style={[
+          styles.container,
+          {
+            borderColor: themeColors.border,
+            shadowColor: themeColors.shadow,
+          },
+        ]}
+      >
+        {/* Question Type Header */}
+        <View style={styles.header}>
+          <LinearGradient
+            colors={[themeColors.alexandriaGold, themeColors.alexandriaBronze]}
+            style={styles.typeIcon}
+          >
+            <FontAwesome5 name="pen-fancy" size={18} color="#FFFFFF" />
+          </LinearGradient>
+          <Text style={[styles.typeLabel, { color: themeColors.textSecondary }]}>
+            Fill in the Blanks
+          </Text>
+        </View>
+
+        {/* Question text with blank inputs */}
+        {renderQuestionWithBlanks()}
+
+        {/* Instructions */}
+        {!isSubmitted && (
+          <View style={styles.instructionsContainer}>
+            <FontAwesome5
+              name="info-circle"
+              size={14}
+              color={themeColors.alexandriaGold}
+              style={styles.instructionIcon}
+            />
+            <Text style={[styles.instructionText, { color: themeColors.textSecondary }]}>
+              Fill in all blanks to complete the question
+            </Text>
+          </View>
+        )}
+      </LinearGradient>
+    </Animatable.View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: 20,
+    padding: 24,
+    marginVertical: 16,
+    marginHorizontal: 4,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  typeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  typeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  questionTextContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  questionTextSegment: {
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 28,
+    letterSpacing: 0.3,
+  },
+  blankContainer: {
+    marginVertical: 8,
+    marginHorizontal: 4,
+  },
+  blankInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  blankInput: {
+    minWidth: 120,
+    maxWidth: 200,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  feedbackIconContainer: {
+    marginLeft: 8,
+  },
+  hintButton: {
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignSelf: 'flex-start',
+  },
+  hintContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  hintIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  hintText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  correctAnswerContainer: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  correctAnswerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  correctAnswerText: {
+    fontWeight: '700',
+  },
+  instructionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  instructionIcon: {
+    marginRight: 8,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+});
+
+export default React.memo(FillInBlankQuestion);

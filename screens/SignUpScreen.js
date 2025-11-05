@@ -26,9 +26,6 @@ import logger from '../utils/logger';
 
 export default function SignUpScreen({ navigation }) {
   const { t, i18n } = useTranslation();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language || 'en');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -125,68 +122,14 @@ export default function SignUpScreen({ navigation }) {
     ]).start();
   }, []);
 
-  // ✅ UPDATED: Modified handleSignUp to redirect to Profile screen
-  const handleSignUp = async () => {
-    setIsLoading(true);
+  // Navigate to Login screen for existing users
+  const handleLogin = () => {
+    navigation.navigate('Login');
+  };
 
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      const user = userCredential.user;
-      
-      // ✅ NEW: Mark that this user needs to complete their profile
-      await AsyncStorage.setItem(`profileCompleted_${user.uid}`, 'false');
-      
-      // ✅ NEW: Store user's language preference using consistent keys
-      await AsyncStorage.setItem(`userLanguage_${user.uid}`, currentLanguage);
-      await AsyncStorage.setItem(`selectedLanguage_${user.uid}`, currentLanguage);
-      await AsyncStorage.setItem('selectedLanguage', currentLanguage);
-      
-      Alert.alert(
-        t('auth.accountCreated'), 
-        t('auth.welcomeToAlexandria'),
-        [
-          {
-            text: t('auth.continue'),
-            onPress: () => {
-              // ✅ NEW: Navigate to Terms screen for new users
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'TermsAndAgreement' }]
-              });
-            }
-          }
-        ]
-      );
-      
-    } catch (error) {
-      let errorMessage = t('auth.signUpFailed');
-      
-      // Provide more specific error messages
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "This email is already registered. Try logging in instead.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "Password should be at least 6 characters.";
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = "Please enter a valid email address.";
-      }
-      
-      Alert.alert(t('auth.signUpFailedTitle'), errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+  // Navigate to ProfileSetup for new users
+  const handleSignUp = () => {
+    navigation.navigate('ProfileSetup');
   };
 
   const handleBackPress = () => {
@@ -264,69 +207,42 @@ export default function SignUpScreen({ navigation }) {
               </Animated.View>
             </View>
 
-            {/* Form */}
+            {/* Welcome Options */}
             <Animated.View style={[styles.formContainer, {
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }]
             }]}>
-              {/* Email */}
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <FontAwesome5 name="envelope" size={16} color="#CBD5E0" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder={t('auth.enterYourEmail')}
-                    placeholderTextColor="#CBD5E0"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
-                </View>
-              </View>
-
-              {/* Password */}
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <FontAwesome5 name="lock" size={16} color="#CBD5E0" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder={t('auth.createPassword')}
-                    placeholderTextColor="#CBD5E0"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-
-              {/* Sign Up Button */}
+              {/* Login Button (Primary) */}
               <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
                 <TouchableOpacity
-                  style={[styles.loginButton, isLoading && styles.buttonDisabled]}
-                  onPress={handleSignUp}
-                  disabled={isLoading}
+                  style={styles.loginButton}
+                  onPress={handleLogin}
                   activeOpacity={0.8}
                 >
                   <LinearGradient colors={['#D4AF37', '#B8941F']} style={styles.buttonGradient}>
-                    {isLoading ? (
-                      <Text style={styles.buttonText}>{t('auth.creating')}</Text>
-                    ) : (
-                      <>
-                        <FontAwesome5 name="user-plus" size={16} color="#1A2C5B" />
-                        <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
-                      </>
-                    )}
+                    <FontAwesome5 name="sign-in-alt" size={16} color="#1A2C5B" />
+                    <Text style={styles.buttonText}>I have an account - Log In</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </Animated.View>
 
-              {/* Link to Login */}
-              <TouchableOpacity style={styles.linkContainer} onPress={() => navigation.navigate('Login')} activeOpacity={0.7}>
-                <Text style={styles.linkText}>
-                  {t('auth.alreadyHaveAccount')}
-                  <Text style={styles.linkHighlight}> {t('auth.signIn')}</Text>
-                </Text>
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Sign Up Button (Secondary) */}
+              <TouchableOpacity
+                style={styles.signUpButton}
+                onPress={handleSignUp}
+                activeOpacity={0.8}
+              >
+                <View style={styles.signUpButtonContent}>
+                  <FontAwesome5 name="user-plus" size={16} color="#D4AF37" />
+                  <Text style={styles.signUpButtonText}>Create New Account</Text>
+                </View>
               </TouchableOpacity>
             </Animated.View>
           </ScrollView>
@@ -476,6 +392,42 @@ const styles = StyleSheet.create({
   },
   linkHighlight: {
     color: '#D4AF37',
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(248, 244, 227, 0.2)',
+  },
+  dividerText: {
+    color: '#CBD5E0',
+    fontSize: 14,
+    fontWeight: '500',
+    marginHorizontal: 15,
+  },
+  signUpButton: {
+    backgroundColor: 'rgba(248, 244, 227, 0.1)',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#D4AF37',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    marginTop: 10,
+  },
+  signUpButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  signUpButtonText: {
+    color: '#F8F4E3',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

@@ -105,6 +105,11 @@ export default function ProfileViewScreen({ navigation }) {
                     if (studentProfile) {
                         setProfile(studentProfile);
                         logger.info('👁️ ProfileViewScreen: Profile set in state');
+                        logger.info('🔍 ProfileViewScreen: Year data loaded:', {
+                            year: studentProfile.year,
+                            educationLevel: studentProfile.educationLevel,
+                            semester: studentProfile.semester
+                        });
                         
                         // Load personalized recommendations
                         try {
@@ -125,7 +130,7 @@ export default function ProfileViewScreen({ navigation }) {
                         'You need to create your student profile first. Would you like to set it up now?',
                         [
                             { text: 'Later', style: 'cancel', onPress: () => NavigationHelper.safeGoBack(navigation) },
-                            { text: 'Set Up Profile', onPress: () => navigation.navigate('ProfileScreen') }
+                            { text: 'Set Up Profile', onPress: () => navigation.navigate('Profile') }
                         ]
                     );
                 }
@@ -172,11 +177,8 @@ export default function ProfileViewScreen({ navigation }) {
                 }}
             />
             <Text style={styles.headerTitle}>Your Profile</Text>
-            <TouchableOpacity 
-                onPress={() => navigation.navigate('ProfileScreen', { 
-                    editMode: true, 
-                    existingProfile: profile 
-                })} 
+            <TouchableOpacity
+                onPress={() => navigation.navigate('ProfileEditSelection')} 
                 style={styles.editButton}
             >
                 <FontAwesome5 name="edit" size={18} color="#D4AF37" />

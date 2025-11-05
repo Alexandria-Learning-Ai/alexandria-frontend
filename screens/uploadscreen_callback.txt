@@ -1,0 +1,37 @@
+    const {
+        files,
+        setFiles,
+        pickFromGallery,
+        pickDocument,
+        handleSelectFiles,
+        removeFile,
+        getFileIcon
+    } = useFileUpload(t, async (newFiles) => {
+        // Analyze files after mobile selection (for quiz purpose)
+        if (uploadPurpose === 'quiz' && newFiles.length > 0) {
+            if (!auth.currentUser?.uid) {
+                Alert.alert(
+                    'Sign In Required',
+                    'Sign in to generate personalized quizzes and track your progress',
+                    [
+                        { text: 'Not Now', style: 'cancel' },
+                        { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                    ]
+                );
+                return;
+            }
+
+            logger.info('🔍 Analyzing file for Smart Defaults (mobile)...', {
+                filename: newFiles[0].name,
+                purpose: uploadPurpose
+            });
+
+            try {
+                await analyzeFile(newFiles[0], auth.currentUser.uid);
+                setShowQuickQuiz(true);
+                logger.info('✅ Smart Defaults analysis complete');
+            } catch (error) {
+                logger.error('❌ Smart Defaults analysis failed:', error);
+            }
+        }
+    });

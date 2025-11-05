@@ -3,17 +3,20 @@
  *
  * Displays individual audio track with status indicator and play controls.
  * Supports multiple states: complete, processing, queued, failed.
+ * FIX Issue 3: Added debouncing and loading state to prevent multiple simultaneous playback
  */
 
-import React from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { AudioTrack, TrackListItemProps } from '../../types/progressiveAudio.types';
+import logger from '../../utils/logger';
 
 // Alexandria theme colors
 const themeColors = {
@@ -31,9 +34,91 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
   track,
   onPlay,
   onRetry,
+  onEditTitle,
   isPlaying,
   isDisabled = false,
 }) => {
+  // FIX Issue 3: Add loading state and debounce protection
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const lastTapTimeRef = useRef<number>(0);
+  const DEBOUNCE_MS = 1000; // 1 second debounce
+
+  /**
+   * Handle edit title action
+   */
+  const handleEditTitle = useCallback(() => {
+    if (!onEditTitle) return;
+
+    Alert.prompt(
+      'Edit Track Title',
+      'Enter a new title for this track:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Save',
+          onPress: (newTitle) => {
+            if (newTitle && newTitle.trim()) {
+              onEditTitle(track.id, newTitle.trim());
+              logger.info('✏️ Track title edited', {
+                trackId: track.id,
+                oldTitle: track.title,
+                newTitle: newTitle.trim(),
+              });
+            }
+          },
+        },
+      ],
+      'plain-text',
+      track.title
+    );
+  }, [track.id, track.title, onEditTitle]);
+
+  /**
+   * Debounced play handler to prevent multiple simultaneous playback
+   */
+  const handlePlayPress = useCallback(async () => {
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapTimeRef.current;
+
+    // Debounce: Ignore rapid taps within 1 second
+    if (timeSinceLastTap < DEBOUNCE_MS) {
+      logger.warn('⚠️ Play button tap ignored - too soon after previous tap', {
+        timeSinceLastTap,
+        trackId: track.id,
+      });
+      return;
+    }
+
+    // Already loading - ignore tap
+    if (isLoadingAudio) {
+      logger.warn('⚠️ Play button tap ignored - audio already loading', {
+        trackId: track.id,
+      });
+      return;
+    }
+
+    lastTapTimeRef.current = now;
+    setIsLoadingAudio(true);
+
+    try {
+      logger.info('🎵 Play button pressed', {
+        trackId: track.id,
+        trackTitle: track.title,
+      });
+      await onPlay();
+    } catch (error) {
+      logger.error('❌ Error playing track', { error, trackId: track.id });
+    } finally {
+      // Keep loading state for a brief moment to prevent rapid re-taps
+      setTimeout(() => {
+        setIsLoadingAudio(false);
+      }, 500);
+    }
+  }, [track.id, track.title, onPlay, isLoadingAudio]);
+
   /**
    * Format duration from seconds to MM:SS
    */
@@ -71,8 +156,8 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
         return (
           <TouchableOpacity
             style={[styles.trackCard, styles.completeTrack]}
-            onPress={onPlay}
-            disabled={isDisabled}
+            onPress={handlePlayPress}
+            disabled={isDisabled || isLoadingAudio}
             activeOpacity={0.7}
           >
             <View style={styles.trackHeader}>
@@ -81,9 +166,20 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                   <Text style={styles.trackNumberText}>{track.track_num}</Text>
                 </View>
                 <View style={styles.trackTitleContainer}>
-                  <Text style={styles.trackTitle} numberOfLines={2}>
-                    {track.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.trackTitle} numberOfLines={2}>
+                      {track.title}
+                    </Text>
+                    {onEditTitle && (
+                      <TouchableOpacity
+                        onPress={handleEditTitle}
+                        style={styles.editButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Text style={styles.editIcon}>✏️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   <Text style={styles.trackDuration}>
                     {formatDuration(track.duration)}
                     {track.file_size && ` • ${formatFileSize(track.file_size)}`}
@@ -91,7 +187,11 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                 </View>
               </View>
               <View style={styles.playButtonContainer}>
-                {isPlaying ? (
+                {isLoadingAudio ? (
+                  <View style={[styles.playButton, styles.loadingButton]}>
+                    <ActivityIndicator size="small" color="#1A2C5B" />
+                  </View>
+                ) : isPlaying ? (
                   <View style={[styles.playButton, styles.nowPlaying]}>
                     <Text style={styles.playIcon}>❚❚</Text>
                   </View>
@@ -104,7 +204,9 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
             </View>
             <View style={styles.statusIndicator}>
               <Text style={styles.completeIcon}>✅</Text>
-              <Text style={styles.completeText}>Ready to play</Text>
+              <Text style={styles.completeText}>
+                {isLoadingAudio ? 'Loading...' : 'Ready to play'}
+              </Text>
             </View>
           </TouchableOpacity>
         );
@@ -118,9 +220,20 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                   <Text style={styles.trackNumberText}>{track.track_num}</Text>
                 </View>
                 <View style={styles.trackTitleContainer}>
-                  <Text style={styles.trackTitle} numberOfLines={2}>
-                    {track.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.trackTitle} numberOfLines={2}>
+                      {track.title}
+                    </Text>
+                    {onEditTitle && (
+                      <TouchableOpacity
+                        onPress={handleEditTitle}
+                        style={styles.editButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Text style={styles.editIcon}>✏️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   <Text style={styles.trackDuration}>
                     ~{formatDuration(getEstimatedDuration(track.character_count))} estimated
                   </Text>
@@ -155,9 +268,20 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                   <Text style={styles.trackNumberText}>{track.track_num}</Text>
                 </View>
                 <View style={styles.trackTitleContainer}>
-                  <Text style={[styles.trackTitle, styles.queuedTitle]} numberOfLines={2}>
-                    {track.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text style={[styles.trackTitle, styles.queuedTitle]} numberOfLines={2}>
+                      {track.title}
+                    </Text>
+                    {onEditTitle && (
+                      <TouchableOpacity
+                        onPress={handleEditTitle}
+                        style={styles.editButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Text style={styles.editIcon}>✏️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   <Text style={styles.trackDuration}>
                     ~{formatDuration(getEstimatedDuration(track.character_count))} estimated
                   </Text>
@@ -182,9 +306,20 @@ const TrackListItem: React.FC<TrackListItemProps> = ({
                   <Text style={styles.trackNumberText}>{track.track_num}</Text>
                 </View>
                 <View style={styles.trackTitleContainer}>
-                  <Text style={styles.trackTitle} numberOfLines={2}>
-                    {track.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.trackTitle} numberOfLines={2}>
+                      {track.title}
+                    </Text>
+                    {onEditTitle && (
+                      <TouchableOpacity
+                        onPress={handleEditTitle}
+                        style={styles.editButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Text style={styles.editIcon}>✏️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   {track.error_message && (
                     <Text style={styles.errorMessage} numberOfLines={2}>
                       {track.error_message}
@@ -287,11 +422,24 @@ const styles = StyleSheet.create({
   trackTitleContainer: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   trackTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: themeColors.text,
     marginBottom: 4,
+    flex: 1,
+  },
+  editButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  editIcon: {
+    fontSize: 16,
   },
   queuedTitle: {
     color: themeColors.textSecondary,
@@ -313,6 +461,10 @@ const styles = StyleSheet.create({
   },
   nowPlaying: {
     backgroundColor: themeColors.success,
+  },
+  loadingButton: {
+    backgroundColor: themeColors.textSecondary,
+    opacity: 0.7,
   },
   playIcon: {
     color: '#1A2C5B',
@@ -406,6 +558,7 @@ const styles = StyleSheet.create({
 });
 
 // Memoize component to prevent unnecessary re-renders
+// Note: Loading state is internal, no need to include in memo comparison
 export default React.memo(TrackListItem, (prevProps, nextProps) => {
   return (
     prevProps.track.id === nextProps.track.id &&

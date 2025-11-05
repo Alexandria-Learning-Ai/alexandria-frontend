@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Alert, AppState } from 'react-native';
+import { Linking, Alert, AppState, View, Text, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import 'react-native-get-random-values';
 import AppNavigator from './navigation/AppNavigator';
 import './i18n';
+import logger from './utils/logger';
 
 // ✅ ULTRA AGGRESSIVE: Global property protection for 'th' errors
 if (typeof global !== 'undefined' && !global.__thProtectionInstalled) {
@@ -21,15 +22,27 @@ if (typeof global !== 'undefined' && !global.__thProtectionInstalled) {
     };
     
     global.__thProtectionInstalled = true;
-    console.log('🛡️ Global th property protection installed');
+    logger.info('🛡️ Global th property protection installed');
   } catch (error) {
-    console.warn('Could not install th property protection:', error);
+    logger.warn('Could not install th property protection:', error);
   }
 }
-import IntelligentNotificationSystem from './utils/IntelligentNotificationSystem';
+import UnifiedNotificationService from './utils/UnifiedNotificationService';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { OnboardingProvider } from './contexts/OnboardingContext';
 import { auth } from './firebaseConfig';
 import TranslationErrorBoundary from './components/TranslationErrorBoundary';
+import { initializeSentry, ErrorBoundary as SentryErrorBoundary, setUser as setSentryUser, clearUser as clearSentryUser } from './utils/SentryConfig';
+import PerformanceMonitoring from './utils/PerformanceMonitoring';
+import { QueryClientProvider } from '@tanstack/react-query';
+import queryClient, { setupNetworkMonitoring, cleanupNetworkMonitoring } from './config/queryClient';
+import SmartQuizRecommendationService from './services/SmartQuizRecommendationService';
+import { ToastProvider } from './hooks/useToast';
+
+// Initialize monitoring systems
+initializeSentry();
+PerformanceMonitoring.setPerformanceCollectionEnabled(true);
+logger.info('🔍 Monitoring systems initialized (Sentry + Firebase Performance)');
 
 export default function App() {
   const appNavigatorRef = useRef(null);
@@ -39,36 +52,57 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [notificationsInitialized, setNotificationsInitialized] = useState(false);
 
-  // ✅ Initialize notifications when app starts
+  // ✅ Initialize notifications and React Query when app starts
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        console.log('🚀 Initializing Alexandria app...');
-        
-        // Initialize intelligent notification system
-        const notificationResult = await IntelligentNotificationSystem.initialize();
-        const notificationSuccess = notificationResult.status === 'granted';
+        logger.info('🚀 Initializing Alexandria app...');
+
+        // Initialize unified notification system
+        const notificationSuccess = await UnifiedNotificationService.initialize();
         setNotificationsInitialized(notificationSuccess);
-        
+
         if (notificationSuccess) {
-          console.log('✅ Intelligent notification system initialized successfully');
+          logger.info('✅ Intelligent notification system initialized successfully');
         } else {
-          console.warn('⚠️ Notifications initialization failed, app will continue without notifications');
+          logger.warn('⚠️ Notifications initialization failed, app will continue without notifications');
         }
-        
+
+        // Initialize React Query network monitoring
+        setupNetworkMonitoring();
+        logger.info('✅ React Query network monitoring initialized');
+
       } catch (error) {
-        console.error('❌ App initialization error:', error);
+        logger.error('❌ App initialization error:', error);
         // Continue without notifications if initialization fails
         setNotificationsInitialized(false);
       }
     };
 
     initializeApp();
+
+    // Cleanup on unmount
+    return () => {
+      cleanupNetworkMonitoring();
+    };
   }, []);
 
   // Listen for user authentication state
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(setUser);
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+      setUser(firebaseUser);
+
+      // Update Sentry user context for error tracking
+      if (firebaseUser) {
+        setSentryUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          username: firebaseUser.displayName || firebaseUser.email
+        });
+      } else {
+        clearSentryUser();
+      }
+    });
     return unsubscribe; // Unsubscribe on unmount
   }, []);
 
@@ -92,11 +126,11 @@ export default function App() {
     const setupBackgroundMaintenance = async () => {
       if (user && notificationsInitialized) {
         try {
-          console.log('🧠 Setting up intelligent notifications for user:', user.uid);
+          logger.info('🧠 Setting up intelligent notifications for user:', user.uid);
           // Schedule personalized notifications
-          await IntelligentNotificationSystem.schedulePersonalizedNotifications(user.uid, 'app_startup');
+          await UnifiedNotificationService.scheduleIntelligentNotifications(user.uid, 'app_startup');
         } catch (error) {
-          console.error('❌ Intelligent notifications error:', error);
+          logger.error('❌ Intelligent notifications error:', error);
           // Don't crash the app if notifications fail
         }
       }
@@ -118,23 +152,22 @@ export default function App() {
     if (isNavReady && appNavigatorRef.current?.navigate) {
       appNavigatorRef.current.navigate(screenName, params);
     } else {
-      console.warn('Navigation not ready. Storing for later.');
+      logger.warn('Navigation not ready. Storing for later.');
       setPendingUrl(screenName); // fallback if needed
     }
   };
 
   const handleSmartQuizNotification = async (notificationData) => {
     if (!user || !isNavReady) {
-      console.warn('User not authenticated or navigation not ready for smart quiz');
+      logger.warn('User not authenticated or navigation not ready for smart quiz');
       return;
     }
 
     try {
-      console.log('🎯 Handling smart quiz notification:', notificationData);
+      logger.info('🎯 Handling smart quiz notification:', notificationData);
       
       if (notificationData.type === 'personalized_quiz' && notificationData.quizId) {
         // Load the recommended quiz from SmartQuizRecommendationService
-        const SmartQuizRecommendationService = (await import('./services/SmartQuizRecommendationService')).default;
         const quiz = await SmartQuizRecommendationService.getRecommendedQuiz(notificationData.quizId);
         
         if (quiz) {
@@ -187,7 +220,7 @@ export default function App() {
         navigateToScreen('Home');
       }
     } catch (error) {
-      console.error('Error handling smart quiz notification:', error);
+      logger.error('Error handling smart quiz notification:', error);
       // Fallback to home screen
       navigateToScreen('Home');
     }
@@ -195,7 +228,7 @@ export default function App() {
 
   const processDeepLink = async (url) => {
     if (!url) return;
-    console.log('Processing deep link:', url);
+    logger.info('Processing deep link:', url);
 
     // Handle subscription deep links
     if (url.includes('/subscription')) {
@@ -226,16 +259,15 @@ export default function App() {
       const parts = url.split(/quiz\/|:\/\/quiz\//);
       return parts[1]?.split(/[?#]/)[0] || null;
     } catch (e) {
-      console.error('Error extracting quiz ID:', e);
+      logger.error('Error extracting quiz ID:', e);
       return null;
     }
   };
 
   const handleSmartQuizDeepLink = async (quizId) => {
     try {
-      console.log('🎯 Handling smart quiz deep link:', quizId);
-      
-      const SmartQuizRecommendationService = (await import('./services/SmartQuizRecommendationService')).default;
+      logger.info('🎯 Handling smart quiz deep link:', quizId);
+
       const quiz = await SmartQuizRecommendationService.getRecommendedQuiz(quizId);
       
       if (quiz) {
@@ -266,7 +298,7 @@ export default function App() {
         );
       }
     } catch (error) {
-      console.error('Failed to load smart quiz:', error);
+      logger.error('Failed to load smart quiz:', error);
       Alert.alert('Error', 'Could not load the recommended quiz.');
       resetToHome();
     }
@@ -303,7 +335,7 @@ export default function App() {
         );
       }
     } catch (error) {
-      console.error('Failed to load quiz:', error);
+      logger.error('Failed to load quiz:', error);
       Alert.alert('Error', 'Could not load quiz.');
       resetToHome();
     }
@@ -326,10 +358,10 @@ export default function App() {
 
           // Run intelligent notifications when app becomes active
           if (user && notificationsInitialized) {
-            await IntelligentNotificationSystem.schedulePersonalizedNotifications(user.uid, 'app_foreground');
+            await UnifiedNotificationService.scheduleIntelligentNotifications(user.uid, 'app_foreground');
           }
         } catch (error) {
-          console.error('Error handling app state change:', error);
+          logger.error('Error handling app state change:', error);
         }
       }
       appState.current = nextAppState;
@@ -342,7 +374,7 @@ export default function App() {
   }, [isNavReady, user, notificationsInitialized]);
 
   const handleNavigationReady = async () => {
-    console.log('✅ Navigation is ready');
+    logger.info('✅ Navigation is ready');
     setIsNavReady(true);
 
     // Check for pending deep link after nav is ready
@@ -355,18 +387,38 @@ export default function App() {
         setPendingUrl(null);
       }
     } catch (error) {
-      console.error('Error handling initial URL:', error);
+      logger.error('Error handling initial URL:', error);
     }
   };
 
   return (
-    <TranslationErrorBoundary>
-      <LanguageProvider>
-        <AppNavigator
-          ref={appNavigatorRef}
-          onReady={handleNavigationReady}
-        />
-      </LanguageProvider>
-    </TranslationErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <SentryErrorBoundary
+        fallback={({ error, resetError }) => (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
+              Oops! Something went wrong
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', marginBottom: 20, textAlign: 'center' }}>
+              {error?.message || 'An unexpected error occurred'}
+            </Text>
+            <Button title="Try Again" onPress={resetError} />
+          </View>
+        )}
+      >
+        <TranslationErrorBoundary>
+          <LanguageProvider>
+            <OnboardingProvider>
+              <ToastProvider>
+                <AppNavigator
+                  ref={appNavigatorRef}
+                  onReady={handleNavigationReady}
+                />
+              </ToastProvider>
+            </OnboardingProvider>
+          </LanguageProvider>
+        </TranslationErrorBoundary>
+      </SentryErrorBoundary>
+    </QueryClientProvider>
   );
 }

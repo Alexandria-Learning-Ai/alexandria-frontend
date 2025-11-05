@@ -46,6 +46,7 @@ interface Styles {
   studyMaterialsIcon: ViewStyle;
   scheduleExamIcon: ViewStyle;
   audioPlaylistsIcon: ViewStyle;
+  bookStudyIcon: ViewStyle;
   secondaryActionTitle: TextStyle;
   secondaryActionSubtitle: TextStyle;
   additionalFeaturesRow: ViewStyle;
@@ -65,7 +66,7 @@ const SmartInsightsButton: React.FC<{
   themeStyles: ThemeStyles;
   t: (key: string) => string;
 }> = ({ navigation, themeStyles, t }) => (
-  <Animatable.View animation="fadeInUp" delay={1500} style={styles.additionalFeature}>
+  <Animatable.View animation="fadeInUp" delay={1650} style={styles.additionalFeature}>
     <TouchableOpacity
       style={[styles.additionalFeatureButton, themeStyles.additionalFeatureButton]}
       onPress={async () => {
@@ -247,7 +248,7 @@ const MainActions: React.FC<MainActionsProps> = ({
         </Animatable.View>
       </View>
 
-      {/* Second Row: Schedule Exam & Empty Slot */}
+      {/* Second Row: Schedule Exam & Audio Playlists */}
       <View style={styles.symmetricalActionsRow}>
         <Animatable.View animation="slideInLeft" delay={1300} style={{ flex: 1 }}>
           <TouchableOpacity
@@ -290,11 +291,38 @@ const MainActions: React.FC<MainActionsProps> = ({
         </Animatable.View>
       </View>
 
+      {/* Third Row: Book Study Mode */}
+      <View style={styles.symmetricalActionsRow}>
+        <Animatable.View animation="slideInLeft" delay={1500} style={{ flex: 1 }}>
+          <TouchableOpacity
+            style={[styles.symmetricalActionCard, themeStyles.secondaryAction]}
+            onPress={() => navigation.navigate('MaterialLibrary')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.secondaryActionIcon, styles.bookStudyIcon]}>
+              <FontAwesome5 name="book-reader" size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.secondaryActionTitle, themeStyles.secondaryActionTitle]}>
+              Book Study
+            </Text>
+            <Text
+              style={[styles.secondaryActionSubtitle, themeStyles.secondaryActionSubtitle]}
+            >
+              Read and study materials
+            </Text>
+          </TouchableOpacity>
+        </Animatable.View>
+
+        <Animatable.View animation="slideInRight" delay={1600} style={{ flex: 1 }}>
+          {/* Empty slot for future feature */}
+        </Animatable.View>
+      </View>
+
       {/* Additional Features Row */}
       <View style={styles.additionalFeaturesRow}>
         <SmartInsightsButton navigation={navigation} themeStyles={themeStyles} t={t} />
 
-        <Animatable.View animation="fadeInUp" delay={1550} style={styles.additionalFeature}>
+        <Animatable.View animation="fadeInUp" delay={1700} style={styles.additionalFeature}>
           <TouchableOpacity
             style={[styles.additionalFeatureButton, themeStyles.additionalFeatureButton]}
             onPress={onShowFlashcardDashboard}
@@ -311,7 +339,7 @@ const MainActions: React.FC<MainActionsProps> = ({
           </TouchableOpacity>
         </Animatable.View>
 
-        <Animatable.View animation="fadeInUp" delay={1600} style={styles.additionalFeature}>
+        <Animatable.View animation="fadeInUp" delay={1750} style={styles.additionalFeature}>
           <TouchableOpacity
             style={[styles.additionalFeatureButton, themeStyles.additionalFeatureButton]}
             onPress={() => navigation.navigate('ExamListScreen')}
@@ -407,6 +435,9 @@ const styles = StyleSheet.create<Styles>({
   },
   audioPlaylistsIcon: {
     backgroundColor: '#D4AF37',
+  },
+  bookStudyIcon: {
+    backgroundColor: '#8B4513',
   },
   secondaryActionTitle: {
     fontSize: 16,

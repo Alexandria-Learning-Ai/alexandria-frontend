@@ -64,6 +64,7 @@ export interface TrackListItemProps {
   track: AudioTrack;
   onPlay: () => void;
   onRetry?: (trackId: string) => void;
+  onEditTitle?: (trackId: string, newTitle: string) => void;
   isPlaying: boolean;
   isDisabled?: boolean;
 }

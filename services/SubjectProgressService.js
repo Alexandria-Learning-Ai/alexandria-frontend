@@ -509,14 +509,15 @@ export class SubjectProgressService {
       
       // Recommend improvement for low-performing subjects
       balance.needsAttention.forEach(subject => {
-        if (subject.averageScore < 60 && !subject.isNeglected) {
+        const avgScore = subject.averageScore || 0;
+        if (avgScore < 60 && !subject.isNeglected) {
           recommendations.push({
             type: 'low_performance',
             priority: 'medium',
             subject: subject.name,
-            message: `🎯 Your ${subject.name} average is ${subject.averageScore.toFixed(0)}%. Focus practice could help improve this!`,
+            message: `🎯 Your ${subject.name} average is ${avgScore.toFixed(0)}%. Focus practice could help improve this!`,
             action: 'focus_practice',
-            subjectKey: Object.keys(balance.subjectDetails).find(key => 
+            subjectKey: Object.keys(balance.subjectDetails).find(key =>
               balance.subjectDetails[key].name === subject.name
             )
           });

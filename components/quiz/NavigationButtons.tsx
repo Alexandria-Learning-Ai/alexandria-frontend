@@ -81,7 +81,7 @@ export const NavigationButtons: React.FC<NavigationButtonsProps> = ({
           color={themeColors.text}
         />
         <Text style={[styles.navButtonText, { color: themeColors.text }]}>
-          {translate('quiz.previous') || 'Previous'}
+          {translate('quiz.previous') || 'Back'}
         </Text>
       </TouchableOpacity>
 
@@ -116,8 +116,8 @@ export const NavigationButtons: React.FC<NavigationButtonsProps> = ({
             />
             <Text style={[styles.submitButtonText, !canSubmit && { color: themeColors.textSecondary }]}>
               {isChallenge
-                ? translate('quiz.completeTrial') || 'Complete Trial'
-                : translate('quiz.submitWisdom') || 'Submit Wisdom'}
+                ? translate('quiz.completeTrial') || 'Complete Challenge'
+                : translate('quiz.submitWisdom') || 'See My Results'}
             </Text>
           </LinearGradient>
         </TouchableOpacity>

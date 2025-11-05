@@ -6,6 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import logger from '../utils/logger';
+import { BackendSyncService } from '../services/BackendSyncService';
 
 
 class OfflineManager {
@@ -311,9 +312,6 @@ class OfflineManager {
         title: data.title,
       });
 
-      // Dynamically import to avoid circular dependency
-      const { BackendSyncService } = await import('../services/BackendSyncService');
-
       // Prepare quiz data for backend
       const quizData = {
         id: data.id,
@@ -362,9 +360,6 @@ class OfflineManager {
         fields: Object.keys(data),
       });
 
-      // Dynamically import to avoid circular dependency
-      const { BackendSyncService } = await import('../services/BackendSyncService');
-
       // Sync to backend
       const result = await BackendSyncService.updateUserProfile(data);
 
@@ -387,9 +382,6 @@ class OfflineManager {
         flashcardSetId: data.flashcardSetId,
         cardsReviewed: data.cardsReviewed,
       });
-
-      // Dynamically import to avoid circular dependency
-      const { BackendSyncService } = await import('../services/BackendSyncService');
 
       // Sync to backend
       const result = await BackendSyncService.updateFlashcardProgress(data);
@@ -414,9 +406,6 @@ class OfflineManager {
         subject: data.subject,
         date: data.date,
       });
-
-      // Dynamically import to avoid circular dependency
-      const { BackendSyncService } = await import('../services/BackendSyncService');
 
       // Sync to backend
       const result = await BackendSyncService.updateExamSchedule(data);

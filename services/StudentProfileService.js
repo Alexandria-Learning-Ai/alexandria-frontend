@@ -23,10 +23,14 @@ export class StudentProfileService {
             notes: profileData.notes || ""
         };
 
-        // Handle year - convert to integer if string
+        // Handle year - backend expects integer, but we need to preserve display format
         if (profileData.year) {
+            // Extract numeric value for backend (required field)
             const yearMatch = profileData.year.toString().match(/\d+/);
             transformed.year = yearMatch ? parseInt(yearMatch[0], 10) : null;
+
+            // Keep the original format for frontend display as a separate field
+            transformed.year_display = profileData.year.toString();
         }
 
         // Handle semester
@@ -534,6 +538,37 @@ export class StudentProfileService {
         return [...new Set(goals)];
     }
 
+    // Helper function to reconstruct year display format from numeric year
+    static reconstructYearDisplay(numericYear, educationLevel) {
+        if (!numericYear) return '';
+
+        // Map numeric years to display formats based on education level
+        const yearMappings = {
+            'undergrad': {
+                1: '1st Year (Freshman)',
+                2: '2nd Year (Sophomore)',
+                3: '3rd Year (Junior)',
+                4: '4th Year (Senior)',
+                5: '5th Year+'
+            },
+            'graduate': {
+                1: '1st Year',
+                2: '2nd Year',
+                3: '3rd Year+'
+            },
+            'masters': {
+                1: '1st Year',
+                2: '2nd Year',
+                3: '3rd Year',
+                4: '4th Year',
+                5: '5th Year+'
+            }
+        };
+
+        const mapping = yearMappings[educationLevel];
+        return mapping ? mapping[numericYear] || `${numericYear}th Year` : `Year ${numericYear}`;
+    }
+
     // Transform backend profile data to frontend format
     static transformBackendToFrontend(backendProfile) {
         if (!backendProfile) return null;
@@ -555,6 +590,10 @@ export class StudentProfileService {
                        backendProfile.originalStudyGoals || 
                        backendProfile.original_study_goals ||
                        (Array.isArray(backendProfile.study_goals) ? backendProfile.study_goals.join(', ') : backendProfile.study_goals) || '',
+            year: backendProfile.year_display || this.reconstructYearDisplay(backendProfile.year, backendProfile.education_level) || '',
+            semester: backendProfile.semester || '',
+            program: backendProfile.program || '',
+            courses: backendProfile.courses || [],
             semesterSeason: backendProfile.semesterSeason || backendProfile.semester_season || '',
             semesterYear: backendProfile.semesterYear || backendProfile.semester_year || '',
             originalStudyGoals: backendProfile.originalStudyGoals || backendProfile.original_study_goals || '',

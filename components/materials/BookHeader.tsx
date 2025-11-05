@@ -1,26 +1,24 @@
 /**
- * BookHeader - Displays book cover and metadata
- *
- * Features:
- * - Cover image placeholder with gradient using thumbnail_color
- * - Title (large, bold typography)
- * - Author (muted secondary color)
- * - Metadata row (word count, chapter count with icons)
- * - Responsive sizing
- * - Alexandria theme styling
- *
- * @param title - Book title
- * @param author - Book author (optional)
- * @param thumbnailColor - Color for gradient cover placeholder
- * @param wordCount - Total word count
- * @param chapterCount - Total chapter count
+ * BookHeader - Displays book cover and metadata (final TypeScript-safe version)
+ * - Properly renders HTML description
+ * - Auto-refreshes image when URL changes
+ * - Type-safe fixes for LinearGradient + RenderHTML
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Image,
+  ColorValue,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { Colors } from '../../constants/Colors';
+import MetadataRow from './MetadataRow';
+import ExpandableText from './ExpandableText';
 
 interface BookHeaderProps {
   title: string;
@@ -32,6 +30,7 @@ interface BookHeaderProps {
   thumbnailColor: string;
   wordCount: number;
   chapterCount: number;
+  cover_image_url?: string;
 }
 
 const BookHeader: React.FC<BookHeaderProps> = ({
@@ -44,7 +43,14 @@ const BookHeader: React.FC<BookHeaderProps> = ({
   thumbnailColor,
   wordCount,
   chapterCount,
+  cover_image_url,
 }) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const imageFadeAnim = useRef(new Animated.Value(0)).current;
+
   const themeColors = useMemo(
     () => ({
       background: Colors.surface,
@@ -57,55 +63,132 @@ const BookHeader: React.FC<BookHeaderProps> = ({
     []
   );
 
-  // Create gradient colors from thumbnail color
-  const gradientColors = useMemo(() => {
+  // Fade-in animation on mount
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  // CRITICAL FIX: Reset image state when URL changes (allows retry after failed load)
+  useEffect(() => {
+    if (cover_image_url) {
+      setImageError(false);
+      setImageLoaded(false);
+    }
+  }, [cover_image_url]);
+
+  // Gradient colors (typed safely)
+  const gradientColors = useMemo<readonly [ColorValue, ColorValue, ColorValue]>(() => {
     const baseColor = thumbnailColor || Colors.primary;
     return [baseColor, `${baseColor}CC`, `${baseColor}99`];
   }, [thumbnailColor]);
 
-  // Format large numbers
-  const formatNumber = (num: number): string => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    } else if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
+  // Ensure cover_image_url is a full HTTPS URL (backend should send presigned URL)
+  const validCoverUrl = useMemo(() => {
+    if (!cover_image_url) return undefined;
+
+    // If already a valid presigned URL, use it as-is
+    if (cover_image_url.startsWith('https://')) {
+      return cover_image_url;
     }
-    return num.toString();
+
+    // Otherwise, construct a proper full S3 URL from key (fallback for legacy behavior)
+    return `https://alxndribucket.s3.us-east-2.amazonaws.com/${cover_image_url}`;
+  }, [cover_image_url]);
+
+  const handleImageLoad = () => {
+    console.log('🖼️ BookHeader: Image loaded successfully:', validCoverUrl);
+    setImageLoaded(true);
+    Animated.timing(imageFadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
   };
+
+  const handleImageError = () => {
+    console.log('🖼️ BookHeader: Image load failed:', validCoverUrl);
+    setImageError(true);
+  };
+
+  const shouldShowImage = !!validCoverUrl && !imageError;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🖼️ BookHeader state:', {
+      cover_image_url,
+      validCoverUrl,
+      imageLoaded,
+      imageError,
+      shouldShowImage,
+    });
+  }, [cover_image_url, validCoverUrl, imageLoaded, imageError, shouldShowImage]);
 
   return (
     <View style={styles.container}>
+      {/* COVER IMAGE */}
       <View style={styles.coverContainer}>
-        <LinearGradient
-          colors={gradientColors}
-          style={styles.coverGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <FontAwesome5 name="book" size={48} color={Colors.white} />
-        </LinearGradient>
+        {shouldShowImage ? (
+          <>
+            <Animated.View style={{ opacity: imageFadeAnim }}>
+              <Image
+                source={{ uri: validCoverUrl }}
+                style={styles.coverImage}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                resizeMode="cover"
+              />
+            </Animated.View>
+
+            {!imageLoaded && (
+              <Animated.View style={{ opacity: fadeAnim, position: 'absolute' }}>
+                <LinearGradient
+                  colors={gradientColors}
+                  style={styles.coverGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <FontAwesome5 name="book" size={48} color={Colors.white} />
+                </LinearGradient>
+              </Animated.View>
+            )}
+
+            {/* DEBUG: Show error indicator (remove after QA) */}
+            {imageError && (
+              <View style={styles.errorIndicator}>
+                <Text style={styles.errorText}>⚠️ Cover failed to load</Text>
+              </View>
+            )}
+          </>
+        ) : (
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <LinearGradient
+              colors={[...gradientColors]}
+              style={styles.coverGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <FontAwesome5 name="book" size={48} color={Colors.white} />
+            </LinearGradient>
+          </Animated.View>
+        )}
       </View>
 
+      {/* BOOK INFO */}
       <View style={styles.infoContainer}>
-        <Text
-          style={[styles.title, { color: themeColors.text }]}
-          numberOfLines={3}
-          ellipsizeMode="tail"
-        >
+        <Text style={[styles.title, { color: themeColors.text }]} numberOfLines={3}>
           {title}
         </Text>
 
         {author && (
-          <Text
-            style={[styles.author, { color: themeColors.textMuted }]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
+          <Text style={[styles.author, { color: themeColors.textMuted }]} numberOfLines={2}>
             {author}
           </Text>
         )}
 
-        {/* Publisher and Publication Date */}
         {(publisher || published_date) && (
           <View style={styles.publisherRow}>
             {publisher && (
@@ -124,59 +207,27 @@ const BookHeader: React.FC<BookHeaderProps> = ({
           </View>
         )}
 
-        {/* Category */}
-        {category && (
-          <View style={styles.categoryContainer}>
-            <FontAwesome5
-              name="tag"
-              size={12}
-              color={themeColors.accent}
-              style={styles.categoryIcon}
-            />
-            <Text style={[styles.categoryText, { color: themeColors.accent }]}>
-              {category}
-            </Text>
-          </View>
-        )}
-
-        {/* Description */}
+        {/* DESCRIPTION - Expandable with "See More" toggle */}
         {description && (
-          <Text
-            style={[styles.description, { color: themeColors.textSecondary }]}
-            numberOfLines={3}
-            ellipsizeMode="tail"
-          >
-            {description}
-          </Text>
+          <View style={styles.descriptionContainer}>
+            <ExpandableText
+              text={description}
+              numberOfLines={3}
+              renderAsHtml={true}
+              textStyle={{
+                fontSize: 14,
+                lineHeight: 21,
+                color: themeColors.textSecondary,
+              }}
+              linkStyle={{
+                color: themeColors.accent,
+              }}
+            />
+          </View>
         )}
 
-        <View style={styles.metadataRow}>
-          <View style={styles.metadataItem}>
-            <FontAwesome5
-              name="file-word"
-              size={16}
-              color={themeColors.textSecondary}
-              style={styles.metadataIcon}
-            />
-            <Text style={[styles.metadataText, { color: themeColors.textSecondary }]}>
-              {formatNumber(wordCount)} words
-            </Text>
-          </View>
-
-          <View style={styles.metadataSeparator} />
-
-          <View style={styles.metadataItem}>
-            <FontAwesome5
-              name="list"
-              size={16}
-              color={themeColors.textSecondary}
-              style={styles.metadataIcon}
-            />
-            <Text style={[styles.metadataText, { color: themeColors.textSecondary }]}>
-              {chapterCount} {chapterCount === 1 ? 'chapter' : 'chapters'}
-            </Text>
-          </View>
-        </View>
+        {/* METADATA ROW */}
+        <MetadataRow category={category} wordCount={wordCount} chapterCount={chapterCount} />
       </View>
     </View>
   );
@@ -205,10 +256,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  infoContainer: {
-    flex: 1,
-    justifyContent: 'flex-start',
+  coverImage: {
+    width: 100,
+    height: 140,
+    borderRadius: 12,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
+  infoContainer: { flex: 1 },
   title: {
     fontSize: 24,
     fontWeight: '700',
@@ -231,50 +289,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 18,
   },
-  categoryContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: Colors.primaryLight,
-    marginBottom: 8,
+  descriptionContainer: { marginBottom: 12 },
+  errorIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    right: 4,
+    backgroundColor: 'rgba(255, 59, 48, 0.9)',
+    borderRadius: 4,
+    padding: 4,
   },
-  categoryIcon: {
-    marginRight: 4,
-  },
-  categoryText: {
-    fontSize: 12,
+  errorText: {
+    color: Colors.white,
+    fontSize: 10,
     fontWeight: '600',
-  },
-  description: {
-    fontSize: 13,
-    fontWeight: '400',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  metadataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  metadataItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  metadataIcon: {
-    marginRight: 6,
-  },
-  metadataText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  metadataSeparator: {
-    width: 1,
-    height: 16,
-    backgroundColor: Colors.border,
-    marginHorizontal: 12,
+    textAlign: 'center',
   },
 });
 

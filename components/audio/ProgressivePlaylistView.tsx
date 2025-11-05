@@ -122,6 +122,27 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
   }, [refreshPlaylist]);
 
   /**
+   * Handle editing track title
+   */
+  const handleEditTitle = useCallback(async (trackId: string, newTitle: string) => {
+    try {
+      logger.info('Updating track title', { trackId, newTitle });
+      const updatedPlaylist = await ProgressivePlaylistService.updateTrackTitle(
+        materialId,
+        trackId,
+        newTitle
+      );
+
+      // Update parent component with new playlist data
+      if (onPlaylistUpdate && isMountedRef.current) {
+        onPlaylistUpdate(updatedPlaylist);
+      }
+    } catch (error) {
+      logger.error('Failed to update track title', { error, trackId, newTitle });
+    }
+  }, [materialId, onPlaylistUpdate]);
+
+  /**
    * Handle saving playlist to My Playlists
    */
   const handleSavePlaylist = useCallback(async () => {
@@ -164,12 +185,13 @@ const ProgressivePlaylistView: React.FC<ProgressivePlaylistProps> = ({
           track={item}
           onPlay={() => onTrackPlay(item)}
           onRetry={handleRetry}
+          onEditTitle={handleEditTitle}
           isPlaying={isPlaying}
           isDisabled={isDisabled}
         />
       );
     },
-    [onTrackPlay, currentlyPlayingTrackId, handleRetry]
+    [onTrackPlay, currentlyPlayingTrackId, handleRetry, handleEditTitle]
   );
 
   /**

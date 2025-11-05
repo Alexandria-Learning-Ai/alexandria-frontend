@@ -3,6 +3,7 @@ import { SmartProgressNotificationService } from './SmartProgressNotificationSer
 import { NotificationService } from './notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import logger from '../utils/logger';
+import { WeaknessAnalysisService } from '../services/WeaknessAnalysisService';
 
 import * as Notifications from 'expo-notifications'; // ✅ FIXED: Use * as import
 
@@ -266,8 +267,6 @@ export class NotificationManager {
     // ✅ NEW: Schedule a notification for a remedial quiz
     static async scheduleRemedialNotification(userId, weakness) {
         try {
-            // Use dynamic import to avoid circular dependency
-            const { WeaknessAnalysisService } = await import('../services/WeaknessAnalysisService');
             const quiz = await WeaknessAnalysisService.generateRemedialQuiz(userId, weakness);
             
             if (!quiz) return false;

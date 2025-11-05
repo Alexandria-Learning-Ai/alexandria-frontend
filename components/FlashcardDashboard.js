@@ -27,10 +27,13 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
         masteringCards: 0,
         strugglingCards: 0,
         dailyStreak: 0,
+        newCards: 0, // Added: count of unreviewed cards
         subjectBreakdown: {},
         weeklyProgress: []
     });
     const [loading, setLoading] = useState(true);
+    const [selectedSubject, setSelectedSubject] = useState(null);
+    const [selectedDifficulty, setSelectedDifficulty] = useState(null);
 
     useEffect(() => {
         loadDashboardData();
@@ -42,8 +45,13 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
             if (!userId) return;
 
             const dashboardStats = await FlashcardService.getStudyStatistics(userId);
-            setStats(dashboardStats);
-            logger.info('📊 Loaded flashcard dashboard stats:', dashboardStats);
+
+            // Calculate new cards (unreviewed)
+            const allCards = await FlashcardService.getFlashcards(userId);
+            const newCards = allCards.filter(card => (card.reviewCount || 0) === 0).length;
+
+            setStats({ ...dashboardStats, newCards });
+            logger.info('📊 Loaded flashcard dashboard stats:', { ...dashboardStats, newCards });
         } catch (error) {
             logger.error('❌ Error loading dashboard data:', error);
         } finally {
@@ -51,7 +59,7 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
         }
     };
 
-    const startStudySession = (mode = 'review') => {
+    const startStudySession = (mode = 'review', filters = {}) => {
         if (stats.totalFlashcards === 0) {
             Alert.alert(
                 'No Flashcards Yet',
@@ -61,8 +69,23 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
             return;
         }
 
-        navigation.navigate('FlashcardScreen', { mode });
+        // Apply selected filters if any
+        const sessionFilters = {
+            ...filters,
+            subject: selectedSubject || filters.subject,
+            difficulty: selectedDifficulty || filters.difficulty
+        };
+
+        navigation.navigate('FlashcardScreen', {
+            mode,
+            filters: sessionFilters
+        });
         onClose?.();
+    };
+
+    const clearFilters = () => {
+        setSelectedSubject(null);
+        setSelectedDifficulty(null);
     };
 
     const generateFlashcardsFromMistakes = async () => {
@@ -246,35 +269,48 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
                         </Text>
                         
                         <View style={styles.secondaryActions}>
-                            <TouchableOpacity 
+                            {/* New Cards Mode */}
+                            {stats.newCards > 0 && (
+                                <TouchableOpacity
+                                    style={[styles.secondaryButton, { backgroundColor: '#4A90E2' }]}
+                                    onPress={() => startStudySession('new')}
+                                >
+                                    <FontAwesome5 name="star" size={16} color="#FFFFFF" />
+                                    <Text style={[styles.secondaryButtonText, { color: '#FFFFFF' }]}>
+                                        New Cards ({stats.newCards})
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity
                                 style={[styles.secondaryButton, { backgroundColor: themeColors.review }]}
-                                onPress={() => startStudySession('review')}
+                                onPress={() => startStudySession('all')}
                             >
-                                <FontAwesome5 name="redo" size={16} color="#FFFFFF" />
+                                <FontAwesome5 name="th" size={16} color="#FFFFFF" />
                                 <Text style={[styles.secondaryButtonText, { color: '#FFFFFF' }]}>
-                                    Review All
+                                    All Cards
                                 </Text>
                             </TouchableOpacity>
 
                             {stats.strugglingCards > 0 && (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={[styles.secondaryButton, { backgroundColor: themeColors.struggling }]}
                                     onPress={() => startStudySession('struggling')}
                                 >
                                     <FontAwesome5 name="exclamation-triangle" size={16} color="#FFFFFF" />
                                     <Text style={[styles.secondaryButtonText, { color: '#FFFFFF' }]}>
-                                        Struggling Cards ({stats.strugglingCards})
+                                        Struggling ({stats.strugglingCards})
                                     </Text>
                                 </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={[styles.secondaryButton, { backgroundColor: themeColors.autoGenerate }]}
                                 onPress={generateFlashcardsFromMistakes}
                             >
                                 <FontAwesome5 name="magic" size={16} color="#FFFFFF" />
                                 <Text style={[styles.secondaryButtonText, { color: '#FFFFFF' }]}>
-                                    Auto-Generate from Mistakes
+                                    Auto-Generate
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -322,22 +358,104 @@ const FlashcardDashboard = ({ navigation, isDarkMode = true, onClose }) => {
                         </View>
                     </Animatable.View>
 
+                    {/* Filters Section */}
+                    {stats.totalFlashcards > 0 && (
+                        <Animatable.View animation="fadeInUp" delay={700} style={styles.section}>
+                            <View style={styles.filterHeader}>
+                                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
+                                    Filters
+                                </Text>
+                                {(selectedSubject || selectedDifficulty) && (
+                                    <TouchableOpacity onPress={clearFilters}>
+                                        <Text style={[styles.clearFilters, { color: themeColors.accent }]}>
+                                            Clear All
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {/* Difficulty Filters */}
+                            <View style={styles.filterRow}>
+                                <Text style={[styles.filterLabel, { color: themeColors.text }]}>Difficulty:</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+                                    {['easy', 'medium', 'hard'].map(difficulty => (
+                                        <TouchableOpacity
+                                            key={difficulty}
+                                            style={[
+                                                styles.filterChip,
+                                                {
+                                                    backgroundColor: selectedDifficulty === difficulty
+                                                        ? themeColors.accent
+                                                        : `${themeColors.cardBackground}`,
+                                                    borderColor: themeColors.accent,
+                                                    borderWidth: selectedDifficulty === difficulty ? 0 : 1
+                                                }
+                                            ]}
+                                            onPress={() => setSelectedDifficulty(
+                                                selectedDifficulty === difficulty ? null : difficulty
+                                            )}
+                                        >
+                                            <Text style={[
+                                                styles.filterChipText,
+                                                {
+                                                    color: selectedDifficulty === difficulty
+                                                        ? '#FFFFFF'
+                                                        : themeColors.text
+                                                }
+                                            ]}>
+                                                {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </Animatable.View>
+                    )}
+
                     {/* Subject Breakdown */}
-                    {Object.keys(stats.subjectBreakdown).length > 0 && (
+                    {stats.subjectBreakdown?.bySubject && Object.keys(stats.subjectBreakdown.bySubject).length > 0 && (
                         <Animatable.View animation="fadeInUp" delay={800} style={styles.section}>
                             <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
-                                Subject Breakdown
+                                Subject Breakdown (Tap to Filter)
                             </Text>
-                            
+
                             <View style={[styles.subjectGrid, { backgroundColor: themeColors.cardBackground }]}>
-                                {Object.entries(stats.subjectBreakdown).map(([subject, count], index) => (
-                                    <View key={subject} style={styles.subjectRow}>
+                                {Object.entries(stats.subjectBreakdown.bySubject).map(([subject, count], index) => (
+                                    <TouchableOpacity
+                                        key={subject}
+                                        style={[
+                                            styles.subjectRow,
+                                            selectedSubject === subject && {
+                                                backgroundColor: `${themeColors.accent}20`
+                                            }
+                                        ]}
+                                        onPress={() => setSelectedSubject(
+                                            selectedSubject === subject ? null : subject
+                                        )}
+                                    >
                                         <View style={styles.subjectInfo}>
-                                            <FontAwesome5 name="book" size={14} color={themeColors.accent} />
-                                            <Text style={[styles.subjectName, { color: themeColors.text }]}>{subject}</Text>
+                                            <FontAwesome5
+                                                name={selectedSubject === subject ? "check-circle" : "book"}
+                                                size={14}
+                                                color={themeColors.accent}
+                                            />
+                                            <Text style={[
+                                                styles.subjectName,
+                                                {
+                                                    color: themeColors.text,
+                                                    fontWeight: selectedSubject === subject ? '700' : '500'
+                                                }
+                                            ]}>
+                                                {typeof subject === 'string' ? subject : String(subject)}
+                                            </Text>
                                         </View>
-                                        <Text style={[styles.subjectCount, { color: themeColors.accent }]}>{count}</Text>
-                                    </View>
+                                        <Text style={[
+                                            styles.subjectCount,
+                                            { color: themeColors.accent }
+                                        ]}>
+                                            {typeof count === 'number' ? count : String(count)}
+                                        </Text>
+                                    </TouchableOpacity>
                                 ))}
                             </View>
                         </Animatable.View>
@@ -593,6 +711,38 @@ const styles = StyleSheet.create({
     },
     hiddenDiv: {
         height: 0,
+    },
+    // Filter styles
+    filterHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    clearFilters: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    filterRow: {
+        marginBottom: 15,
+    },
+    filterLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 10,
+    },
+    filterScroll: {
+        flexDirection: 'row',
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginRight: 10,
+    },
+    filterChipText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 

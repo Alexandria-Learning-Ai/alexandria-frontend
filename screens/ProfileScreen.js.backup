@@ -1,0 +1,685 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+  ActivityIndicator,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FontAwesome5 } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
+import { useTranslation } from 'react-i18next';
+import EnhancedBirthdayInput from '../components/EnhancedBirthdayInput';
+import { styles } from '../styles/ProfileScreenStyles';
+import {
+  EDUCATION_LEVELS,
+  SEMESTER_SEASONS,
+  generateYearOptions,
+  LEARNING_STYLES,
+  PAIN_POINTS
+} from '../constants/profileOptions';
+import { useProfileState } from '../hooks/useProfileState';
+import { useProfileData } from '../hooks/useProfileData';
+import { useProfileValidation } from '../hooks/useProfileValidation';
+import { useCourseManagement } from '../hooks/useCourseManagement';
+import { useProfileNavigation } from '../hooks/useProfileNavigation';
+
+export default function ProfileScreen({ navigation, route }) {
+  const { t } = useTranslation();
+
+  // State management hook
+  const {
+    firstName,
+    lastName,
+    email,
+    loading,
+    isNewUser,
+    isEditingMode,
+    editSection,
+    sectionTitle,
+    currentStep,
+    profile,
+    availableYears,
+    availablePrograms,
+    programSuggestions,
+    showProgramSuggestions,
+    courseInput,
+    courseSuggestions,
+    courseValidation,
+    validatingCourse,
+    fadeAnim,
+    scrollViewRef,
+    setFirstName,
+    setLastName,
+    setEmail,
+    setLoading,
+    setIsNewUser,
+    setIsEditingMode,
+    setEditSection,
+    setSectionTitle,
+    setCurrentStep,
+    setProfile,
+    setAvailableYears,
+    setAvailablePrograms,
+    setProgramSuggestions,
+    setShowProgramSuggestions,
+    setCourseInput,
+    setCourseSuggestions,
+    setCourseValidation,
+    setValidatingCourse,
+  } = useProfileState();
+
+  // Profile data hook
+  const {
+    handleCompleteProfileSetup,
+    handleSaveSectionEdit,
+    handleCompleteProfile,
+  } = useProfileData({
+    profile,
+    availableYears,
+    editSection,
+    sectionTitle,
+    routeParams: route?.params,
+    navigation,
+    setFirstName,
+    setLastName,
+    setEmail,
+    setProfile,
+    setIsNewUser,
+    setIsEditingMode,
+    setEditSection,
+    setSectionTitle,
+    setCurrentStep,
+    setLoading,
+    setAvailableYears,
+    setAvailablePrograms,
+    fadeAnim,
+  });
+
+  // Validation hook
+  const { validateStep } = useProfileValidation({
+    profile,
+    currentStep,
+    isEditingMode,
+    t,
+  });
+
+  // Course management hook
+  const {
+    handleCourseInputChange,
+    addCourse,
+    selectSuggestion,
+    removeCourse,
+  } = useCourseManagement({
+    courseInput,
+    profile,
+    setCourseInput,
+    setCourseSuggestions,
+    setCourseValidation,
+    setValidatingCourse,
+    setProfile,
+  });
+
+  // Navigation hook
+  const {
+    scrollToInput,
+    handleNext,
+    handleBack,
+    handleBackPress,
+    toggleSelection,
+    handleProgramChange,
+    selectProgram,
+    updateSemester,
+  } = useProfileNavigation({
+    currentStep,
+    isEditingMode,
+    editSection,
+    isNewUser,
+    profile,
+    availablePrograms,
+    validateStep,
+    handleSaveSectionEdit,
+    handleCompleteProfile,
+    handleCompleteProfileSetup,
+    setCurrentStep,
+    setProfile,
+    setProgramSuggestions,
+    setShowProgramSuggestions,
+    setIsEditingMode,
+    setIsNewUser,
+    scrollViewRef,
+    navigation,
+  });
+
+  // Step Progress Indicator
+  const renderStepProgress = () => (
+    <View style={styles.progressContainer}>
+      <Text style={styles.progressText}>Step {currentStep} of 5</Text>
+      <View style={styles.progressBar}>
+        <View style={[styles.progressFill, { width: `${(currentStep / 5) * 100}%` }]} />
+      </View>
+    </View>
+  );
+
+  // Step 1: Personal Info
+  const renderStep1 = () => (
+    <Animatable.View animation="slideInRight" style={styles.stepContainer}>
+      <View style={styles.stepHeader}>
+        <FontAwesome5 name={isEditingMode ? "user" : "user-plus"} size={32} color="#D4AF37" />
+        <Text style={styles.stepTitle}>
+          {isEditingMode ? 'Edit Personal Information' : 'Create Your Account'}
+        </Text>
+        <Text style={styles.stepSubtitle}>
+          {isEditingMode ? 'Update your name and contact details' : 'Enter your details to get started'}
+        </Text>
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>First Name *</Text>
+        <TextInput
+          style={styles.input}
+          value={profile.firstName}
+          onChangeText={(text) => setProfile(prev => ({ ...prev, firstName: text }))}
+          onFocus={() => scrollToInput(100)}
+          placeholder="Enter your first name"
+          placeholderTextColor="#CBD5E0"
+          maxLength={25}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Last Name *</Text>
+        <TextInput
+          style={styles.input}
+          value={profile.lastName}
+          onChangeText={(text) => setProfile(prev => ({ ...prev, lastName: text }))}
+          onFocus={() => scrollToInput(200)}
+          placeholder="Enter your last name"
+          placeholderTextColor="#CBD5E0"
+          maxLength={25}
+        />
+      </View>
+
+      {!isEditingMode && (
+        <>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email Address *</Text>
+            <TextInput
+              style={styles.input}
+              value={profile.email}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, email: text }))}
+              onFocus={() => scrollToInput(300)}
+              placeholder="Enter your email address"
+              placeholderTextColor="#CBD5E0"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password *</Text>
+            <TextInput
+              style={styles.input}
+              value={profile.password}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, password: text }))}
+              onFocus={() => scrollToInput(400)}
+              placeholder="Create a password (min. 6 characters)"
+              placeholderTextColor="#CBD5E0"
+              secureTextEntry
+              autoComplete="new-password"
+            />
+          </View>
+        </>
+      )}
+
+      <View style={styles.inputContainer} onTouchStart={() => scrollToInput(500)}>
+        <EnhancedBirthdayInput
+          value={profile.birthDate}
+          onDateChange={(formattedDate, dateObject) => {
+            setProfile(prev => ({
+              ...prev,
+              birthDate: formattedDate,
+              birthDateObject: dateObject
+            }));
+          }}
+          label="Birth Date *"
+          required={true}
+          minAge={13}
+          maxAge={120}
+        />
+      </View>
+    </Animatable.View>
+  );
+
+  // Step 2: Education Level
+  const renderStep2 = () => (
+    <Animatable.View animation="slideInRight" style={styles.stepContainer}>
+      <View style={styles.stepHeader}>
+        <FontAwesome5 name="graduation-cap" size={32} color="#D4AF37" />
+        <Text style={styles.stepTitle}>
+          {isEditingMode ? 'Edit Education Level' : 'Education Level'}
+        </Text>
+        <Text style={styles.stepSubtitle}>
+          {isEditingMode ? 'Update your education level' : 'What level are you currently studying at?'}
+        </Text>
+      </View>
+
+      <ScrollView style={styles.optionsContainer} showsVerticalScrollIndicator={false}>
+        {EDUCATION_LEVELS.map((level) => (
+          <TouchableOpacity
+            key={level.id}
+            style={[
+              styles.optionCard,
+              profile.educationLevel === level.id && styles.optionCardSelected
+            ]}
+            onPress={() => setProfile(prev => ({ ...prev, educationLevel: level.id }))}
+          >
+            <FontAwesome5
+              name={level.icon}
+              size={24}
+              color={profile.educationLevel === level.id ? "#D4AF37" : "#CBD5E0"}
+            />
+            <Text style={[
+              styles.optionLabel,
+              profile.educationLevel === level.id && styles.optionLabelSelected
+            ]}>
+              {level.label}
+            </Text>
+            <Text style={styles.optionDescription}>{level.description}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </Animatable.View>
+  );
+
+  // Step 3: Academic Details
+  const renderStep3 = () => (
+    <Animatable.View animation="slideInRight" style={styles.stepContainer}>
+      <View style={styles.stepHeader}>
+        <FontAwesome5 name="calendar-alt" size={32} color="#D4AF37" />
+        <Text style={styles.stepTitle}>
+          {isEditingMode ? 'Edit Academic Details' : 'Academic Details'}
+        </Text>
+        <Text style={styles.stepSubtitle}>
+          {isEditingMode ? 'Update your academic information' : 'Help us understand your current academic status'}
+        </Text>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Year/Level *</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsContainer}>
+            {availableYears.map((yearOption) => (
+              <TouchableOpacity
+                key={yearOption.id}
+                style={[
+                  styles.optionChip,
+                  profile.year === yearOption.id && styles.optionChipSelected
+                ]}
+                onPress={() => setProfile(prev => ({ ...prev, year: yearOption.id }))}
+              >
+                <Text style={[
+                  styles.optionChipText,
+                  profile.year === yearOption.id && styles.optionChipTextSelected
+                ]}>
+                  {yearOption.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Current Semester *</Text>
+
+          <View style={styles.semesterRow}>
+            <View style={styles.semesterColumn}>
+              <Text style={styles.subLabel}>Season</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonContainer}>
+                {SEMESTER_SEASONS.map((season) => (
+                  <TouchableOpacity
+                    key={season.id}
+                    style={[
+                      styles.seasonChip,
+                      profile.semesterSeason === season.id && styles.seasonChipSelected
+                    ]}
+                    onPress={() => updateSemester('semesterSeason', season.id)}
+                  >
+                    <Text style={[
+                      styles.seasonChipText,
+                      profile.semesterSeason === season.id && styles.seasonChipTextSelected
+                    ]}>
+                      {season.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.semesterColumn}>
+              <Text style={styles.subLabel}>Year</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.yearContainer}>
+                {generateYearOptions().map((year) => (
+                  <TouchableOpacity
+                    key={year.id}
+                    style={[
+                      styles.yearChip,
+                      profile.semesterYear === year.id && styles.yearChipSelected
+                    ]}
+                    onPress={() => updateSemester('semesterYear', year.id)}
+                  >
+                    <Text style={[
+                      styles.yearChipText,
+                      profile.semesterYear === year.id && styles.yearChipTextSelected
+                    ]}>
+                      {year.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          {profile.semester && (
+            <View style={styles.semesterPreview}>
+              <FontAwesome5 name="check-circle" size={16} color="#4CAF50" />
+              <Text style={styles.semesterPreviewText}>{profile.semester}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Degree/Program *</Text>
+          <TextInput
+            style={styles.input}
+            value={profile.program}
+            onChangeText={handleProgramChange}
+            placeholder="Type or select from suggestions below"
+            placeholderTextColor="#CBD5E0"
+            onFocus={() => {
+              scrollToInput(200);
+              if (availablePrograms.length > 0) {
+                setProgramSuggestions(availablePrograms);
+                setShowProgramSuggestions(true);
+              }
+            }}
+          />
+
+          {showProgramSuggestions && programSuggestions.length > 0 && (
+            <View style={styles.programSuggestionsContainer}>
+              <Text style={styles.suggestionsTitle}>Common Programs:</Text>
+              <View style={styles.programSuggestions}>
+                {programSuggestions.slice(0, 8).map((program, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.programSuggestionChip}
+                    onPress={() => selectProgram(program)}
+                  >
+                    <Text style={styles.programSuggestionText}>{program}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </Animatable.View>
+  );
+
+  // Step 4: Courses
+  const renderStep4 = () => (
+    <Animatable.View animation="slideInRight" style={styles.stepContainer}>
+      <View style={styles.stepHeader}>
+        <FontAwesome5 name="book" size={32} color="#D4AF37" />
+        <Text style={styles.stepTitle}>
+          {isEditingMode ? 'Edit Current Courses' : 'Current Courses'}
+        </Text>
+        <Text style={styles.stepSubtitle}>
+          {isEditingMode ? 'Update your current courses' : 'What courses are you taking this semester?'}
+        </Text>
+      </View>
+
+      <View style={styles.courseInputContainer}>
+        <TextInput
+          style={[
+            styles.courseInput,
+            courseValidation?.valid === false && styles.courseInputError,
+            courseValidation?.valid === true && styles.courseInputSuccess
+          ]}
+          value={courseInput}
+          onChangeText={handleCourseInputChange}
+          onFocus={() => scrollToInput(100)}
+          placeholder="e.g. MATH 301: Linear Algebra II"
+          placeholderTextColor="#CBD5E0"
+          onSubmitEditing={addCourse}
+        />
+        <TouchableOpacity
+          style={[styles.addCourseButton, validatingCourse && styles.addCourseButtonDisabled]}
+          onPress={addCourse}
+          disabled={validatingCourse}
+        >
+          {validatingCourse ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <FontAwesome5 name="plus" size={16} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {courseValidation && !courseValidation.valid && (
+        <View style={styles.validationContainer}>
+          <FontAwesome5 name="exclamation-triangle" size={14} color="#ff6b7a" />
+          <Text style={styles.validationText}>{courseValidation.message}</Text>
+        </View>
+      )}
+
+      {courseSuggestions.length > 0 && (
+        <View style={styles.suggestionsContainer}>
+          <Text style={styles.suggestionsTitle}>Suggestions:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {courseSuggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.suggestionChip}
+                onPress={() => selectSuggestion(suggestion)}
+              >
+                <Text style={styles.suggestionText}>
+                  {typeof suggestion === 'string' ? suggestion :
+                    suggestion.name || suggestion.course_name || suggestion.code || 'Course'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      <ScrollView style={styles.coursesContainer} showsVerticalScrollIndicator={false}>
+        {profile.courses.map((course) => (
+          <View key={course.id} style={styles.courseChip}>
+            <FontAwesome5
+              name={course.validated ? "check-circle" : "book-open"}
+              size={14}
+              color={course.validated ? "#4CAF50" : "#D4AF37"}
+            />
+            <Text style={styles.courseChipText}>{course.code}</Text>
+            <TouchableOpacity onPress={() => removeCourse(course.id)}>
+              <FontAwesome5 name="times" size={12} color="#ff6b7a" />
+            </TouchableOpacity>
+          </View>
+        ))}
+      </ScrollView>
+    </Animatable.View>
+  );
+
+  // Step 5: Study Goals & Preferences
+  const renderStep5 = () => (
+    <Animatable.View animation="slideInRight" style={styles.stepContainer}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.stepHeader}>
+          <FontAwesome5 name="bullseye" size={32} color="#D4AF37" />
+          <Text style={styles.stepTitle}>
+            {isEditingMode ? 'Edit Study Goals & Preferences' : 'Study Goals & Preferences'}
+          </Text>
+          <Text style={styles.stepSubtitle}>
+            {isEditingMode ? 'Update your study goals and preferences' : 'Help us personalize your learning experience'}
+          </Text>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Your Study Goals *</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={profile.studyGoals}
+            onChangeText={(text) => setProfile(prev => ({ ...prev, studyGoals: text }))}
+            onFocus={() => scrollToInput(150)}
+            placeholder="e.g. Pass finals with A's, Maintain GPA 3.7+, Prep for MCAT"
+            placeholderTextColor="#CBD5E0"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        </View>
+
+        <View style={styles.preferencesSection}>
+          <Text style={styles.sectionTitle}>Learning Preferences (Optional)</Text>
+          <View style={styles.chipsContainer}>
+            {LEARNING_STYLES.map((style) => (
+              <TouchableOpacity
+                key={style.id}
+                style={[
+                  styles.chip,
+                  profile.learningStyles.includes(style.id) && styles.chipSelected
+                ]}
+                onPress={() => toggleSelection('learningStyles', style.id)}
+              >
+                <FontAwesome5
+                  name={style.icon}
+                  size={14}
+                  color={profile.learningStyles.includes(style.id) ? "#FFFFFF" : "#CBD5E0"}
+                />
+                <Text style={[
+                  styles.chipText,
+                  profile.learningStyles.includes(style.id) && styles.chipTextSelected
+                ]}>
+                  {style.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.preferencesSection}>
+          <Text style={styles.sectionTitle}>Areas You'd Like Help With (Optional)</Text>
+          <View style={styles.chipsContainer}>
+            {PAIN_POINTS.map((point) => (
+              <TouchableOpacity
+                key={point.id}
+                style={[
+                  styles.chip,
+                  profile.painPoints.includes(point.id) && styles.chipSelected
+                ]}
+                onPress={() => toggleSelection('painPoints', point.id)}
+              >
+                <FontAwesome5
+                  name={point.icon}
+                  size={14}
+                  color={profile.painPoints.includes(point.id) ? "#FFFFFF" : "#CBD5E0"}
+                />
+                <Text style={[
+                  styles.chipText,
+                  profile.painPoints.includes(point.id) && styles.chipTextSelected
+                ]}>
+                  {point.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    </Animatable.View>
+  );
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1: return renderStep1();
+      case 2: return renderStep2();
+      case 3: return renderStep3();
+      case 4: return renderStep4();
+      case 5: return renderStep5();
+      default: return renderStep1();
+    }
+  };
+
+  return (
+    <LinearGradient colors={["#1A2C5B", "#2C467D"]} style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+              <FontAwesome5 name="arrow-left" size={20} color="#F8F4E3" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Setup Your Profile</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          {renderStepProgress()}
+
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollContainer}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {renderCurrentStep()}
+          </ScrollView>
+
+          <View style={styles.navigationContainer}>
+            {currentStep > 1 && (
+              <TouchableOpacity style={styles.backNavButton} onPress={handleBack}>
+                <FontAwesome5 name="arrow-left" size={16} color="#CBD5E0" />
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.nextButton}
+              onPress={handleNext}
+              disabled={loading}
+            >
+              <LinearGradient colors={["#D4AF37", "#B8941F"]} style={styles.nextButtonGradient}>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#1A2C5B" />
+                ) : (
+                  <>
+                    <Text style={styles.nextButtonText}>
+                      {isEditingMode
+                        ? (editSection && editSection !== 'all' ? 'Save Changes' : 'Save Changes')
+                        : currentStep === 5 ? 'Complete Setup' : 'Continue'
+                      }
+                    </Text>
+                    <FontAwesome5
+                      name={currentStep === 5 ? "check" : "arrow-right"}
+                      size={16}
+                      color="#1A2C5B"
+                    />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </LinearGradient>
+  );
+}

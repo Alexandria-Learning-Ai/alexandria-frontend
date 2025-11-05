@@ -21,22 +21,34 @@ const NavigationTestButton = () => {
   const runNavigationTest = async () => {
     Alert.alert(
       'Navigation Test',
-      'This will test navigation to all screens. Continue?',
+      'Choose a test option:',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Test', 
+        {
+          text: '⭐ HomeV2 (Experimental)',
+          onPress: () => {
+            try {
+              navigation.navigate('HomeV2');
+              logger.info('Navigated to HomeV2 (Experimental Design)');
+            } catch (error) {
+              logger.error('Failed to navigate to HomeV2:', error);
+              Alert.alert('Navigation Error', error.message);
+            }
+          }
+        },
+        {
+          text: '🧪 Full Nav Test',
           onPress: async () => {
             const tester = new NavigationTester(navigation);
-            
+
             try {
               // Run comprehensive navigation tests
               await tester.testAllNavigationPaths();
               await tester.testBackNavigation();
               await tester.testDeepNavigation();
-              
+
               const report = tester.generateTestReport();
-              
+
               Alert.alert(
                 'Navigation Test Complete',
                 `Success Rate: ${report.successRate.toFixed(1)}%\n` +

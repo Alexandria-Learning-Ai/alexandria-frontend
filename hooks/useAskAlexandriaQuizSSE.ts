@@ -71,17 +71,17 @@ export const useAskAlexandriaQuizSSE = () => {
 
         // Validation
         if (!quizTopic) {
-            Alert.alert('Missing Topic', 'Please enter a subject/topic for your quiz.');
+            Alert.alert('Topic Required', 'Enter a subject or topic to create your quiz.');
             return { success: false };
         }
 
         if (!selectedCourse) {
-            Alert.alert('Select Course', 'Please select a course from your program to track progress.');
+            Alert.alert('Course Required', 'Select a course from your program to track your progress.');
             return { success: false };
         }
 
         if (quizTypes.length === 0) {
-            Alert.alert('Select Quiz Type', 'Please select at least one quiz type.');
+            Alert.alert('Quiz Type Required', 'Choose at least one question type for your quiz.');
             return { success: false };
         }
 
@@ -226,7 +226,7 @@ export const useAskAlexandriaQuizSSE = () => {
                         eventSourceRef.current = null;
                         setLoading(false);
 
-                        Alert.alert('Quiz Generation Error', data.error || 'Failed to generate quiz');
+                        Alert.alert('Quiz Generation Failed', data.error || 'Unable to generate your quiz. Please try again.');
                         resolve({
                             success: false,
                             error: data.error || 'Failed to generate quiz'
@@ -260,8 +260,8 @@ export const useAskAlexandriaQuizSSE = () => {
             logger.error('❌ Quiz generation error:', error);
             setLoading(false);
 
-            const errorMessage = error.message || 'Failed to generate quiz. Please try again.';
-            Alert.alert('Quiz Generation Error', errorMessage);
+            const errorMessage = error.message || 'Unable to generate your quiz. Please try again.';
+            Alert.alert('Quiz Generation Failed', errorMessage);
 
             return {
                 success: false,

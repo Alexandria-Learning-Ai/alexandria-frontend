@@ -334,6 +334,39 @@ export class FormValidator {
       isValid: errorCount === 0
     };
   }
+
+  /**
+   * Static convenience method for email validation
+   */
+  static validateEmail(email) {
+    if (!email) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  /**
+   * Static convenience method for password validation
+   */
+  static validatePassword(password) {
+    const errors = [];
+
+    if (!password || password.length < 8) {
+      errors.push('Password must be at least 8 characters');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Static convenience method for required field validation
+   */
+  static validateRequired(value) {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string' && value.trim() === '') return false;
+    return true;
+  }
 }
 
 /**

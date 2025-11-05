@@ -408,6 +408,60 @@ class ProgressivePlaylistService {
       throw error;
     }
   }
+
+  /**
+   * Update track title
+   *
+   * @param materialId - Material ID
+   * @param trackId - Track ID
+   * @param newTitle - New track title
+   * @returns Updated playlist
+   */
+  static async updateTrackTitle(
+    materialId: string,
+    trackId: string,
+    newTitle: string
+  ): Promise<ProgressivePlaylist> {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const response = await axios.patch(
+        `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist/tracks/${trackId}/title`,
+        { title: newTitle },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': user.uid,
+          },
+          params: {
+            user_id: user.uid,
+          },
+        }
+      );
+
+      logger.info('✏️ Track title updated successfully', {
+        trackId,
+        newTitle,
+      });
+
+      return response.data.playlist;
+    } catch (error: any) {
+      logger.error('❌ Failed to update track title', { error, trackId, newTitle });
+
+      if (error.response) {
+        throw new Error(
+          error.response.data?.detail ||
+            error.response.data?.message ||
+            'Failed to update track title'
+        );
+      }
+
+      throw error;
+    }
+  }
 }
 
 export default ProgressivePlaylistService;

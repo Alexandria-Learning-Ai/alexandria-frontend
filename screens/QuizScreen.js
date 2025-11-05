@@ -29,6 +29,7 @@ import QuestionCard from '../components/quiz/QuestionCard';
 import NavigationButtons from '../components/quiz/NavigationButtons';
 import QuizResultsDisplay from '../components/quiz/QuizResultsDisplay';
 import QuizExitConfirmModal from '../components/quiz/QuizExitConfirmModal';
+import AchievementPopup from '../components/achievements/AchievementPopup';
 
 const QuizScreen = ({ route, navigation }) => {
   const { t } = useTranslation();
@@ -68,6 +69,11 @@ const QuizScreen = ({ route, navigation }) => {
   // Exit confirmation modal state
   const [showExitModal, setShowExitModal] = useState(false);
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+
+  // Achievement popup state
+  const [achievements, setAchievements] = useState([]);
+  const [currentAchievementIndex, setCurrentAchievementIndex] = useState(0);
+  const [showAchievementPopup, setShowAchievementPopup] = useState(false);
 
   // Chapter quiz results hook (for Book Study mode)
   const { saveQuizResult } = useChapterQuizResults(
@@ -149,6 +155,34 @@ const QuizScreen = ({ route, navigation }) => {
     showAlexandriaAlert,
     saveChapterQuizResult: saveQuizResult, // Pass hook function for Book Study quizzes
   });
+
+  // Wrapper for handleSubmit to capture achievements
+  const handleSubmitWithAchievements = async () => {
+    const result = await handleSubmit();
+
+    // If achievements were returned, show popup
+    if (result && result.achievements && result.achievements.length > 0) {
+      logger.info('Displaying achievements popup', { count: result.achievements.length });
+      setAchievements(result.achievements);
+      setCurrentAchievementIndex(0);
+      setShowAchievementPopup(true);
+    }
+  };
+
+  // Handle achievement popup dismiss
+  const handleAchievementDismiss = () => {
+    const nextIndex = currentAchievementIndex + 1;
+
+    if (nextIndex < achievements.length) {
+      // Show next achievement
+      setCurrentAchievementIndex(nextIndex);
+    } else {
+      // All achievements shown, close popup
+      setShowAchievementPopup(false);
+      setCurrentAchievementIndex(0);
+      setAchievements([]);
+    }
+  };
 
   // Enhanced retake handler
   const handleRetake = () => {
@@ -432,7 +466,7 @@ const QuizScreen = ({ route, navigation }) => {
           themeColors={themeState.colors}
           onPrevious={() => navigateQuestion('prev', questions.length)}
           onNext={() => navigateQuestion('next', questions.length)}
-          onSubmit={handleSubmit}
+          onSubmit={handleSubmitWithAchievements}
           isChallenge={routeParams.isChallenge}
           translate={t}
           hasAnswered={currentQuestion ? userAnswers[currentQuestion.id] != null && userAnswers[currentQuestion.id] !== '' : false}
@@ -458,6 +492,17 @@ const QuizScreen = ({ route, navigation }) => {
         onCancel={handleCancelExit}
         isSaving={isSavingProgress}
       />
+
+      {/* Achievement Popup */}
+      {showAchievementPopup && achievements[currentAchievementIndex] && (
+        <AchievementPopup
+          achievement={achievements[currentAchievementIndex]}
+          visible={showAchievementPopup}
+          onDismiss={handleAchievementDismiss}
+          themeColors={themeState.colors}
+          autoDismissDelay={5000}
+        />
+      )}
     </View>
   );
 };

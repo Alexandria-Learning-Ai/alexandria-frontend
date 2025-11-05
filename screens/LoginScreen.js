@@ -92,7 +92,7 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleBackPress = () => {
-    NavigationHelper.safeGoBack(navigation, 'Home');
+    navigation.navigate('SignUp');
   };
 
   return (

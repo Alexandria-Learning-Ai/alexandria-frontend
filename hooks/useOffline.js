@@ -5,6 +5,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import OfflineManager from '../utils/OfflineManager';
+import logger from '../utils/logger';
+
 
 export const useOffline = () => {
   const [isOnline, setIsOnline] = useState(OfflineManager.isOnline);
@@ -20,7 +22,7 @@ export const useOffline = () => {
         
         return unsubscribe;
       } catch (error) {
-        console.error('Error initializing offline hook:', error);
+        logger.error('Error initializing offline hook:', error);
         return () => {};
       }
     };
@@ -49,7 +51,7 @@ export const useOffline = () => {
     try {
       return await OfflineManager.cacheData(key, data, expiry);
     } catch (error) {
-      console.error(`Error caching data in hook:`, error);
+      logger.error(`Error caching data in hook:`, error);
       return false;
     }
   }, []);
@@ -59,7 +61,7 @@ export const useOffline = () => {
     try {
       return await OfflineManager.getCachedData(key, fallbackToEmpty);
     } catch (error) {
-      console.error(`Error getting cached data in hook:`, error);
+      logger.error(`Error getting cached data in hook:`, error);
       return null;
     }
   }, []);
@@ -69,7 +71,7 @@ export const useOffline = () => {
     try {
       return await OfflineManager.getDataWithFallback(key, fetchFunction, forceRefresh);
     } catch (error) {
-      console.error(`Error in getDataWithFallback hook:`, error);
+      logger.error(`Error in getDataWithFallback hook:`, error);
       return { data: null, source: 'error' };
     }
   }, []);
@@ -79,7 +81,7 @@ export const useOffline = () => {
     try {
       return await OfflineManager.queueOfflineAction(action);
     } catch (error) {
-      console.error(`Error queuing offline action:`, error);
+      logger.error(`Error queuing offline action:`, error);
       return false;
     }
   }, []);
@@ -89,7 +91,7 @@ export const useOffline = () => {
     try {
       return await OfflineManager.isCacheValid(key);
     } catch (error) {
-      console.error(`Error checking cache validity:`, error);
+      logger.error(`Error checking cache validity:`, error);
       return false;
     }
   }, []);

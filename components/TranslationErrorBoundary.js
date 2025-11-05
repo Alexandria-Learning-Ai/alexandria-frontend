@@ -11,28 +11,49 @@ class TranslationErrorBoundary extends React.Component {
 
   static getDerivedStateFromError(error) {
     // Check if this is a translation-related error
-    const isTranslationError = error?.message?.includes("Property 't") || 
+    const isTranslationError = error?.message?.includes("Property 't") ||
                                error?.message?.includes("Property 'th") ||
                                error?.message?.includes("translation") ||
                                error?.stack?.includes("useTranslation");
-    
+
+    // Check if this is a React child rendering error
+    const isReactChildError = error?.message?.includes("Objects are not valid as a React child") ||
+                              error?.message?.includes("React child") ||
+                              error?.message?.includes("object with keys");
+
     if (isTranslationError) {
       logger.warn('🌐 Translation error caught by boundary:', error.message);
       // Don't break the app for translation errors, just log them
       return { hasError: false, error: null };
     }
-    
+
+    if (isReactChildError) {
+      logger.warn('⚛️ React child rendering error caught by boundary:', error.message);
+      // Don't break the app for React child errors, just log them
+      return { hasError: false, error: null };
+    }
+
     // For other errors, show error boundary
     return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
     logger.error('🚨 Error caught by TranslationErrorBoundary:', error, errorInfo);
-    
+
     // If it's a translation error, try to recover
-    if (error?.message?.includes("Property 't") || 
+    if (error?.message?.includes("Property 't") ||
         error?.message?.includes("Property 'th")) {
       logger.info('🔄 Attempting to recover from translation error...');
+      setTimeout(() => {
+        this.setState({ hasError: false, error: null });
+      }, 100);
+    }
+
+    // If it's a React child error, try to recover
+    if (error?.message?.includes("Objects are not valid as a React child") ||
+        error?.message?.includes("React child") ||
+        error?.message?.includes("object with keys")) {
+      logger.info('🔄 Attempting to recover from React child error...');
       setTimeout(() => {
         this.setState({ hasError: false, error: null });
       }, 100);

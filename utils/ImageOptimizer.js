@@ -5,7 +5,6 @@
 
 import { Image, Dimensions, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
 import logger from '../utils/logger';
 
 
@@ -235,9 +234,7 @@ export class ImageOptimizer {
    */
   async analyzeAssets() {
     try {
-      const assetsDir = `${FileSystem.documentDirectory}assets`;
-      
-      // This is a simplified analysis - in a real app you'd scan the actual bundle
+      // Simplified analysis - returns optimization recommendations
       return {
         totalImages: 0,
         totalSize: '0MB',

@@ -1,0 +1,20 @@
+components/materials/BookDetailSkeleton.tsx(43,13): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(83,15): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(113,31): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(115,31): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(134,27): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(147,11): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(156,25): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(157,25): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(170,33): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(173,31): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(178,31): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(180,31): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/BookDetailSkeleton.tsx(185,15): error TS2322: Type 'number' is not assignable to type 'string'.
+components/materials/ProcessingView.tsx(93,17): error TS2339: Property 'status' does not exist on type 'Query<MaterialStatusResponse, Error, MaterialStatusResponse, readonly unknown[]>'.
+components/materials/ProcessingView.tsx(93,45): error TS2339: Property 'status' does not exist on type 'Query<MaterialStatusResponse, Error, MaterialStatusResponse, readonly unknown[]>'.
+components/materials/ProcessingView.tsx(355,5): error TS2345: Argument of type '{ container: { flex: number; justifyContent: "center"; alignItems: "center"; paddingHorizontal: number; }; card: { width: "100%"; maxWidth: number; borderRadius: number; padding: number; alignItems: "center"; ... 4 more ...; elevation: number; }; ... 14 more ...; cancelButtonText: { ...; }; }' is not assignable to parameter of type '{ container: { flex: number; justifyContent: "center"; alignItems: "center"; paddingHorizontal: number; }; card: { width: "100%"; maxWidth: number; borderRadius: number; padding: number; alignItems: "center"; ... 4 more ...; elevation: number; }; ... 14 more ...; cancelButtonText: { ...; }; } & NamedStyles<...>'.
+  Property 'progressBarFill' is incompatible with index signature.
+    Object literal may only specify known properties, and 'transition' does not exist in type 'ViewStyle | TextStyle | ImageStyle'.
+hooks/useMaterialStatus.ts(283,41): error TS2339: Property 'status' does not exist on type 'Query<MaterialStatusResponse, Error, MaterialStatusResponse, readonly unknown[]>'.
+screens/BookDetailScreen.tsx(234,69): error TS2448: Block-scoped variable 'refetchProgress' used before its declaration.

@@ -1,6 +1,7 @@
 // services/WeaknessAnalysisService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UnifiedNotificationService } from '../utils/UnifiedNotificationService';
+// ✅ REMOVED: Circular dependency - UnifiedNotificationService imports this service
+// import { UnifiedNotificationService } from '../utils/UnifiedNotificationService';
 import * as Notifications from 'expo-notifications';
 import { SubjectDetector } from '../utils/SubjectDetector';
 import { API_BASE_URL } from '../config/api';
@@ -836,17 +837,47 @@ Respond in JSON format:
     try {
       logger.info('🎯 Generating remedial quiz for:', targetWeakness.topic);
 
+      // Prepare user analysis data for the smart quiz API
+      const userAnalysis = {
+        weak_subjects: [targetWeakness.topic],
+        struggling_question_types: [],
+        average_score: 100 - targetWeakness.severity, // Convert severity to score
+        recent_trend: 'stable',
+        total_quizzes_taken: targetWeakness.totalCount || 1,
+        preferred_difficulty: this.getDifficultyLevel(targetWeakness)
+      };
+
+      const questionCount = Math.min(10, Math.max(5, targetWeakness.incorrectCount * 2));
+
+      // Call backend API to generate quiz with actual questions
+      const response = await fetch(`${API_BASE_URL}/api/generate-smart-quiz`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          focus_area: 'weakness_reinforcement',
+          user_analysis: userAnalysis,
+          difficulty: this.getDifficultyLevel(targetWeakness),
+          question_count: questionCount,
+          context: 'user_request'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status}`);
+      }
+
+      const quizData = await response.json();
+
+      // Add additional metadata
       const remedialQuiz = {
-        id: `remedial_${Date.now()}`,
+        ...quizData,
         userId,
         type: 'remedial',
         targetTopic: targetWeakness.topic,
-        title: `Alexandria Focus: ${targetWeakness.topic.replace('_', ' ').toUpperCase()}`,
-        description: `Targeted practice to strengthen your ${targetWeakness.topic.replace('_', ' ')} skills`,
-        difficulty: this.getDifficultyLevel(targetWeakness),
-        questionCount: Math.min(10, Math.max(5, targetWeakness.incorrectCount * 2)),
         timeLimit: 15, // minutes
-        aiPrompt: this.generateAIQuizPrompt(targetWeakness),
         scheduledFor: new Date(Date.now() + this.getRandomDelay()),
         priority: targetWeakness.severity > 70 ? 'high' : 'medium'
       };
@@ -856,8 +887,72 @@ Respond in JSON format:
 
     } catch (error) {
       logger.error('Error generating remedial quiz:', error);
-      return null;
+
+      // Fallback: Return a simple quiz structure if API fails
+      logger.info('Falling back to local quiz generation');
+      return {
+        id: `remedial_${Date.now()}`,
+        userId,
+        type: 'remedial',
+        targetTopic: targetWeakness.topic,
+        title: `Focus: ${targetWeakness.topic.replace(/_/g, ' ')}`,
+        questions: this.generateFallbackQuestions(targetWeakness),
+        questionCount: 5,
+        difficulty: this.getDifficultyLevel(targetWeakness),
+        metadata: {
+          focus_area: 'weakness_reinforcement',
+          difficulty: this.getDifficultyLevel(targetWeakness),
+          estimated_time: 10,
+          target_weaknesses: [targetWeakness.topic]
+        }
+      };
     }
+  }
+
+  // ✅ Generate simple fallback questions when API is unavailable
+  static generateFallbackQuestions(weakness) {
+    const topic = weakness.topic.replace(/_/g, ' ');
+    const examples = weakness.examples || [];
+
+    // Create 5 review questions based on the weakness topic
+    const questions = [];
+
+    // If we have examples from the weakness, create similar questions
+    if (examples.length > 0) {
+      examples.slice(0, 3).forEach((example, idx) => {
+        questions.push({
+          id: `fallback_${Date.now()}_${idx}`,
+          type: 'multiple_choice',
+          text: `Review: ${example.question || `Question about ${topic}`}`,
+          options: [
+            example.correctAnswer,
+            example.userAnswer !== example.correctAnswer ? example.userAnswer : 'Alternative answer',
+            'Another option',
+            'Different answer'
+          ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 4),
+          correctAnswer: example.correctAnswer,
+          subject: topic,
+          difficulty: weakness.severity > 70 ? 'easy' : 'medium',
+          explanation: `This question focuses on ${topic} concepts that need reinforcement.`
+        });
+      });
+    }
+
+    // Fill remaining slots with generic questions
+    while (questions.length < 5) {
+      questions.push({
+        id: `fallback_${Date.now()}_${questions.length}`,
+        type: 'multiple_choice',
+        text: `Practice question ${questions.length + 1} about ${topic}`,
+        options: ['Option A', 'Option B', 'Option C', 'Option D'],
+        correctAnswer: 'Option A',
+        subject: topic,
+        difficulty: this.getDifficultyLevel(weakness),
+        explanation: `This is a practice question to help strengthen your ${topic} skills.`
+      });
+    }
+
+    return questions;
   }
 
   // ✅ Generate AI prompt for targeted quiz creation

@@ -670,9 +670,57 @@ const styles = StyleSheet.create({
   },
 });
 
+// =============================
+// Achievement Summary Card
+// =============================
+export const AchievementSummaryCard = ({ achievements, visible, isDarkMode, onViewAll }) => {
+  if (!visible || !achievements || achievements.length === 0) return null;
+
+  return (
+    <View style={styles.achievementSummaryCard}>
+      <Text style={styles.achievementTitle}>🏆 Recent Achievements</Text>
+      {achievements.slice(0, 3).map((achievement, index) => (
+        <View key={index} style={styles.achievementItem}>
+          <FontAwesome5 name={achievement.icon || 'trophy'} size={16} color="#D4AF37" />
+          <Text style={styles.achievementText}>{achievement.title || achievement.message}</Text>
+        </View>
+      ))}
+      {onViewAll && (
+        <TouchableOpacity onPress={onViewAll}>
+          <Text style={styles.viewAllText}>View All →</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+// =============================
+// Insights Display
+// =============================
+export const InsightsDisplay = ({ insights, visible, isDarkMode, onInsightTap }) => {
+  if (!visible || !insights || insights.length === 0) return null;
+
+  return (
+    <View style={styles.insightsContainer}>
+      <Text style={styles.insightsTitle}>💡 AI Insights</Text>
+      {insights.map((insight, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.insightItem}
+          onPress={() => onInsightTap && onInsightTap(insight)}
+        >
+          <Text style={styles.insightText}>{insight.message || insight.text}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
 export default {
   AchievementCelebrationModal,
   InsightCard,
   AchievementBadge,
   ProgressRing,
+  AchievementSummaryCard,
+  InsightsDisplay,
 };

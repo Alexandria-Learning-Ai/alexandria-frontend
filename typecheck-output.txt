@@ -1,0 +1,134 @@
+
+> alexandria-app@1.0.0 typecheck
+> tsc --noEmit
+
+components/progress/HierarchicalCoursesView.tsx(79,17): error TS2365: Operator '+' cannot be applied to types 'number' and 'unknown'.
+components/progress/HierarchicalCoursesView.tsx(80,19): error TS2365: Operator '+' cannot be applied to types 'unknown' and 'number'.
+components/progress/WeeklyActivity.tsx(47,8): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: AbstractChartProps & BarChartProps): BarChart', gave the following error.
+    Type '{ data: { labels: string[]; datasets: { data: number[]; }[]; }; width: number; height: number; chartConfig: any; style: any; showValuesOnTopOfBars: true; }' is missing the following properties from type 'Readonly<AbstractChartProps & BarChartProps>': yAxisLabel, yAxisSuffix
+  Overload 2 of 2, '(props: AbstractChartProps & BarChartProps, context: any): BarChart', gave the following error.
+    Type '{ data: { labels: string[]; datasets: { data: number[]; }[]; }; width: number; height: number; chartConfig: any; style: any; showValuesOnTopOfBars: true; }' is missing the following properties from type 'Readonly<AbstractChartProps & BarChartProps>': yAxisLabel, yAxisSuffix
+components/results/ResultsHeader.tsx(23,44): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/SubjectCorrectionModal.tsx(100,55): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/SubjectCorrectionModal.tsx(170,77): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/UsageStatsCard.tsx(28,84): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/WeaknessInsightCard.tsx(83,79): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/WeaknessInsightCard.tsx(105,83): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/results/WeaknessInsightCard.tsx(131,92): error TS2339: Property 'color' does not exist on type 'ViewStyle | TextStyle'.
+  Property 'color' does not exist on type 'ViewStyle'.
+components/upload/QuizConfiguration.tsx(53,46): error TS2322: Type 'string | number' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+components/upload/QuizConfiguration.tsx(96,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: SliderProps): Slider', gave the following error.
+    Type '{ style: any; minimumValue: number; maximumValue: number; step: number; value: number; onValueChange: (num: number) => void; minimumTrackTintColor: string; maximumTrackTintColor: string; thumbStyle: any; }' is not assignable to type 'IntrinsicAttributes & IntrinsicClassAttributes<Slider> & Readonly<SliderProps>'.
+      Property 'thumbStyle' does not exist on type 'IntrinsicAttributes & IntrinsicClassAttributes<Slider> & Readonly<SliderProps>'.
+  Overload 2 of 2, '(props: SliderProps, context: any): Slider', gave the following error.
+    Type '{ style: any; minimumValue: number; maximumValue: number; step: number; value: number; onValueChange: (num: number) => void; minimumTrackTintColor: string; maximumTrackTintColor: string; thumbStyle: any; }' is not assignable to type 'IntrinsicAttributes & IntrinsicClassAttributes<Slider> & Readonly<SliderProps>'.
+      Property 'thumbStyle' does not exist on type 'IntrinsicAttributes & IntrinsicClassAttributes<Slider> & Readonly<SliderProps>'.
+hooks/useQuizGeneration.ts(273,40): error TS2367: This comparison appears to be unintentional because the types '"quiz"' and '"study"' have no overlap.
+screens/ExamListScreen.tsx(263,9): error TS2345: Argument of type '{ id: string; examTitle: string; examDate: Date; subject: string; }' is not assignable to parameter of type 'string'.
+services/FlashcardService.ts(617,36): error TS2339: Property 'responseTime' does not exist on type '{}'.
+services/FlashcardService.ts(618,33): error TS2339: Property 'sessionId' does not exist on type '{}'.
+services/FlashcardService.ts(619,33): error TS2339: Property 'studyMode' does not exist on type '{}'.
+styles/ResultsScreenStyles.ts(975,3): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1,27): error TS2339: Property 'create' does not exist on type '{ new (): StyleSheet; prototype: StyleSheet; }'.
+styles/UploadScreenStyles.temp.ts(644,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(647,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(653,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(663,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(668,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(673,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(680,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(788,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(967,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(974,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(978,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(981,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(987,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(993,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(999,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1011,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1020,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1025,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1030,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1040,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1044,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1061,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1068,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1078,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1081,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1085,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1088,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1093,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1101,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1105,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.temp.ts(1113,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(645,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(648,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(654,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(664,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(669,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(674,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(681,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(789,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(968,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(975,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(979,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(982,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(988,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(994,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1000,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1012,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1021,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1026,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1031,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1041,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1045,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1062,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1069,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1079,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1082,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1086,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1089,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1094,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1102,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1106,5): error TS1117: An object literal cannot have multiple properties with the same name.
+styles/UploadScreenStyles.ts(1114,5): error TS1117: An object literal cannot have multiple properties with the same name.
+utils/answerFormatters.ts(11,54): error TS2339: Property 'label' does not exist on type 'string | OptionData'.
+  Property 'label' does not exist on type 'string'.
+utils/answerFormatters.ts(12,29): error TS2339: Property 'text' does not exist on type 'string | OptionData'.
+  Property 'text' does not exist on type 'string'.
+utils/answerFormatters.ts(12,44): error TS2551: Property 'value' does not exist on type 'string | OptionData'. Did you mean 'valueOf'?
+  Property 'value' does not exist on type 'string'.
+utils/answerFormatters.ts(21,7): error TS2367: This comparison appears to be unintentional because the types '"math" | "multiple_choice" | "open_ended" | "true_false" | "fill_in_blank"' and '"short"' have no overlap.
+utils/answerFormatters.ts(22,5): error TS2322: Type 'string | string[]' is not assignable to type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+utils/answerFormatters.ts(28,63): error TS2339: Property 'label' does not exist on type 'string | OptionData'.
+  Property 'label' does not exist on type 'string'.
+utils/answerFormatters.ts(30,30): error TS2339: Property 'text' does not exist on type 'string | OptionData'.
+  Property 'text' does not exist on type 'string'.
+utils/answerFormatters.ts(30,52): error TS2551: Property 'value' does not exist on type 'string | OptionData'. Did you mean 'valueOf'?
+  Property 'value' does not exist on type 'string'.
+utils/answerFormatters.ts(32,9): error TS2322: Type 'string | string[]' is not assignable to type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+utils/answerFormatters.ts(34,29): error TS2339: Property 'isCorrect' does not exist on type 'string | OptionData'.
+  Property 'isCorrect' does not exist on type 'string'.
+utils/answerFormatters.ts(35,26): error TS2339: Property 'text' does not exist on type 'string | OptionData'.
+  Property 'text' does not exist on type 'string'.
+utils/answerFormatters.ts(35,37): error TS2551: Property 'value' does not exist on type 'string | OptionData'. Did you mean 'valueOf'?
+  Property 'value' does not exist on type 'string'.
+utils/answerFormatters.ts(41,3): error TS2322: Type 'string | string[]' is not assignable to type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+utils/answerFormatters.ts(54,62): error TS2339: Property 'label' does not exist on type 'string | OptionData'.
+  Property 'label' does not exist on type 'string'.
+utils/answerFormatters.ts(55,44): error TS2339: Property 'text' does not exist on type 'string | OptionData'.
+  Property 'text' does not exist on type 'string'.
+utils/answerFormatters.ts(55,67): error TS2551: Property 'value' does not exist on type 'string | OptionData'. Did you mean 'valueOf'?
+  Property 'value' does not exist on type 'string'.

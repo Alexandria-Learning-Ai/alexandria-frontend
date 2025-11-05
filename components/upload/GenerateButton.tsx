@@ -225,7 +225,7 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
               <View style={[styles.loadingContent, enhancedStyles.loadingContent]}>
                 <ActivityIndicator size="small" color="#FFFFFF" />
                 <Text style={[styles.generateButtonText, enhancedStyles.generateButtonText]}>
-                  {uploadPurpose === 'study' ? 'Processing Study Material' : t('upload.generatingQuiz')}
+                  {uploadPurpose === 'study' ? 'Preparing Your Materials' : 'Creating Your Quiz'}
                 </Text>
                 <View style={enhancedStyles.loadingDots}>
                   <Text style={enhancedStyles.loadingDotsText}>...</Text>
@@ -249,8 +249,8 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
                 </Animated.View>
                 <Text style={[styles.generateButtonText, enhancedStyles.generateButtonText]}>
                   {uploadPurpose === 'study'
-                    ? 'Add to Study Library'
-                    : t('upload.generateQuiz')}
+                    ? 'Start Studying'
+                    : 'Create My Quiz'}
                 </Text>
                 {!disabled && (
                   <FontAwesome5

@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect, useRef } from 'react';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import {
     View,
     Text,
     TouchableOpacity,
-    StyleSheet,
-    Animated,
-    Dimensions,
-    ScrollView,
-    Alert,
-    RefreshControl,
+        StyleSheet,
+        Animated,
+        Dimensions,
+        ScrollView,
+        Alert,
+        RefreshControl,
     Modal,
     FlatList,
     Linking,
@@ -23,51 +25,31 @@ import { auth } from '../firebaseConfig';
 import { UserService } from '../utils/UserService';
 import { StudentProfileService } from '../services/StudentProfileService';
 import { ExamScheduleService } from '../utils/examScheduleService';
-import { NotificationManager } from '../utils/NotificationManager';
+import UnifiedNotificationService from '../utils/UnifiedNotificationService';
 import HierarchicalSubjectService from '../services/HierarchicalSubjectService'; // ✅ NEW: Import hierarchical service
 import { SubjectProgressService } from '../services/SubjectProgressService'; // ✅ NEW: Import for hierarchical progress
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../contexts/LanguageContext';
 import FlashcardDashboard from '../components/FlashcardDashboard';
 import NavigationTestButton from '../components/NavigationTestButton';
+import MotivationalQuote from '../components/home/MotivationalQuote';
+import ExamCountdownWidget from '../components/home/ExamCountdownWidget';
+import MainActions from '../components/home/MainActions';
+import HomeHeader from '../components/home/HomeHeader';
+import { ProgressWidget, HierarchicalInsightsWidget } from '../components/home/ProgressWidgets';
+import ProfileMenuModals from '../components/home/ProfileMenuModals';
 import logger from '../utils/logger';
+import { useTheme } from '../hooks/useTheme';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { useQuizStats } from '../hooks/useQuizStats';
+import { useHierarchicalProgress } from '../hooks/useHierarchicalProgress';
+import { useOnboarding } from '../contexts/OnboardingContext';
+import WelcomeModal from '../components/onboarding/WelcomeModal';
 
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Language options are now provided by the LanguageContext
-
-// Profile menu options - labels will be translated dynamically
-const getProfileMenuOptions = (t) => {
-    // Safety guard to prevent undefined labels during language transitions
-    if (!t || typeof t !== 'function') {
-        return [
-            { id: 'viewProfile', icon: 'user-circle', label: 'View Profile', type: 'action' },
-            { id: 'editProfile', icon: 'edit', label: 'Edit Profile', type: 'action' },
-            { id: 'divider1', type: 'divider' },
-            { id: 'language', icon: 'globe', label: 'Language', type: 'submenu' },
-            { id: 'settings', icon: 'cog', label: 'Settings', type: 'action' },
-            { id: 'help', icon: 'question-circle', label: 'Help & Support', type: 'action' },
-            { id: 'privacy', icon: 'shield-alt', label: 'Privacy Policy', type: 'action' },
-            { id: 'about', icon: 'info-circle', label: 'About Alexandria', type: 'action' },
-            { id: 'divider2', type: 'divider' },
-            { id: 'signout', icon: 'sign-out-alt', label: 'Sign Out', type: 'destructive' },
-        ];
-    }
-    
-    return [
-        { id: 'viewProfile', icon: 'user-circle', label: t('menu.viewProfile') || 'View Profile', type: 'action' },
-        { id: 'editProfile', icon: 'edit', label: t('menu.editProfile') || 'Edit Profile', type: 'action' },
-        { id: 'divider1', type: 'divider' },
-        { id: 'language', icon: 'globe', label: t('menu.language') || 'Language', type: 'submenu' },
-        { id: 'settings', icon: 'cog', label: t('menu.settings') || 'Settings', type: 'action' },
-        { id: 'help', icon: 'question-circle', label: t('menu.helpSupport') || 'Help & Support', type: 'action' },
-        { id: 'privacy', icon: 'shield-alt', label: t('menu.privacyPolicy') || 'Privacy Policy', type: 'action' },
-        { id: 'about', icon: 'info-circle', label: t('menu.aboutAlexandria') || 'About Alexandria', type: 'action' },
-        { id: 'divider2', type: 'divider' },
-        { id: 'signout', icon: 'sign-out-alt', label: t('menu.signOut') || 'Sign Out', type: 'destructive' },
-    ];
-};
 
 // Function to get translated academic quotes
 const getAcademicQuotes = (t) => {
@@ -147,32 +129,22 @@ export default function HomeScreen({ navigation }) {
     // Language and translation hooks
     const { t, i18n } = useTranslation();
     const { currentLanguage, availableLanguages, setLanguage } = useLanguage();
-    
-    const [userName, setUserName] = useState('Student');
-    const [recentStats, setRecentStats] = useState({
-        totalQuizzes: 0,
-        averageScore: 0,
-        currentStreak: 0
-    });
-    const [isDarkMode, setIsDarkMode] = useState(true);
-    const [fullName, setFullName] = useState('');
-    const [userProfile, setUserProfile] = useState(null);
-    const [profileCompletion, setProfileCompletion] = useState(0);
+
+    // Custom hooks
+    const { isDarkMode, setIsDarkMode, themeStyles } = useTheme();
+    const { userName, fullName, userProfile, profileCompletion } = useUserProfile();
+    const { recentStats, refreshStats } = useQuizStats();
+    const { hierarchicalInsights } = useHierarchicalProgress();
+    const { onboardingState, markAsComplete, loading: onboardingLoading } = useOnboarding();
+    const isFocused = useIsFocused();
+
+    // Local state
     const [nextExam, setNextExam] = useState(null);
     const [daysLeft, setDaysLeft] = useState(0);
     const [currentQuote, setCurrentQuote] = useState(null);
     const [showFlashcardDashboard, setShowFlashcardDashboard] = useState(false);
+    const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
-    // ✅ NEW: Hierarchical progress insights state
-    const [hierarchicalInsights, setHierarchicalInsights] = useState({
-        topSubject: null,
-        recentCourse: null,
-        improvingSubject: null,
-        needsAttentionSubject: null,
-        totalSubjects: 0,
-        totalCourses: 0
-    });
-    
     // Profile menu states
     const [profileMenuVisible, setProfileMenuVisible] = useState(false);
     const [languageMenuVisible, setLanguageMenuVisible] = useState(false);
@@ -227,14 +199,11 @@ export default function HomeScreen({ navigation }) {
         // };
         // cleanupOldData();
 
-        // ✅ KEEP: Just the essential initialization
-        loadUserData();
-        loadRecentStats();
+        // Initialize data
         loadNextExam();
-        loadHierarchicalInsights(); // ✅ NEW: Load hierarchical insights
-        
+
         setCurrentQuote(getRandomQuote());
-        
+
         const examInterval = setInterval(loadNextExam, 60000);
         
         Animated.parallel([
@@ -262,120 +231,31 @@ export default function HomeScreen({ navigation }) {
         }
     }, [i18n.language, t]);
 
-    const loadUserData = async () => {
-        try {
-            const user = auth?.currentUser;
-            if (user) {
-                const userServiceToUse = UserService || UserServiceFallback;
-                const profile = await userServiceToUse.getUserProfile(user.uid);
-                if (profile && profile.fullName) {
-                    setFullName(profile.fullName);
-                    setUserName(userServiceToUse.getFirstName(profile.fullName));
-                } else {
-                    setUserName('Student'); // Default if no profile found
-                }
-
-                // Check if student profile exists first
-                try {
-                    // Small delay to ensure any concurrent saves are completed
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    const profileStatus = await StudentProfileService.checkProfileStatus(user.uid);
-                    
-                    if (profileStatus.exists) {
-                        // Profile exists, load full profile
-                        const studentProfile = await StudentProfileService.getProfile(user.uid);
-                        setUserProfile(studentProfile);
-                        if (studentProfile) {
-                            const completion = StudentProfileService.getProfileCompletionPercentage(studentProfile);
-                            setProfileCompletion(completion);
-                        }
-                    } else {
-                        // Profile doesn't exist - new user needs to create profile
-                        logger.info('👤 New user detected - profile needs to be created');
-                        setUserProfile(null);
-                        setProfileCompletion(0);
-                        // You could navigate to profile creation here if desired
-                        // navigation.navigate('ProfileScreen');
-                    }
-                } catch (profileError) {
-                    logger.warn('Error loading student profile:', profileError);
-                    setProfileCompletion(0);
-                }
+    // Control welcome modal visibility with proper focus handling
+    useFocusEffect(
+        React.useCallback(() => {
+            // Only show modal when focused, onboarding loaded, and first time
+            if (!onboardingLoading && !onboardingState.welcomeSeen) {
+                setShowWelcomeModal(true);
             } else {
-                // If no user is logged in, just default to 'Student'
-                setUserName('Student');
-                setProfileCompletion(0);
+                setShowWelcomeModal(false);
             }
-        } catch (error) {
-            logger.error('Error loading user data:', error);
-            setUserName('Student');
-            setProfileCompletion(0);
-        }
-    };
 
-    const loadRecentStats = async () => {
-        try {
-            const user = auth.currentUser; // ✅ Get current user
-            if (!user) return; // ✅ Don't load if no user
-            
-            // ✅ Use user-specific key instead of global key
-            const quizHistory = await AsyncStorage.getItem(`quizHistory_${user.uid}`);
-            
-            if (quizHistory) {
-                const quizzes = JSON.parse(quizHistory);
-                const totalQuizzes = quizzes.length;
-                
-                if (totalQuizzes > 0) {
-                    const totalCorrect = quizzes.reduce((sum, quiz) => sum + (quiz.results?.score || 0), 0);
-                    const totalQuestions = quizzes.reduce((sum, quiz) => sum + (quiz.results?.totalQuestions || 0), 0);
-                    const averageScore = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
-                    
-                    const currentStreak = calculateStreak(quizzes);
-                    
-                    setRecentStats({
-                        totalQuizzes,
-                        averageScore,
-                        currentStreak
-                    });
-                }
-            }
-        } catch (error) {
-            logger.error('Error loading recent stats:', error);
-        }
-    };
+            // Cleanup when screen loses focus
+            return () => {
+                setShowWelcomeModal(false);
+            };
+        }, [onboardingLoading, onboardingState.welcomeSeen])
+    );
 
-    const calculateStreak = (quizzes) => {
-        if (quizzes.length === 0) return 0;
-        
-        const sortedQuizzes = quizzes.sort((a, b) => 
-            new Date(b.metadata?.completedAt) - new Date(a.metadata?.completedAt)
-        );
-        
-        let streak = 0;
-        let currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
-        
-        for (const quiz of sortedQuizzes) {
-            const quizDate = new Date(quiz.metadata?.completedAt);
-            quizDate.setHours(0, 0, 0, 0);
-            
-            const daysDiff = Math.floor((currentDate - quizDate) / (1000 * 60 * 60 * 24));
-            
-            if (daysDiff === streak) {
-                streak++;
-                currentDate.setDate(currentDate.getDate() - 1);
-            } else {
-                break;
-            }
-        }
-        
-        return streak;
-    };
+    // ✅ REMOVED: loadUserData, loadRecentStats, calculateStreak - moved to custom hooks
 
     // Load selected language on app start
     useEffect(() => {
         loadSelectedLanguage();
     }, []);
+
+    // ✅ REMOVED: useFocusEffect for loadUserData - now handled by useUserProfile hook
 
     const loadSelectedLanguage = async () => {
         try {
@@ -389,1014 +269,35 @@ export default function HomeScreen({ navigation }) {
         }
     };
 
-    const handleLanguageSelect = async (language) => {
-        try {
-            await setLanguage(language);
-            setLanguageMenuVisible(false);
-            setProfileMenuVisible(false);
-            
-            Alert.alert(
-                t('messages.languageUpdated'),
-                t('messages.languageUpdatedDesc'),
-                [{ text: t('common.ok'), style: 'default' }]
-            );
-        } catch (error) {
-            logger.error('Error saving language preference:', error);
-            Alert.alert(t('common.error'), 'Failed to update language preference');
-        }
-    };
+    // ✅ REMOVED: handleLanguageSelect, handleProfileMenuSelect, handleSignOut moved to ProfileMenuModals component
+    // ✅ REMOVED: getThemeStyles - moved to useTheme hook
 
-    const handleProfileMenuSelect = (option) => {
-        setProfileMenuVisible(false);
-        
-        switch (option.id) {
-            case 'viewProfile':
-                navigation.navigate('ProfileView');
-                break;
-            case 'editProfile':
-                navigation.navigate('ProfileScreen');
-                break;
-            case 'language':
-                setLanguageMenuVisible(true);
-                break;
-            case 'settings':
-                Alert.alert(t('menu.settings'), t('alerts.comingSoon'));
-                break;
-            case 'help':
-                Alert.alert(
-                    t('menu.helpSupport'),
-                    'Need help? Contact our support team.',
-                    [
-                        { text: 'Email Support', onPress: () => Linking.openURL('mailto:support@alexandria.app') },
-                        { text: t('alerts.cancel'), style: 'cancel' }
-                    ]
-                );
-                break;
-            case 'privacy':
-                Alert.alert(
-                    'Privacy Policy',
-                    'Your privacy is important to us. We collect minimal data necessary for app functionality.',
-                    [
-                        { text: 'View Full Policy', onPress: () => Linking.openURL('https://alexandria.app/privacy') },
-                        { text: 'OK', style: 'default' }
-                    ]
-                );
-                break;
-            case 'about':
-                Alert.alert(
-                    'About Alexandria',
-                    'Alexandria Quiz App v1.0\n\nYour AI-powered learning companion.\n\nBuilt with ❤️ for students everywhere.',
-                    [{ text: 'OK', style: 'default' }]
-                );
-                break;
-            case 'signout':
-                handleSignOut();
-                break;
-        }
-    };
-
-    const handleSignOut = () => {
-        Alert.alert(
-            t('auth.signOut'),
-            t('messages.signOutConfirm'),
-            [
-                { text: t('alerts.cancel'), style: 'cancel' },
-                { 
-                    text: t('auth.signOut'), 
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await signOut(auth);
-                        } catch (error) {
-                            Alert.alert(t('alerts.error'), t('messages.failedToSignOut'));
-                        }
-                    }
-                }
-            ]
-        );
-    };
-
-    // Get theme styles
-    const getThemeStyles = () => {
-        if (isDarkMode) {
-            return {
-                container: { backgroundColor: '#1A2C5B' },
-                greeting: { color: '#F8F4E3' },
-                userName: { color: '#F8F4E3' },
-                profileButton: { backgroundColor: 'rgba(248, 244, 227, 0.1)' },
-                profileIcon: { color: '#F8F4E3' },
-                quickStats: { backgroundColor: 'rgba(248, 244, 227, 0.1)' },
-                statNumber: { color: '#F8F4E3' },
-                statLabel: { color: '#CBD5E0' },
-                
-                // Progress Widget
-                progressWidget: { backgroundColor: 'rgba(44, 70, 125, 0.8)' },
-                progressIcon: { color: '#D4AF37' },
-                progressTitle: { color: '#F8F4E3' },
-                progressStatNumber: { color: '#F8F4E3' },
-                progressStatLabel: { color: '#CBD5E0' },
-                strengthWeaknessLabel: { color: '#CBD5E0' },
-                strengthWeaknessValue: { color: '#F8F4E3' },
-                quickProgressAction: { backgroundColor: 'rgba(212, 175, 55, 0.2)', borderColor: '#D4AF37' },
-                quickProgressActionText: { color: '#D4AF37' },
-                noProgressIcon: { color: '#F8F4E3' },
-                noProgressText: { color: '#CBD5E0' },
-                startButton: { backgroundColor: '#D4AF37' },
-                startButtonText: { color: '#1A2C5B' },
-                
-                // Buttons
-                primaryAction: { backgroundColor: '#D4AF37' },
-                primaryActionIcon: { backgroundColor: '#1A2C5B' },
-                primaryActionIconColor: { color: '#F8F4E3' },
-                primaryActionTitle: { color: '#1A2C5B' },
-                primaryActionSubtitle: { color: '#1A2C5B' },
-                
-                secondaryAction: { backgroundColor: 'rgba(44, 70, 125, 0.8)' },
-                secondaryActionTitle: { color: '#F8F4E3' },
-                secondaryActionSubtitle: { color: '#CBD5E0' },
-                
-                additionalFeatureButton: { backgroundColor: 'rgba(248, 244, 227, 0.1)', borderColor: 'rgba(248, 244, 227, 0.3)' },
-                additionalFeatureIcon: { color: '#F8F4E3' },
-                additionalFeatureText: { color: '#F8F4E3' },
-                
-                quoteContainer: { backgroundColor: 'rgba(212, 175, 55, 0.15)', borderColor: 'rgba(212, 175, 55, 0.4)' },
-                quoteIcon: { color: '#D4AF37' },
-                quoteText: { color: '#F8F4E3' },
-                quoteAuthor: { color: '#CBD5E0' },
-                
-                askAlexandriaButton: { backgroundColor: 'rgba(44, 70, 125, 0.8)', borderColor: '#D4AF37' },
-                askAlexandriaText: { color: '#F8F4E3' },
-                askAlexandriaIcon: { color: '#D4AF37' },
-                
-                refreshColor: { color: '#D4AF37' },
-                
-                // Profile Menu Dark
-                profileMenuContainer: { backgroundColor: 'rgba(44, 70, 125, 0.95)' },
-                profileMenuAvatar: { backgroundColor: 'rgba(212, 175, 55, 0.2)' },
-                profileMenuUserName: { color: '#F8F4E3' },
-                profileMenuUserEmail: { color: '#CBD5E0' },
-                profileMenuDivider: { backgroundColor: 'rgba(248, 244, 227, 0.2)' },
-                profileMenuItem: { backgroundColor: 'transparent' },
-                profileMenuItemIcon: { color: '#F8F4E3' },
-                profileMenuItemText: { color: '#F8F4E3' },
-                profileMenuLanguageFlag: { color: '#F8F4E3' },
-                profileMenuChevron: { color: '#CBD5E0' },
-                
-                // Language Menu Dark
-                languageMenuContainer: { backgroundColor: 'rgba(44, 70, 125, 0.95)' },
-                languageMenuTitle: { color: '#F8F4E3' },
-                languageMenuItem: { backgroundColor: 'transparent' },
-                languageLabel: { color: '#F8F4E3' },
-            };
-        } else {
-            return {
-                container: { backgroundColor: '#F8F4E3' },
-                greeting: { color: '#4A5568' },
-                userName: { color: '#1A2C5B' },
-                profileButton: { backgroundColor: 'rgba(255, 255, 255, 0.9)', shadowColor: '#1A2C5B' },
-                profileIcon: { color: '#1A2C5B' },
-                quickStats: { backgroundColor: 'rgba(255, 255, 255, 0.95)', shadowColor: '#1A2C5B' },
-                statNumber: { color: '#1A2C5B' },
-                statLabel: { color: '#4A5568' },
-                
-                // Progress Widget
-                progressWidget: { backgroundColor: 'rgba(255, 255, 255, 0.95)' },
-                progressIcon: { color: '#1A2C5B' },
-                progressTitle: { color: '#1A2C5B' },
-                progressStatNumber: { color: '#1A2C5B' },
-                progressStatLabel: { color: '#4A5568' },
-                strengthWeaknessLabel: { color: '#4A5568' },
-                strengthWeaknessValue: { color: '#1A2C5B' },
-                quickProgressAction: { backgroundColor: 'rgba(26, 44, 91, 0.1)', borderColor: '#1A2C5B' },
-                quickProgressActionText: { color: '#1A2C5B' },
-                noProgressIcon: { color: '#1A2C5B' },
-                noProgressText: { color: '#4A5568' },
-                startButton: { backgroundColor: '#1A2C5B' },
-                startButtonText: { color: '#FFFFFF' },
-                
-                // Buttons
-                primaryAction: { backgroundColor: '#1A2C5B' },
-                primaryActionIcon: { backgroundColor: '#D4AF37' },
-                primaryActionIconColor: { color: '#1A2C5B' },
-                primaryActionTitle: { color: '#FFFFFF' },
-                primaryActionSubtitle: { color: '#FFFFFF' },
-                
-                secondaryAction: { backgroundColor: 'rgba(255, 255, 255, 0.95)' },
-                secondaryActionTitle: { color: '#1A2C5B' },
-                secondaryActionSubtitle: { color: '#4A5568' },
-                
-                additionalFeatureButton: { backgroundColor: 'rgba(26, 44, 91, 0.05)', borderColor: 'rgba(26, 44, 91, 0.2)' },
-                additionalFeatureIcon: { color: '#1A2C5B' },
-                additionalFeatureText: { color: '#1A2C5B' },
-                
-                quoteContainer: { backgroundColor: 'rgba(212, 175, 55, 0.1)', borderColor: 'rgba(212, 175, 55, 0.3)' },
-                quoteIcon: { color: '#D4AF37' },
-                quoteText: { color: '#1A2C5B' },
-                quoteAuthor: { color: '#4A5568' },
-                
-                askAlexandriaButton: { backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#1A2C5B' },
-                askAlexandriaText: { color: '#1A2C5B' },
-                askAlexandriaIcon: { color: '#1A2C5B' },
-                
-                refreshColor: { color: '#1A2C5B' },
-                
-                // Profile Menu Light
-                profileMenuContainer: { backgroundColor: 'rgba(255, 255, 255, 0.98)' },
-                profileMenuAvatar: { backgroundColor: 'rgba(26, 44, 91, 0.1)' },
-                profileMenuUserName: { color: '#1A2C5B' },
-                profileMenuUserEmail: { color: '#4A5568' },
-                profileMenuDivider: { backgroundColor: 'rgba(26, 44, 91, 0.1)' },
-                profileMenuItem: { backgroundColor: 'transparent' },
-                profileMenuItemIcon: { color: '#1A2C5B' },
-                profileMenuItemText: { color: '#1A2C5B' },
-                profileMenuLanguageFlag: { color: '#1A2C5B' },
-                profileMenuChevron: { color: '#4A5568' },
-                
-                // Language Menu Light
-                languageMenuContainer: { backgroundColor: 'rgba(255, 255, 255, 0.98)' },
-                languageMenuTitle: { color: '#1A2C5B' },
-                languageMenuItem: { backgroundColor: 'transparent' },
-                languageLabel: { color: '#1A2C5B' },
-            };
-        }
-    };
-
-    const currentThemeStyles = getThemeStyles();
-
-    const Header = () => (
-        <Animatable.View animation="fadeInDown" delay={200} style={styles.headerContainer}>
-            <View style={styles.headerTop}>
-                <View>
-                    <Text style={[styles.greeting, currentThemeStyles.greeting]}>
-                        {(UserService?.getGreeting?.(t) || UserServiceFallback.getGreeting(t))},
-                    </Text>
-                    <Text style={[styles.userName, currentThemeStyles.userName]}>
-                        {userName || 'Student'}! 👋
-                    </Text>
-                    {profileCompletion > 0 && profileCompletion < 100 && (
-                        <View style={styles.profileCompletionContainer}>
-                            <View style={styles.profileCompletionBar}>
-                                <View style={[styles.profileCompletionFill, { width: `${profileCompletion}%` }]} />
-                            </View>
-                            <Text style={styles.profileCompletionText}>{t('profile.profileCompletion')} {profileCompletion}% {t('profile.complete')}</Text>
-                        </View>
-                    )}
-                </View>
-                
-                <TouchableOpacity 
-                    style={[styles.profileButton, currentThemeStyles.profileButton]}
-                    onPress={() => setProfileMenuVisible(true)}
-                >
-                    <FontAwesome5 name="user" size={20} color={currentThemeStyles.profileIcon.color} />
-                </TouchableOpacity>
-            </View>
-
-            <Animatable.View animation="slideInUp" delay={600} style={[styles.quickStats, currentThemeStyles.quickStats]}>
-                <View style={styles.statItem}>
-                    <FontAwesome5 name="clipboard-list" size={16} color="#D4AF37" />
-                    <Text style={[styles.statNumber, currentThemeStyles.statNumber]}>{recentStats.totalQuizzes}</Text>
-                    <Text style={[styles.statLabel, currentThemeStyles.statLabel]}>{t('home.quickStats.quizzes')}</Text>
-                </View>
-                
-                <View style={styles.statDivider} />
-                
-                <View style={styles.statItem}>
-                    <FontAwesome5 name="percentage" size={16} color="#28a745" />
-                    <Text style={[styles.statNumber, currentThemeStyles.statNumber]}>{recentStats.averageScore}%</Text>
-                    <Text style={[styles.statLabel, currentThemeStyles.statLabel]}>{t('home.quickStats.avgScore')}</Text>
-                </View>
-                
-                <View style={styles.statDivider} />
-                
-                <View style={styles.statItem}>
-                    <FontAwesome5 name="fire" size={16} color="#dc3545" />
-                    <Text style={[styles.statNumber, currentThemeStyles.statNumber]}>{recentStats.currentStreak}</Text>
-                    <Text style={[styles.statLabel, currentThemeStyles.statLabel]}>{t('home.quickStats.streak')}</Text>
-                </View>
-            </Animatable.View>
-        </Animatable.View>
-    );
-
-    // ✅ NEW: Load hierarchical insights for dashboard
-    const loadHierarchicalInsights = async () => {
-        try {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            // Get hierarchical progress data
-            const hierarchicalProgress = await SubjectProgressService.getHierarchicalProgress(user.uid);
-
-            if (Object.keys(hierarchicalProgress).length === 0) {
-                // No hierarchical data yet
-                setHierarchicalInsights({
-                    topSubject: null,
-                    recentCourse: null,
-                    improvingSubject: null,
-                    needsAttentionSubject: null,
-                    totalSubjects: 0,
-                    totalCourses: 0
-                });
-                return;
-            }
-
-            // Analyze the hierarchical data for insights
-            const subjects = Object.entries(hierarchicalProgress);
-            let totalCourses = 0;
-            let topSubject = null;
-            let topSubjectScore = 0;
-            let improvingSubject = null;
-            let maxImprovement = 0;
-            let needsAttentionSubject = null;
-            let lowestScore = 100;
-            let recentCourse = null;
-            let mostRecentTime = 0;
-
-            subjects.forEach(([subjectName, subjectData]) => {
-                const subjectScore = subjectData.averageScore || 0;
-                const courses = Object.keys(subjectData.courses || {});
-                totalCourses += courses.length;
-
-                // Find top-performing subject
-                if (subjectScore > topSubjectScore) {
-                    topSubjectScore = subjectScore;
-                    topSubject = {
-                        name: subjectName,
-                        score: subjectScore,
-                        courses: courses.length,
-                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
-                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
-                    };
-                }
-
-                // Find subject that needs attention (lowest score)
-                if (subjectScore > 0 && subjectScore < lowestScore) {
-                    lowestScore = subjectScore;
-                    needsAttentionSubject = {
-                        name: subjectName,
-                        score: subjectScore,
-                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
-                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
-                    };
-                }
-
-                // Find most recently studied course
-                Object.entries(subjectData.courses || {}).forEach(([courseName, courseData]) => {
-                    if (courseData.lastStudied) {
-                        const courseTime = new Date(courseData.lastStudied).getTime();
-                        if (courseTime > mostRecentTime) {
-                            mostRecentTime = courseTime;
-                            recentCourse = {
-                                name: courseName,
-                                subject: subjectName,
-                                score: courseData.averageScore || 0,
-                                lastStudied: courseData.lastStudied,
-                                color: HierarchicalSubjectService.getSubjectColor(subjectName)
-                            };
-                        }
-                    }
-                });
-
-                // Calculate improvement trend (simplified)
-                if (subjectData.improvementTrend && subjectData.improvementTrend > maxImprovement) {
-                    maxImprovement = subjectData.improvementTrend;
-                    improvingSubject = {
-                        name: subjectName,
-                        improvement: subjectData.improvementTrend,
-                        score: subjectScore,
-                        color: HierarchicalSubjectService.getSubjectColor(subjectName),
-                        icon: HierarchicalSubjectService.getSubjectIcon(subjectName)
-                    };
-                }
-            });
-
-            setHierarchicalInsights({
-                topSubject,
-                recentCourse,
-                improvingSubject,
-                needsAttentionSubject,
-                totalSubjects: subjects.length,
-                totalCourses
-            });
-
-            logger.info('📊 Hierarchical insights loaded:', {
-                totalSubjects: subjects.length,
-                totalCourses,
-                topSubject: topSubject?.name,
-                recentCourse: recentCourse?.name
-            });
-
-        } catch (error) {
-            logger.error('❌ Error loading hierarchical insights:', error);
-        }
-    };
-
-    const ProgressWidget = () => {
-        const [progressData, setProgressData] = useState({
-            recentScores: [],
-            improvementTrend: 0,
-            strongestCategory: '',
-            weakestCategory: '',
-            totalQuizzes: 0,
-            averageScore: 0
-        });
-
-        useEffect(() => {
-            loadProgressWidget();
-        }, []);
-
-        const loadProgressWidget = async () => {
-            try {
-                const user = auth.currentUser; // ✅ Get current user
-                if (!user) return; // ✅ Don't load if no user
-                
-                // ✅ Use user-specific key
-                const quizHistory = await AsyncStorage.getItem(`quizHistory_${user.uid}`);
-                
-                if (quizHistory) {
-                    const quizzes = JSON.parse(quizHistory);
-                    
-                    const recentScores = quizzes.slice(0, 5).map(quiz => quiz.results?.percentage || 0);
-                    const improvementTrend = calculateTrend(recentScores);
-                    const categoryStats = calculateCategoryStats(quizzes);
-                    
-                    setProgressData({
-                        recentScores,
-                        improvementTrend,
-                        strongestCategory: categoryStats.strongest,
-                        weakestCategory: categoryStats.weakest,
-                        totalQuizzes: quizzes.length,
-                        averageScore: calculateOverallAverage(quizzes)
-                    });
-                }
-            } catch (error) {
-                logger.error('Error loading progress widget:', error);
-            }
-        };
-
-        const calculateTrend = (scores) => {
-            if (scores.length < 2) return 0;
-            const recent = scores.slice(0, Math.ceil(scores.length / 2));
-            const older = scores.slice(Math.ceil(scores.length / 2));
-            
-            const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-            const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
-            
-            return Math.round(recentAvg - olderAvg);
-        };
-
-        const calculateCategoryStats = (quizzes) => {
-            const categoryMap = new Map();
-            
-            quizzes.forEach(quiz => {
-                const category = quiz.metadata?.category || t('home.categories.general');
-                if (!categoryMap.has(category)) {
-                    categoryMap.set(category, { total: 0, correct: 0 });
-                }
-                const stats = categoryMap.get(category);
-                stats.total += quiz.results?.totalQuestions || 0;
-                stats.correct += quiz.results?.score || 0;
-            });
-
-            let strongest = '';
-            let weakest = '';
-            let highestAccuracy = 0;
-            let lowestAccuracy = 100;
-
-            categoryMap.forEach((stats, category) => {
-                if (stats.total > 0) {
-                    const accuracy = (stats.correct / stats.total) * 100;
-                    if (accuracy > highestAccuracy) {
-                        highestAccuracy = accuracy;
-                        strongest = category;
-                    }
-                    if (accuracy < lowestAccuracy) {
-                        lowestAccuracy = accuracy;
-                        weakest = category;
-                    }
-                }
-            });
-
-            return { strongest, weakest };
-        };
-
-        const calculateOverallAverage = (quizzes) => {
-            const totalCorrect = quizzes.reduce((sum, quiz) => sum + (quiz.results?.score || 0), 0);
-            const totalQuestions = quizzes.reduce((sum, quiz) => sum + (quiz.results?.totalQuestions || 0), 0);
-            return totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
-        };
-
-        const getTrendIcon = () => {
-            if (progressData.improvementTrend > 0) return { name: 'arrow-up', color: '#28a745' };
-            if (progressData.improvementTrend < 0) return { name: 'arrow-down', color: '#dc3545' };
-            return { name: 'minus', color: '#ffc107' };
-        };
-
-        const trendIcon = getTrendIcon();
-
-        if (progressData.totalQuizzes === 0) {
-            return (
-                <Animatable.View animation="slideInUp" delay={700} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
-                    <View style={styles.progressHeader}>
-                        <FontAwesome5 name="chart-line" size={20} color={currentThemeStyles.progressIcon.color} />
-                        <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Your Progress</Text>
-                    </View>
-                    <View style={styles.noProgressContainer}>
-                        <FontAwesome5 name="book-open" size={32} color={currentThemeStyles.noProgressIcon.color} />
-                        <Text style={[styles.noProgressText, currentThemeStyles.noProgressText]}>
-                            Take your first quiz to see your progress!
-                        </Text>
-                        <TouchableOpacity
-                            style={[styles.startButton, currentThemeStyles.startButton]}
-                            onPress={() => navigation.navigate('Upload')}
-                        >
-                            <Text style={[styles.startButtonText, currentThemeStyles.startButtonText]}>{t('home.actions.startLearning')}</Text>
-                        </TouchableOpacity>
-                    </View>
-                </Animatable.View>
-            );
-        }
-
-        return (
-            <Animatable.View animation="slideInUp" delay={700} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
-                <View style={styles.progressHeader}>
-                    <FontAwesome5 name="chart-line" size={20} color={currentThemeStyles.progressIcon.color} />
-                    <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Your Progress</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('ProgressTracker')}>
-                        <FontAwesome5 name="external-link-alt" size={16} color={currentThemeStyles.progressIcon.color} />
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.progressContent}>
-                    <View style={styles.progressStatsRow}>
-                        <View style={styles.progressStat}>
-                            <Text style={[styles.progressStatNumber, currentThemeStyles.progressStatNumber]}>
-                                {progressData.averageScore}%
-                            </Text>
-                            <Text style={[styles.progressStatLabel, currentThemeStyles.progressStatLabel]}>
-                                Overall
-                            </Text>
-                        </View>
-                        
-                        <View style={styles.progressStat}>
-                            <View style={styles.trendContainer}>
-                                <FontAwesome5 name={trendIcon.name} size={16} color={trendIcon.color} />
-                                <Text style={[styles.progressStatNumber, { color: trendIcon.color }]}>
-                                    {Math.abs(progressData.improvementTrend)}%
-                                </Text>
-                            </View>
-                            <Text style={[styles.progressStatLabel, currentThemeStyles.progressStatLabel]}>
-                                Trend
-                            </Text>
-                        </View>
-                        
-                        <View style={styles.progressStat}>
-                            <Text style={[styles.progressStatNumber, currentThemeStyles.progressStatNumber]}>
-                                {progressData.totalQuizzes}
-                            </Text>
-                            <Text style={[styles.progressStatLabel, currentThemeStyles.progressStatLabel]}>
-                                {t('home.quickStats.quizzes')}
-                            </Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.strengthsWeaknessesContainer}>
-                        <View style={styles.strengthWeaknessItem}>
-                            <View style={styles.strengthIndicator}>
-                                <FontAwesome5 name="trophy" size={12} color="#28a745" />
-                            </View>
-                            <View style={styles.strengthWeaknessText}>
-                                <Text style={[styles.strengthWeaknessLabel, currentThemeStyles.strengthWeaknessLabel]}>
-                                    {t('home.analysis.strengths')}
-                                </Text>
-                                <Text style={[styles.strengthWeaknessValue, currentThemeStyles.strengthWeaknessValue]}>
-                                    {progressData.strongestCategory || 'N/A'}
-                                </Text>
-                            </View>
-                        </View>
-                        
-                        <View style={styles.strengthWeaknessItem}>
-                            <View style={styles.weaknessIndicator}>
-                                <FontAwesome5 name="exclamation-triangle" size={12} color="#ffc107" />
-                            </View>
-                            <View style={styles.strengthWeaknessText}>
-                                <Text style={[styles.strengthWeaknessLabel, currentThemeStyles.strengthWeaknessLabel]}>
-                                    Focus On
-                                </Text>
-                                <Text style={[styles.strengthWeaknessValue, currentThemeStyles.strengthWeaknessValue]}>
-                                    {progressData.weakestCategory || 'N/A'}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    <TouchableOpacity
-                        style={[styles.quickProgressAction, currentThemeStyles.quickProgressAction]}
-                        onPress={() => navigation.navigate('ProgressTracker')}
-                    >
-                        <Text style={[styles.quickProgressActionText, currentThemeStyles.quickProgressActionText]}>
-                            View Detailed Analytics
-                        </Text>
-                        <FontAwesome5 name="arrow-right" size={14} color={currentThemeStyles.quickProgressActionText.color} />
-                    </TouchableOpacity>
-                </View>
-            </Animatable.View>
-        );
-    };
-
-    // ✅ NEW: Hierarchical Insights Widget Component
-    const HierarchicalInsightsWidget = () => {
-        const { totalSubjects, totalCourses, topSubject, recentCourse, needsAttentionSubject } = hierarchicalInsights;
-
-        // Don't show if no hierarchical data
-        if (totalSubjects === 0) {
-            return (
-                <Animatable.View animation="slideInUp" delay={750} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
-                    <View style={styles.progressHeader}>
-                        <FontAwesome5 name="sitemap" size={20} color={currentThemeStyles.progressIcon.color} />
-                        <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Course Insights</Text>
-                        <TouchableOpacity onPress={() => navigation.navigate('ProgressTracker')}>
-                            <FontAwesome5 name="external-link-alt" size={16} color={currentThemeStyles.progressIcon.color} />
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.noProgressContainer}>
-                        <FontAwesome5 name="graduation-cap" size={32} color={currentThemeStyles.noProgressIcon.color} />
-                        <Text style={[styles.noProgressText, currentThemeStyles.noProgressText]}>
-                            Take hierarchical quizzes to see course-level insights!
-                        </Text>
-                        <TouchableOpacity
-                            style={[styles.startButton, currentThemeStyles.startButton]}
-                            onPress={() => navigation.navigate('AskAlexandria', { hierarchicalMode: true })}
-                        >
-                            <Text style={[styles.startButtonText, currentThemeStyles.startButtonText]}>Explore Subjects</Text>
-                        </TouchableOpacity>
-                    </View>
-                </Animatable.View>
-            );
-        }
-
-        return (
-            <Animatable.View animation="slideInUp" delay={750} style={[styles.progressWidget, currentThemeStyles.progressWidget]}>
-                <View style={styles.progressHeader}>
-                    <FontAwesome5 name="sitemap" size={20} color={currentThemeStyles.progressIcon.color} />
-                    <Text style={[styles.progressTitle, currentThemeStyles.progressTitle]}>Course Insights</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('ProgressTracker', { activeTab: 'courses' })}>
-                        <FontAwesome5 name="external-link-alt" size={16} color={currentThemeStyles.progressIcon.color} />
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.progressContent}>
-                    {/* Overview Stats */}
-                    <View style={styles.hierarchicalOverview}>
-                        <View style={styles.hierarchicalStat}>
-                            <Text style={[styles.hierarchicalStatNumber, currentThemeStyles.progressStatNumber]}>
-                                {totalSubjects}
-                            </Text>
-                            <Text style={[styles.hierarchicalStatLabel, currentThemeStyles.progressStatLabel]}>
-                                Subjects
-                            </Text>
-                        </View>
-                        <View style={styles.hierarchicalStat}>
-                            <Text style={[styles.hierarchicalStatNumber, currentThemeStyles.progressStatNumber]}>
-                                {totalCourses}
-                            </Text>
-                            <Text style={[styles.hierarchicalStatLabel, currentThemeStyles.progressStatLabel]}>
-                                Courses
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Top Subject */}
-                    {topSubject && (
-                        <View style={styles.hierarchicalInsight}>
-                            <View style={styles.insightHeader}>
-                                <View style={[styles.insightIcon, { backgroundColor: topSubject.color + '20' }]}>
-                                    <FontAwesome5 name={topSubject.icon} size={16} color={topSubject.color} />
-                                </View>
-                                <View style={styles.insightContent}>
-                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
-                                        🏆 Top Subject
-                                    </Text>
-                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
-                                        {topSubject.name}
-                                    </Text>
-                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
-                                        {topSubject.score}% • {topSubject.courses} courses
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Recent Course */}
-                    {recentCourse && (
-                        <View style={styles.hierarchicalInsight}>
-                            <View style={styles.insightHeader}>
-                                <View style={[styles.insightIcon, { backgroundColor: recentCourse.color + '20' }]}>
-                                    <FontAwesome5 name="clock" size={16} color={recentCourse.color} />
-                                </View>
-                                <View style={styles.insightContent}>
-                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
-                                        📚 Recent Course
-                                    </Text>
-                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
-                                        {recentCourse.name}
-                                    </Text>
-                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
-                                        in {recentCourse.subject} • {recentCourse.score}%
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Needs Attention */}
-                    {needsAttentionSubject && (
-                        <View style={styles.hierarchicalInsight}>
-                            <View style={styles.insightHeader}>
-                                <View style={[styles.insightIcon, { backgroundColor: needsAttentionSubject.color + '20' }]}>
-                                    <FontAwesome5 name="exclamation-triangle" size={16} color="#F39C12" />
-                                </View>
-                                <View style={styles.insightContent}>
-                                    <Text style={[styles.insightTitle, currentThemeStyles.progressStatLabel]}>
-                                        ⚠️ Needs Practice
-                                    </Text>
-                                    <Text style={[styles.insightSubject, currentThemeStyles.progressStatNumber]}>
-                                        {needsAttentionSubject.name}
-                                    </Text>
-                                    <Text style={[styles.insightDetail, currentThemeStyles.progressStatLabel]}>
-                                        {needsAttentionSubject.score}% average
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Action Button */}
-                    <TouchableOpacity
-                        style={[styles.hierarchicalAction, currentThemeStyles.quickProgressAction]}
-                        onPress={() => navigation.navigate('AskAlexandria', { hierarchicalMode: true })}
-                    >
-                        <Text style={[styles.hierarchicalActionText, currentThemeStyles.quickProgressActionText]}>
-                            Study More Courses
-                        </Text>
-                        <FontAwesome5 name="arrow-right" size={14} color={currentThemeStyles.quickProgressActionText.color} />
-                    </TouchableOpacity>
-                </View>
-            </Animatable.View>
-        );
-    };
-
-    // ✅ NEW: Smart Insights Button Component
-    const SmartInsightsButton = () => (
-        <Animatable.View animation="fadeInUp" delay={1500} style={styles.additionalFeature}>
-            <TouchableOpacity
-                style={[styles.additionalFeatureButton, currentThemeStyles.additionalFeatureButton]}
-                onPress={async () => {
-                    const user = auth.currentUser;
-                    if (user) {
-                        try {
-                            // Get current notification status with insights
-                            const status = await NotificationManager.getNotificationStatus(user.uid);
-                            
-                            if (status && status.analysisSnapshot) {
-                                const analysis = status.analysisSnapshot;
-                                let message = `Progress: ${analysis.trend || 'Stable'}\n`;
-                                message += `Overall Score: ${analysis.overallScore || 'N/A'}%\n`;
-                                
-                                if (analysis.topFocusArea) {
-                                    message += `\nFocus Area: ${analysis.topFocusArea}`;
-                                }
-                                
-                                if (analysis.examReadiness && analysis.examReadiness.length > 0) {
-                                    const nextExam = analysis.examReadiness[0];
-                                    message += `\nNext Exam: ${nextExam.title} (${nextExam.readiness}% ready)`;
-                                }
-                                
-                                message += `\n\nActive Notifications: ${status.activeCounts?.total || 0}`;
-                                
-                                Alert.alert(
-                                    '🧠 Your Learning Dashboard',
-                                    message,
-                                    [
-                                        { text: 'View Details', onPress: () => navigation.navigate('ProgressTracker') },
-                                        { 
-                                            text: 'Refresh Analysis', 
-                                            onPress: async () => {
-                                                await NotificationManager.scheduleAllNotifications(user.uid, null, 'manual_refresh');
-                                                Alert.alert('✨ Analysis Updated!', 'Your learning insights have been refreshed.');
-                                            }
-                                        },
-                                        { text: 'Got it!', style: 'default' }
-                                    ]
-                                );
-                            } else {
-                                Alert.alert(
-                                    '🌟 Keep Learning!', 
-                                    'Take more quizzes to unlock personalized insights from Alexandria!',
-                                    [
-                                        { text: t('home.actions.takeQuiz'), onPress: () => navigation.navigate('Upload') },
-                                        { text: 'OK', style: 'default' }
-                                    ]
-                                );
-                            }
-                        } catch (error) {
-                            logger.error('Error getting insights:', error);
-                            Alert.alert('Error', 'Could not load insights. Please try again.');
-                        }
-                    }
-                }}
-                activeOpacity={0.8}
-            >
-                <FontAwesome5 name="brain" size={20} color={currentThemeStyles.additionalFeatureIcon.color} />
-                <Text style={[styles.additionalFeatureText, currentThemeStyles.additionalFeatureText]}>
-                    Smart Insights
-                </Text>
-            </TouchableOpacity>
-        </Animatable.View>
-    );
-
-    const MainActions = () => (
-        <View style={styles.actionsContainer}>
-            <Animatable.View animation="bounceIn" delay={900} style={styles.primaryActionContainer}>
-                <TouchableOpacity
-                    style={[styles.primaryAction, currentThemeStyles.primaryAction]}
-                    onPress={() => navigation.navigate('Upload')}
-                    activeOpacity={0.8}
-                >
-                    <View style={[styles.primaryActionIcon, currentThemeStyles.primaryActionIcon]}>
-                        <FontAwesome5 name="plus" size={32} color={currentThemeStyles.primaryActionIconColor.color} />
-                    </View>
-                    <Text style={[styles.primaryActionTitle, currentThemeStyles.primaryActionTitle]}>
-                        {t('home.actions.takeNewQuiz')}
-                    </Text>
-                    <Text style={[styles.primaryActionSubtitle, currentThemeStyles.primaryActionSubtitle]}>
-                        {t('home.actions.uploadAndStartLearning')}
-                    </Text>
-                </TouchableOpacity>
-            </Animatable.View>
-
-            <Animatable.View animation="fadeInUp" delay={1000} style={styles.askAlexandriaContainer}>
-                <TouchableOpacity
-                    style={[styles.askAlexandriaButton, currentThemeStyles.askAlexandriaButton]}
-                    onPress={() => navigation.navigate('AskAlexandria')}
-                    activeOpacity={0.8}
-                >
-                    <FontAwesome5 name="comments" size={18} color={currentThemeStyles.askAlexandriaIcon.color} />
-                    <Text style={[styles.askAlexandriaText, currentThemeStyles.askAlexandriaText]}>
-                        {t('home.actions.askAlexandriaForQuiz')}
-                    </Text>
-                    <FontAwesome5 name="arrow-right" size={14} color={currentThemeStyles.askAlexandriaIcon.color} />
-                </TouchableOpacity>
-            </Animatable.View>
-
-            <View style={styles.symmetricalActionsRow}>
-                <Animatable.View animation="slideInLeft" delay={1100} style={{ flex: 1 }}>
-                    <TouchableOpacity
-                        style={[styles.symmetricalActionCard, currentThemeStyles.secondaryAction]}
-                        onPress={() => navigation.navigate('QuizHistory')}
-                        activeOpacity={0.8}
-                    >
-                        <View style={[styles.secondaryActionIcon, styles.historyIcon]}>
-                            <FontAwesome5 name="history" size={24} color="#FFFFFF" />
-                        </View>
-                        <Text style={[styles.secondaryActionTitle, currentThemeStyles.secondaryActionTitle]}>
-                            Quiz History
-                        </Text>
-                        <Text style={[styles.secondaryActionSubtitle, currentThemeStyles.secondaryActionSubtitle]}>
-                            Review past quizzes
-                        </Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-
-                <Animatable.View animation="slideInRight" delay={1200} style={{ flex: 1 }}>
-                    <TouchableOpacity
-                        style={[styles.symmetricalActionCard, currentThemeStyles.secondaryAction]}
-                        onPress={() => navigation.navigate('ScheduleExamScreen')}
-                        activeOpacity={0.8}
-                    >
-                        <View style={[styles.secondaryActionIcon, styles.scheduleExamIcon]}>
-                            <FontAwesome5 name="calendar-plus" size={24} color="#FFFFFF" />
-                        </View>
-                        <Text style={[styles.secondaryActionTitle, currentThemeStyles.secondaryActionTitle]}>
-                            Schedule Exam
-                        </Text>
-                        <Text style={[styles.secondaryActionSubtitle, currentThemeStyles.secondaryActionSubtitle]}>
-                        Set exam reminders
-                        </Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-            </View>
-
-            {/* ✅ UPDATED: Additional Features Row with Smart Insights */}
-            <View style={styles.additionalFeaturesRow}>
-                <SmartInsightsButton />
-                <Animatable.View animation="fadeInUp" delay={1550} style={styles.additionalFeature}>
-                    <TouchableOpacity
-                        style={[styles.additionalFeatureButton, currentThemeStyles.additionalFeatureButton]}
-                        onPress={() => setShowFlashcardDashboard(true)}
-                        activeOpacity={0.8}
-                    >
-                        <FontAwesome5 
-                            name="layer-group" 
-                            size={20} 
-                            color={currentThemeStyles.additionalFeatureIcon.color} 
-                        />
-                        <Text style={[styles.additionalFeatureText, currentThemeStyles.additionalFeatureText]}>
-                            Study Cards
-                        </Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-                
-                <Animatable.View animation="fadeInUp" delay={1600} style={styles.additionalFeature}>
-                    <TouchableOpacity
-                        style={[styles.additionalFeatureButton, currentThemeStyles.additionalFeatureButton]}
-                        onPress={() => navigation.navigate('ExamListScreen')}
-                        activeOpacity={0.8}
-                    >
-                        <FontAwesome5 
-                            name="list" 
-                            size={20} 
-                            color={currentThemeStyles.additionalFeatureIcon.color} 
-                        />
-                        <Text style={[styles.additionalFeatureText, currentThemeStyles.additionalFeatureText]}>
-                            {t('home.exam.viewExams')}
-                        </Text>
-                    </TouchableOpacity>
-                </Animatable.View>
-            </View>
-        </View>
-    );
-
-    const MotivationalQuote = () => {
-        if (!currentQuote) return null;
-        
-        return (
-            <Animatable.View animation="fadeIn" delay={1500} style={[styles.quoteContainer, currentThemeStyles.quoteContainer]}>
-                <FontAwesome5 name="quote-left" size={16} color={currentThemeStyles.quoteIcon.color} />
-                <Text style={[styles.quoteText, currentThemeStyles.quoteText]}>
-                    "{currentQuote.text}"
-                </Text>
-                <Text style={[styles.quoteAuthor, currentThemeStyles.quoteAuthor]}>
-                    - {currentQuote.author}
-                </Text>
-            </Animatable.View>
-        );
-    };
-
-    const ExamCountdownWidget = () => {
-        if (!nextExam) return null;
-
-        const urgency = ExamScheduleService.getUrgencyLevel(daysLeft);
-        const message = ExamScheduleService.getMotivationalMessage(daysLeft, nextExam.title);
-
-        const urgencyColors = {
-            today: ['#EF4444', '#DC2626'],
-            tomorrow: ['#F59E0B', '#D97706'],
-            urgent: ['#F59E0B', '#D97706'],
-            soon: ['#10B981', '#059669'],
-            upcoming: ['#3B82F6', '#2563EB']
-        };
-
-        return (
-            <Animatable.View animation="fadeInUp" delay={1600}>
-                <TouchableOpacity onPress={() => navigation.navigate('ExamListScreen')}>
-                    <LinearGradient 
-                        colors={urgencyColors[urgency] || urgencyColors.upcoming}
-                        style={styles.examCountdownContainer}
-                    >
-                        <View style={styles.examCountdownContent}>
-                            <View style={styles.examCountdownHeader}>
-                                <FontAwesome5 name="graduation-cap" size={20} color="#FFFFFF" />
-                                <Text style={styles.examCountdownTitle}>{t('home.exam.nextExam')}</Text>
-                            </View>
-                            
-                            <Text style={styles.examTitle}>{nextExam.title}</Text>
-                            
-                            <View style={styles.countdownContainer}>
-                                <Text style={styles.countdownText}>
-                                    {daysLeft === 0 ? `🔥 ${t('home.exam.today').toUpperCase()}!` : 
-                                     daysLeft === 1 ? `⏰ ${t('home.exam.tomorrow').toUpperCase()}` :
-                                     `⏳ ${daysLeft} ${daysLeft === 1 ? t('home.quickStats.day') : t('home.quickStats.days')} left`}
-                                </Text>
-                            </View>
-                            
-                            <Text style={styles.motivationalText}>{message}</Text>
-                            
-                            <View style={styles.practicePrompt}>
-                                <Text style={styles.practiceText}>📚 Ready to practice?</Text>
-                                <FontAwesome5 name="arrow-right" size={14} color="#FFFFFF" />
-                            </View>
-                        </View>
-                    </LinearGradient>
-                </TouchableOpacity>
-            </Animatable.View>
-        );
-    };
+    // ✅ EXTRACTED: Header component moved to components/home/HomeHeader.tsx
+    // ✅ EXTRACTED: ProgressWidget & HierarchicalInsightsWidget moved to components/home/ProgressWidgets.tsx
+    // ✅ EXTRACTED: SmartInsightsButton and MainActions moved to components/home/MainActions.tsx
+    // ✅ EXTRACTED: MotivationalQuote component moved to components/home/MotivationalQuote.tsx
+    // ✅ REMOVED: loadHierarchicalInsights - moved to useHierarchicalProgress hook
+    // ✅ EXTRACTED: ExamCountdownWidget component moved to components/home/ExamCountdownWidget.tsx
 
     return (
-        <View style={[styles.container, currentThemeStyles.container]}>
+        <View style={[styles.container, themeStyles.container]}>
             <StatusBar barStyle="light-content" backgroundColor="#1A2C5B" />
             <NavigationTestButton />
+
+            {/* EXPERIMENTAL: Toggle to V2 Design button */}
+            {__DEV__ && (
+                <TouchableOpacity
+                    style={styles.experimentalToggleButton}
+                    onPress={() => navigation.navigate('HomeV2')}
+                >
+                    <FontAwesome5 name="paint-brush" size={16} color="#D4AF37" />
+                    <Text style={styles.experimentalToggleText}>Try Experimental Design</Text>
+                    <View style={styles.experimentalBadge}>
+                        <Text style={styles.experimentalBadgeText}>V2</Text>
+                    </View>
+                </TouchableOpacity>
+            )}
+
             <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
                 <ScrollView 
                     contentContainerStyle={styles.scrollContainer}
@@ -1404,35 +305,40 @@ export default function HomeScreen({ navigation }) {
                     refreshControl={
                         <RefreshControl
                             refreshing={false}
-                            onRefresh={loadRecentStats}
-                            colors={[currentThemeStyles.refreshColor.color]}
-                            tintColor={currentThemeStyles.refreshColor.color}
+                            onRefresh={refreshStats}
+                            colors={[themeStyles.refreshColor.color]}
+                            tintColor={themeStyles.refreshColor.color}
                         />
                     }
                 >
-                    <Header />
-                    <ProgressWidget />
-                    <HierarchicalInsightsWidget />
-                    <MainActions />
-                    <MotivationalQuote />
-                    <ExamCountdownWidget />
+                    <HomeHeader
+                        userName={userName}
+                        profileCompletion={profileCompletion}
+                        recentStats={recentStats}
+                        themeStyles={themeStyles}
+                        t={t}
+                        onProfilePress={() => setProfileMenuVisible(true)}
+                    />
+                    <ProgressWidget navigation={navigation} themeStyles={themeStyles} t={t} />
+                    <HierarchicalInsightsWidget
+                        navigation={navigation}
+                        themeStyles={themeStyles}
+                        t={t}
+                        hierarchicalInsights={hierarchicalInsights}
+                    />
+                    <MainActions
+                        navigation={navigation}
+                        themeStyles={themeStyles}
+                        t={t}
+                        onShowFlashcardDashboard={() => setShowFlashcardDashboard(true)}
+                    />
+                    <MotivationalQuote quote={currentQuote} themeStyles={themeStyles} />
+                    <ExamCountdownWidget exam={nextExam} daysLeft={daysLeft} navigation={navigation} t={t} />
 
-                    <View style={styles.cardContainer}>
-                        {/* Your existing cards */}
-                    </View>
-
-                    {/* ✅ FIXED: Change from 'SubscriptionScreen' to 'Subscription' */}
-                    <TouchableOpacity
-                        style={[styles.card, currentThemeStyles.card, { backgroundColor: '#D4AF37' }]}
-                        onPress={() => navigation.navigate('Subscription', { userId: auth.currentUser?.uid })}
-                    >
-                        <FontAwesome5 name="crown" size={24} color="#FFFFFF" />
-                        <Text style={[styles.cardTitle, { color: '#FFFFFF', marginTop: 8 }]}>Test Subscriptions</Text>
-                    </TouchableOpacity>
-                    {/* End of temporary button */}
+                    {/* ✅ REMOVED: Temporary subscription test button */}
 
                     <View style={styles.section}>
-                        <Text style={[styles.sectionTitle, currentThemeStyles.sectionTitle]}>Recent Activity</Text>
+                        <Text style={[styles.sectionTitle, themeStyles.sectionTitle]}>Recent Activity</Text>
                         {/* Your existing recent activity content */}
                     </View>
                 </ScrollView>
@@ -1447,155 +353,30 @@ export default function HomeScreen({ navigation }) {
                 />
             )}
 
-            {/* Profile Menu Modal */}
-            <Modal
-                visible={profileMenuVisible}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setProfileMenuVisible(false)}
-            >
-                <TouchableOpacity 
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setProfileMenuVisible(false)}
-                >
-                    <View style={[styles.profileMenuContainer, currentThemeStyles.profileMenuContainer]}>
-                        <View style={styles.profileMenuHeader}>
-                            <View style={styles.profileMenuUserInfo}>
-                                <View style={[styles.profileMenuAvatar, currentThemeStyles.profileMenuAvatar]}>
-                                    <FontAwesome5 name="user" size={20} color={currentThemeStyles.profileIcon.color} />
-                                </View>
-                                <View>
-                                    <Text style={[styles.profileMenuUserName, currentThemeStyles.profileMenuUserName]}>
-                                        {userName || 'Student'}
-                                    </Text>
-                                    <Text style={[styles.profileMenuUserEmail, currentThemeStyles.profileMenuUserEmail]}>
-                                        {auth.currentUser?.email || 'guest@alexandria.app'}
-                                    </Text>
-                                </View>
-                            </View>
-                            <TouchableOpacity 
-                                style={styles.profileMenuClose}
-                                onPress={() => setProfileMenuVisible(false)}
-                            >
-                                <FontAwesome5 name="times" size={16} color={currentThemeStyles.profileIcon.color} />
-                            </TouchableOpacity>
-                        </View>
+            {/* ✅ EXTRACTED: Profile & Language Menu Modals moved to ProfileMenuModals component */}
+            <ProfileMenuModals
+                profileMenuVisible={profileMenuVisible}
+                languageMenuVisible={languageMenuVisible}
+                setProfileMenuVisible={setProfileMenuVisible}
+                setLanguageMenuVisible={setLanguageMenuVisible}
+                userName={userName}
+                currentLanguage={currentLanguage}
+                availableLanguages={availableLanguages}
+                themeStyles={themeStyles}
+                navigation={navigation}
+                t={t}
+                setLanguage={setLanguage}
+            />
 
-                        <FlatList
-                            data={getProfileMenuOptions(t)}
-                            keyExtractor={(item) => item.id}
-                            renderItem={({ item }) => {
-                                if (item.type === 'divider') {
-                                    return <View style={[styles.profileMenuDivider, currentThemeStyles.profileMenuDivider]} />;
-                                }
-                                
-                                return (
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.profileMenuItem,
-                                            currentThemeStyles.profileMenuItem,
-                                            item.type === 'destructive' && styles.profileMenuItemDestructive
-                                        ]}
-                                        onPress={() => handleProfileMenuSelect(item)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={styles.profileMenuItemContent}>
-                                            <FontAwesome5 
-                                                name={item.icon} 
-                                                size={16} 
-                                                color={
-                                                    item.type === 'destructive' 
-                                                        ? '#ff6b7a' 
-                                                        : currentThemeStyles.profileMenuItemIcon.color
-                                                } 
-                                            />
-                                            <Text style={[
-                                                styles.profileMenuItemText,
-                                                item.type === 'destructive' 
-                                                    ? styles.profileMenuItemTextDestructive
-                                                    : currentThemeStyles.profileMenuItemText
-                                            ]}>
-                                                {item.label}
-                                            </Text>
-                                        </View>
-                                        {item.type === 'submenu' && (
-                                            <View style={styles.profileMenuLanguageIndicator}>
-                                                <Text style={[styles.profileMenuLanguageFlag, currentThemeStyles.profileMenuLanguageFlag]}>
-                                                    {currentLanguage.flag}
-                                                </Text>
-                                                <FontAwesome5 
-                                                    name="chevron-right" 
-                                                    size={12} 
-                                                    color={currentThemeStyles.profileMenuChevron.color} 
-                                                />
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            }}
-                            showsVerticalScrollIndicator={false}
-                        />
-                    </View>
-                </TouchableOpacity>
-            </Modal>
-
-            {/* Language Selection Modal */}
-            <Modal
-                visible={languageMenuVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setLanguageMenuVisible(false)}
-            >
-                <TouchableOpacity 
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setLanguageMenuVisible(false)}
-                >
-                    <View style={[styles.languageMenuContainer, currentThemeStyles.languageMenuContainer]}>
-                        <View style={styles.languageMenuHeader}>
-                            <Text style={[styles.languageMenuTitle, currentThemeStyles.languageMenuTitle]}>
-                                Select Language
-                            </Text>
-                            <TouchableOpacity 
-                                style={styles.languageMenuClose}
-                                onPress={() => setLanguageMenuVisible(false)}
-                            >
-                                <FontAwesome5 name="times" size={18} color={currentThemeStyles.profileIcon.color} />
-                            </TouchableOpacity>
-                        </View>
-                        
-                        <FlatList
-                            data={availableLanguages}
-                            keyExtractor={(item) => item.code}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[
-                                        styles.languageMenuItem,
-                                        currentThemeStyles.languageMenuItem,
-                                        currentLanguage.code === item.code && styles.languageMenuItemSelected
-                                    ]}
-                                    onPress={() => handleLanguageSelect(item)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={styles.languageFlag}>{item.flag}</Text>
-                                    <Text style={[
-                                        styles.languageLabel,
-                                        currentThemeStyles.languageLabel,
-                                        currentLanguage.code === item.code && styles.languageLabelSelected
-                                    ]}>
-                                        {item.label}
-                                    </Text>
-                                    {currentLanguage.code === item.code && (
-                                        <FontAwesome5 name="check" size={16} color="#28a745" />
-                                    )}
-                                </TouchableOpacity>
-                            )}
-                            showsVerticalScrollIndicator={false}
-                        />
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+            {/* ✅ NEW: Welcome Modal for first-time users (only when screen is focused and onboarding loaded) */}
+            <WelcomeModal
+                visible={showWelcomeModal}
+                userName={userName || 'Scholar'}
+                onGetStarted={() => {
+                    markAsComplete('welcomeSeen');
+                    setShowWelcomeModal(false);
+                }}
+            />
         </View>
     );
 }
@@ -1609,403 +390,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: 40,
     },
-    headerContainer: {
-        marginBottom: 40,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    greeting: {
-        fontSize: 16,
-        opacity: 0.8,
-        marginBottom: 4,
-    },
-    userName: {
-        fontSize: 28,
-        fontWeight: '800',
-        letterSpacing: -0.5,
-    },
-    profileCompletionContainer: {
-        marginTop: 8,
-        gap: 4,
-    },
-    profileCompletionBar: {
-        height: 4,
-        backgroundColor: 'rgba(248, 244, 227, 0.2)',
-        borderRadius: 2,
-        overflow: 'hidden',
-    },
-    profileCompletionFill: {
-        height: '100%',
-        backgroundColor: '#D4AF37',
-        borderRadius: 2,
-    },
-    profileCompletionText: {
-        fontSize: 12,
-        color: 'rgba(248, 244, 227, 0.8)',
-        fontWeight: '500',
-    },
-    profileButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    quickStats: {
-        flexDirection: 'row',
-        padding: 20,
-        borderRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    statItem: {
-        flex: 1,
-        alignItems: 'center',
-        gap: 4,
-    },
-    statNumber: {
-        fontSize: 20,
-        fontWeight: '700',
-        marginTop: 4,
-    },
-    statLabel: {
-        fontSize: 12,
-        opacity: 0.7,
-    },
-    statDivider: {
-        width: 1,
-        height: 40,
-        backgroundColor: 'rgba(0,0,0,0.1)',
-        marginHorizontal: 16,
-    },
-    progressWidget: {
-        borderRadius: 20,
-        padding: 20,
-        marginBottom: 30,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    progressHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    progressTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        flex: 1,
-        marginLeft: 8,
-    },
-    progressContent: {
-        gap: 16,
-    },
-    progressStatsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-    },
-    progressStat: {
-        alignItems: 'center',
-    },
-    progressStatNumber: {
-        fontSize: 20,
-        fontWeight: '800',
-        marginBottom: 4,
-    },
-    progressStatLabel: {
-        fontSize: 12,
-        opacity: 0.7,
-    },
-    trendContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    strengthsWeaknessesContainer: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    strengthWeaknessItem: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: 12,
-        backgroundColor: 'rgba(0,0,0,0.05)',
-    },
-    strengthIndicator: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: 'rgba(40, 167, 69, 0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 8,
-    },
-    weaknessIndicator: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: 'rgba(255, 193, 7, 0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 8,
-    },
-    strengthWeaknessText: {
-        flex: 1,
-    },
-    strengthWeaknessLabel: {
-        fontSize: 10,
-        opacity: 0.7,
-        marginBottom: 2,
-    },
-    strengthWeaknessValue: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    quickProgressAction: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        gap: 8,
-    },
-    quickProgressActionText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    noProgressContainer: {
-        alignItems: 'center',
-        paddingVertical: 20,
-    },
-    noProgressText: {
-        fontSize: 14,
-        textAlign: 'center',
-        marginVertical: 12,
-        opacity: 0.7,
-    },
-    startButton: {
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 20,
-        marginTop: 8,
-    },
-    startButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    actionsContainer: {
-        marginBottom: 30,
-    },
-    primaryActionContainer: {
-        marginBottom: 24,
-    },
-    primaryAction: {
-        padding: 32,
-        borderRadius: 24,
-        alignItems: 'center',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 12,
-    },
-    primaryActionIcon: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    primaryActionTitle: {
-        fontSize: 24,
-        fontWeight: '800',
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    primaryActionSubtitle: {
-        fontSize: 16,
-        textAlign: 'center',
-        opacity: 0.8,
-        lineHeight: 22,
-    },
-    symmetricalActionsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-        gap: 16,
-    },
-    symmetricalActionCard: {
-        flex: 1,
-        padding: 24,
-        borderRadius: 20,
-        alignItems: 'center',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    secondaryActionIcon: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    historyIcon: {
-        backgroundColor: '#1A2C5B',
-    },
-    scheduleExamIcon: {
-        backgroundColor: '#28a745',
-    },
-    secondaryActionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        marginBottom: 6,
-        textAlign: 'center',
-    },
-    secondaryActionSubtitle: {
-        fontSize: 12,
-        textAlign: 'center',
-        opacity: 0.7,
-        lineHeight: 16,
-    },
-    additionalFeaturesRow: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    additionalFeature: {
-        flex: 1,
-    },
-    additionalFeatureButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 12,
-        borderRadius: 12,
-        gap: 6,
-        borderWidth: 1,
-    },
-    additionalFeatureText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    quoteContainer: {
-        padding: 24,
-        borderRadius: 16,
-        alignItems: 'center',
-        marginTop: 20,
-        borderWidth: 1,
-    },
-    quoteText: {
-        fontSize: 16,
-        fontStyle: 'italic',
-        textAlign: 'center',
-        marginVertical: 12,
-        lineHeight: 24,
-    },
-    quoteAuthor: {
-        fontSize: 14,
-        fontWeight: '600',
-        opacity: 0.8,
-    },
-    askAlexandriaContainer: {
-        marginBottom: 24,
-    },
-    askAlexandriaButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 30,
-        gap: 12,
-        borderWidth: 2,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    askAlexandriaText: {
-        fontSize: 16,
-        fontWeight: '600',
-        flex: 1,
-        textAlign: 'center',
-    },
-    examCountdownContainer: {
-        borderRadius: 15,
-        marginVertical: 10,
-        overflow: 'hidden',
-    },
-    examCountdownContent: {
-        padding: 20,
-    },
-    examCountdownHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    examCountdownTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        marginLeft: 8,
-    },
-    examTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        marginBottom: 10,
-    },
-    countdownContainer: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 8,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        marginBottom: 10,
-        alignSelf: 'flex-start',
-    },
-    countdownText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-    },
-    motivationalText: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.9)',
-        marginBottom: 15,
-        fontStyle: 'italic',
-    },
-    practicePrompt: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    practiceText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#FFFFFF',
-    },
+    // ✅ REMOVED: HomeHeader styles moved to HomeHeader component
+    // ✅ REMOVED: ProgressWidget & HierarchicalInsightsWidget styles moved to ProgressWidgets component
+    // ✅ REMOVED: MainActions styles (including askAlexandria) moved to MainActions component
+    // ✅ REMOVED: Quote styles moved to MotivationalQuote component
+    // ✅ REMOVED: Exam countdown styles moved to ExamCountdownWidget component
     cardContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -2035,213 +424,45 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginBottom: 16,
     },
-
-    // Profile Menu Styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-start',
-        alignItems: 'flex-end',
-    },
-    profileMenuContainer: {
-        borderRadius: 16,
-        margin: 20,
-        marginTop: 100,
-        minWidth: 280,
-        maxWidth: 320,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-        elevation: 12,
-    },
-    profileMenuHeader: {
+    // EXPERIMENTAL: Toggle button styles
+    experimentalToggleButton: {
+        position: 'absolute',
+        top: 110,
+        right: 20,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 20,
-        paddingBottom: 16,
+        backgroundColor: 'rgba(212, 175, 55, 0.15)',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 24,
+        borderWidth: 1.5,
+        borderColor: '#D4AF37',
+        zIndex: 1000,
+        shadowColor: '#D4AF37',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
     },
-    profileMenuUserInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    profileMenuAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    profileMenuUserName: {
-        fontSize: 16,
+    experimentalToggleText: {
+        color: '#F8F4E3',
+        fontSize: 13,
         fontWeight: '700',
-        marginBottom: 2,
+        marginLeft: 8,
+        marginRight: 8,
+        letterSpacing: 0.3,
     },
-    profileMenuUserEmail: {
-        fontSize: 12,
-        opacity: 0.8,
+    experimentalBadge: {
+        backgroundColor: '#D4AF37',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
     },
-    profileMenuClose: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    profileMenuDivider: {
-        height: 1,
-        marginHorizontal: 16,
-        marginVertical: 8,
-    },
-    profileMenuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    profileMenuItemDestructive: {
-        backgroundColor: 'rgba(255, 107, 122, 0.1)',
-    },
-    profileMenuItemContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    profileMenuItemText: {
-        fontSize: 16,
-        marginLeft: 16,
-        fontWeight: '500',
-    },
-    profileMenuItemTextDestructive: {
-        color: '#ff6b7a',
-        fontWeight: '600',
-    },
-    profileMenuLanguageIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    profileMenuLanguageFlag: {
-        fontSize: 16,
-    },
-
-    // Language Menu Styles
-    languageMenuContainer: {
-        borderRadius: 16,
-        margin: 20,
-        marginTop: 120,
-        maxHeight: screenHeight * 0.7,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
-        elevation: 12,
-    },
-    languageMenuHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 20,
-        paddingBottom: 16,
-    },
-    languageMenuTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    languageMenuClose: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    languageMenuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    languageMenuItemSelected: {
-        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-    },
-    languageFlag: {
-        fontSize: 20,
-        marginRight: 16,
-    },
-    languageLabel: {
-        fontSize: 16,
-        fontWeight: '500',
-        flex: 1,
-    },
-    languageLabelSelected: {
-        fontWeight: '700',
-        color: '#28a745',
-    },
-
-    // ✅ NEW: Hierarchical Insights Widget Styles
-    hierarchicalOverview: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: 16,
-    },
-    hierarchicalStat: {
-        alignItems: 'center',
-    },
-    hierarchicalStatNumber: {
-        fontSize: 20,
+    experimentalBadgeText: {
+        color: '#1A2C5B',
+        fontSize: 10,
         fontWeight: '800',
-        marginBottom: 4,
+        letterSpacing: 0.5,
     },
-    hierarchicalStatLabel: {
-        fontSize: 12,
-        opacity: 0.7,
-    },
-    hierarchicalInsight: {
-        marginBottom: 12,
-    },
-    insightHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    insightIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    insightContent: {
-        flex: 1,
-    },
-    insightTitle: {
-        fontSize: 12,
-        opacity: 0.8,
-        marginBottom: 2,
-    },
-    insightSubject: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 2,
-    },
-    insightDetail: {
-        fontSize: 11,
-        opacity: 0.7,
-    },
-    hierarchicalAction: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: 8,
-        marginTop: 8,
-        gap: 8,
-        borderWidth: 1,
-    },
-    hierarchicalActionText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
+    // ✅ REMOVED: All modal styles moved to ProfileMenuModals component
 });

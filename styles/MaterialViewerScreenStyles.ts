@@ -590,4 +590,28 @@ export const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '500',
     },
+
+    // WebView Styles
+    webview: {
+        flex: 1,
+        backgroundColor: 'transparent',
+    },
+
+    webviewLoadingContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        padding: 20,
+    },
+
+    webviewLoadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        fontWeight: '500',
+    },
 });

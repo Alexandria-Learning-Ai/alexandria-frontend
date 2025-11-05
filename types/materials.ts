@@ -57,6 +57,11 @@ export interface MaterialMetadata {
 }
 
 /**
+ * Chapter content type
+ */
+export type ChapterContentType = 'html' | 'text';
+
+/**
  * Chapter interface
  */
 export interface Chapter {
@@ -65,6 +70,7 @@ export interface Chapter {
   index: number; // 1-indexed chapter number
   title: string;
   content_url: string; // S3 signed URL (1-hour expiry)
+  content_type?: ChapterContentType; // 'html' for HTML with images, 'text' for plain text
   word_count: number;
   created_at: string;
 }
@@ -167,6 +173,10 @@ export interface MaterialDetailResponse {
  */
 export interface ChapterContentResponse {
   chapter: Chapter;
+  content: string;
+  content_type: 'text' | 'html';
+  epub_styles?: string | null;
+  expires_at: string;
   progress?: ChapterProgress;
 }
 

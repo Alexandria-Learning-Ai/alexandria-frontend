@@ -9,11 +9,12 @@ const path = require('path');
 // Directories to process
 const directories = [
   'screens',
-  'components', 
+  'components',
   'services',
   'utils',
   'contexts',
-  'navigation'
+  'navigation',
+  'hooks'
 ];
 
 // Files to skip
@@ -128,7 +129,7 @@ function processDirectory(dirPath) {
         results.filesModified += subResults.filesModified;
         results.totalChanges += subResults.totalChanges;
         results.errors.push(...subResults.errors);
-      } else if (file.endsWith('.js') && !skipFiles.includes(file)) {
+      } else if ((file.endsWith('.js') || file.endsWith('.ts') || file.endsWith('.tsx')) && !skipFiles.includes(file)) {
         results.filesProcessed++;
         const result = processFile(filePath);
         

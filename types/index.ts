@@ -439,6 +439,13 @@ export interface Question {
   difficulty?: 'easy' | 'medium' | 'hard' | 'expert' | 'genius';
   points?: number;
   solution_steps?: string[]; // Math question solution steps
+  blanks?: Array<{
+    position: number;
+    correct_answer: string;
+    accepted_answers?: string[];
+    case_sensitive?: boolean;
+    hint?: string;
+  }>; // Fill-in-blank question blanks configuration
 }
 
 /**

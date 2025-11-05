@@ -4,6 +4,7 @@
  */
 
 import logger from './logger';
+import { validateFillInBlankAnswer, validateMultipleBlanks } from './fillInBlankValidator';
 
 /**
  * Normalize answer for comparison
@@ -79,6 +80,56 @@ export const evaluateAnswer = (question: any, userAnswer: any): boolean => {
         return Math.abs(numericUser - numericCorrect) <= tolerance;
       }
 
+      return normalizedUser === normalizedCorrect;
+
+    case 'fill_in_blank':
+      // Use dedicated fill-in-blank validator with fuzzy matching
+      // Handle both single-blank and multi-blank questions
+      if (question.blanks && Array.isArray(question.blanks)) {
+        if (question.blanks.length === 1) {
+          // Single blank question
+          const blank = question.blanks[0];
+          const validation = validateFillInBlankAnswer(
+            String(userAnswer),
+            blank,
+            true // Enable fuzzy matching
+          );
+
+          logger.info(`🔍 FILL-IN-BLANK EVALUATION (Single):`, {
+            questionId: question.id,
+            userAnswer: userAnswer,
+            correctAnswer: blank.correct_answer,
+            acceptedAnswers: blank.accepted_answers,
+            isCorrect: validation.isCorrect,
+            similarity: validation.similarityScore,
+            matchedAnswer: validation.matchedAnswer
+          });
+
+          return validation.isCorrect;
+        } else {
+          // Multi-blank question - userAnswer should be an array
+          const userAnswers = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
+          const validation = validateMultipleBlanks(
+            userAnswers.map(a => String(a)),
+            question.blanks,
+            true // Enable fuzzy matching
+          );
+
+          logger.info(`🔍 FILL-IN-BLANK EVALUATION (Multi):`, {
+            questionId: question.id,
+            userAnswers: userAnswers,
+            blanks: question.blanks.map(b => b.correct_answer),
+            allCorrect: validation.allCorrect,
+            correctCount: validation.correctCount,
+            totalCount: validation.totalCount
+          });
+
+          return validation.allCorrect;
+        }
+      }
+
+      // Fallback: if no blanks configuration, use normalized comparison
+      logger.warn(`⚠️ Fill-in-blank question ${question.id} missing blanks configuration`);
       return normalizedUser === normalizedCorrect;
 
     default:

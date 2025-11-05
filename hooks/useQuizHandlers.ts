@@ -346,15 +346,10 @@ export const useQuizHandlers = (params: QuizHandlersParams) => {
       if (analyticsResult.success) {
         logger.info('✅ Advanced analytics submitted successfully!');
 
-        // Show achievement notifications if any
+        // Store achievements for popup display (handled by QuizScreen)
         if (analyticsResult.achievements && analyticsResult.achievements.length > 0) {
-          const achievementNames = analyticsResult.achievements.map(a => a.name).join(', ');
-          setTimeout(() => {
-            showAlexandriaAlert(
-              '🏆 New Achievements Unlocked!',
-              `Congratulations! You've earned: ${achievementNames}`,
-            );
-          }, 1500);
+          logger.info('🏆 Achievements unlocked:', analyticsResult.achievements);
+          // Achievements will be shown via AchievementPopup in QuizScreen
         }
 
         // Show insights notification
@@ -383,6 +378,12 @@ export const useQuizHandlers = (params: QuizHandlersParams) => {
         };
 
         navigateToResults(enhancedMetadata);
+
+        // Return achievements and points for QuizScreen to display
+        return {
+          achievements: analyticsResult.achievements || [],
+          pointsEarned: analyticsResult.pointsEarned || 0,
+        };
 
       } else {
         logger.warn('⚠️ Analytics submission failed, proceeding with fallback flow');
@@ -495,3 +496,12 @@ export const useQuizHandlers = (params: QuizHandlersParams) => {
     handleStartQuiz,
   };
 };
+
+export interface QuizHandlersReturn {
+  handleSelectOption: (questionId: string, selectedValue: any) => void;
+  handleShortAnswer: (questionId: string, text: string) => void;
+  handleQuizComplete: (results: any[], finalScore: number, finalQuestions: any[]) => Promise<void>;
+  handleSubmit: () => Promise<{ achievements?: any[]; pointsEarned?: number } | void>;
+  navigateQuestion: (direction: 'next' | 'prev', questionsLength: number) => void;
+  handleStartQuiz: () => void;
+}

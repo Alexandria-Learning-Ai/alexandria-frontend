@@ -25,6 +25,21 @@ export const getDisplayCorrectAnswer = (question: Question): string => {
   } else if (question.type === 'true_false') {
     const normalizedCorrectAnswer = normalizeAnswer(question.correctAnswer);
     return normalizedCorrectAnswer === 'true' ? 'True' : 'False';
+  } else if (question.type === 'fill_in_blank') {
+    // Handle fill-in-blank questions by extracting answers from blanks array
+    if (question.blanks && Array.isArray(question.blanks) && question.blanks.length > 0) {
+      // For single blank, return the correct answer directly
+      if (question.blanks.length === 1) {
+        const blank = question.blanks[0];
+        return blank.correct_answer || 'N/A';
+      }
+      // For multiple blanks, join all correct answers
+      return question.blanks
+        .map(blank => blank.correct_answer || '?')
+        .join(', ');
+    }
+    // Fallback to correctAnswer if blanks not configured properly
+    return question.correctAnswer || 'N/A';
   } else if (question.options && Array.isArray(question.options)) {
     if (question.type === 'multiple_choice') {
       const correctOption = question.options.find(opt => typeof opt === 'object' && opt?.label === question.correctAnswer);
@@ -71,6 +86,14 @@ export const getDisplayUserAnswer = (
     } else {
       return String(userAnswer);
     }
+  } else if (question.type === 'fill_in_blank') {
+    // Handle fill-in-blank user answers
+    // For multi-blank questions, userAnswer might be an array
+    if (Array.isArray(userAnswer)) {
+      return userAnswer.length > 0 ? userAnswer.join(', ') : '—';
+    }
+    // For single blank, display the answer directly
+    return userAnswer || '—';
   } else {
     return userAnswer || '—';
   }
