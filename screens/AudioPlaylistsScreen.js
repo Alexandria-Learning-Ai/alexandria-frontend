@@ -185,7 +185,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
 
       logger.info(`📄 Selected file: ${file.name} (${file.size} bytes)`);
 
-      // Step 1: Extract text
+      // Upload directly for audio generation (bypasses Materials Library)
       const formData = new FormData();
       formData.append('file', {
         uri: file.uri,
@@ -193,42 +193,46 @@ export default function AudioPlaylistsScreen({ navigation }) {
         name: file.name,
       });
       formData.append('user_id', user.uid);
+      formData.append('voice', 'default');
+      formData.append('speed', '1.0');
+      formData.append('language', 'en');
 
-      logger.info('🔄 Extracting text from document...');
+      logger.info('🎵 Uploading for audio-only generation...');
 
-      const extractResponse = await axios.post(
-        `${API_BASE_URL}/api/study/extract-text`,
+      const response = await axios.post(
+        `${API_BASE_URL}/api/audio/upload-and-generate`,
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
             'X-User-ID': user.uid,
           },
-          timeout: 120000, // 2 minutes for text extraction
+          timeout: 120000, // 2 minutes for upload and processing
         }
       );
 
-      if (!extractResponse.data || !extractResponse.data.material_id) {
-        throw new Error('Failed to extract text from document');
+      if (!response.data || !response.data.material_id || !response.data.playlist) {
+        throw new Error('Failed to generate audio playlist');
       }
 
-      const materialId = extractResponse.data.material_id;
-      const materialTitle = extractResponse.data.title || file.name;
+      const materialId = response.data.material_id;
+      const playlist = response.data.playlist;
+      const materialTitle = playlist.title || file.name;
 
-      logger.info(`✅ Material uploaded successfully: ${materialId}`);
+      logger.info(`✅ Audio playlist created: ${playlist.chunked_playlist_id}`);
 
       setUploadingForAudio(false);
 
-      // Step 2: Navigate to Progressive Playlist Screen
-      // It will auto-create the playlist
+      // Navigate to Progressive Playlist Screen with existing playlist data
       navigation.navigate('ProgressivePlaylist', {
         materialId,
         materialTitle,
+        initialPlaylist: playlist, // Pass the playlist data directly
       });
 
       Alert.alert(
         'Upload Successful!',
-        `"${materialTitle}" uploaded. Generating audio playlist...`,
+        `"${materialTitle}" audio generation started!`,
         [{ text: 'OK' }]
       );
     } catch (error) {

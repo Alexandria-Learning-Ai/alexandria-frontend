@@ -33,6 +33,7 @@ type RootStackParamList = {
   ProgressivePlaylist: {
     materialId: string;
     materialTitle?: string;
+    initialPlaylist?: ProgressivePlaylist;
   };
 };
 
@@ -42,7 +43,7 @@ type ProgressivePlaylistScreenNavigationProp = StackNavigationProp<RootStackPara
 export default function ProgressivePlaylistScreen() {
   const navigation = useNavigation<ProgressivePlaylistScreenNavigationProp>();
   const route = useRoute<ProgressivePlaylistScreenRouteProp>();
-  const { materialId, materialTitle } = route.params;
+  const { materialId, materialTitle, initialPlaylist } = route.params;
 
   // State
   const [playlist, setPlaylist] = useState<ProgressivePlaylist | null>(null);
@@ -72,6 +73,17 @@ export default function ProgressivePlaylistScreen() {
   }, [materialId]);
 
   /**
+   * Reload playlist when screen comes into focus
+   * FIX Issue 2: Persist playlist state when navigating away and back
+   */
+  useFocusEffect(
+    useCallback(() => {
+      logger.info('📱 Screen focused - reloading playlist data');
+      loadPlaylist();
+    }, [materialId])
+  );
+
+  /**
    * Load playlist from API (or create if doesn't exist)
    */
   const loadPlaylist = async () => {
@@ -80,6 +92,14 @@ export default function ProgressivePlaylistScreen() {
       setError(null);
 
       logger.info(`📋 Loading progressive playlist for material: ${materialId}`);
+
+      // Use initial playlist data if provided (from audio-only upload)
+      if (initialPlaylist) {
+        logger.info('✅ Using initial playlist data from upload');
+        setPlaylist(initialPlaylist);
+        setIsLoading(false);
+        return;
+      }
 
       // Try to get existing playlist
       let playlistData = await ProgressivePlaylistService.getPlaylistStatus(materialId);
@@ -314,6 +334,7 @@ export default function ProgressivePlaylistScreen() {
             playlist={playlist}
             onTrackPlay={handleTrackPlay}
             onRefresh={handleRefresh}
+            onPlaylistUpdate={handlePlaylistUpdate}
             currentlyPlayingTrackId={currentTrack?.id || null}
           />
         </View>

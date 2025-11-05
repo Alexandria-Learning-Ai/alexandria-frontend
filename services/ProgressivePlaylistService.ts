@@ -257,7 +257,9 @@ class ProgressivePlaylistService {
         throw new Error('User not authenticated');
       }
 
+      // Send form data with user_id to match backend expectations
       const formData = new FormData();
+      formData.append('user_id', user.uid);
 
       const response = await axios.post<AudioTrack>(
         `${API_BASE_URL}/api/study/audio/tracks/${trackId}/retry`,
@@ -266,9 +268,6 @@ class ProgressivePlaylistService {
           headers: {
             'Content-Type': 'multipart/form-data',
             'X-User-ID': user.uid,
-          },
-          params: {
-            user_id: user.uid,
           },
         }
       );
@@ -354,6 +353,60 @@ class ProgressivePlaylistService {
     }
 
     return Math.round((playlist.completed_tracks / playlist.total_tracks) * 100);
+  }
+
+  /**
+   * Finalize chunked playlist - save all tracks to My Playlists
+   *
+   * @param materialId - Material ID
+   * @returns Finalize response with playlist details
+   */
+  static async finalizePlaylist(materialId: string): Promise<{
+    success: boolean;
+    message: string;
+    playlist_id: string;
+    tracks_added: number;
+  }> {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Send form data with user_id to match backend expectations
+      const formData = new FormData();
+      formData.append('user_id', user.uid);
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/study/materials/${materialId}/audio/playlist/finalize`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'X-User-ID': user.uid,
+          },
+        }
+      );
+
+      logger.info('💾 Playlist finalized successfully', {
+        playlistId: response.data.playlist_id,
+        tracksAdded: response.data.tracks_added,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('❌ Failed to finalize playlist', { error, materialId });
+
+      if (error.response) {
+        throw new Error(
+          error.response.data?.detail ||
+            error.response.data?.message ||
+            'Failed to save playlist'
+        );
+      }
+
+      throw error;
+    }
   }
 }
 
