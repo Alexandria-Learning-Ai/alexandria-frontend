@@ -1,0 +1,43 @@
+# Node / React Native
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+expo-error.log
+dist/
+build/
+.cache/
+.expo/
+.expo-shared/
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# macOS system files
+.DS_Store
+
+# Android / iOS builds
+android/
+ios/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.xcworkspace
+*.xcuserstate
+*.xcuserdatad
+
+# VS Code & editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+
+# Misc
+Thumbs.db
