@@ -87,6 +87,14 @@ const QuickShortcutTab: React.FC<QuickShortcutTabProps> = ({ navigation, user, s
       route: 'AskAlexandria',
     },
     {
+      id: 'flashcards',
+      title: 'Flashcards',
+      description: 'Study with flashcards',
+      icon: 'layer-group',
+      color: '#9B59B6',
+      route: 'FlashcardDashboardScreen',
+    },
+    {
       id: 'history',
       title: 'Quiz History',
       description: 'Review past quizzes',

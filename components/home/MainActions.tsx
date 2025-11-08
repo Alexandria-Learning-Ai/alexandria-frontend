@@ -291,7 +291,7 @@ const MainActions: React.FC<MainActionsProps> = ({
         </Animatable.View>
       </View>
 
-      {/* Third Row: Book Study Mode */}
+      {/* Third Row: Book Study Mode & Flashcards */}
       <View style={styles.symmetricalActionsRow}>
         <Animatable.View animation="slideInLeft" delay={1500} style={{ flex: 1 }}>
           <TouchableOpacity

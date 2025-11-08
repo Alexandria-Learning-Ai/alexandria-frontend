@@ -38,6 +38,7 @@ import WeaknessAnalysisScreen from '../screens/WeaknessAnalysisScreen';
 import TermsAndAgreementScreen from '../screens/TermsAndAgreementScreen';
 import FlashcardScreen from '../screens/FlashcardScreen';
 import FlashcardStudyScreen from '../screens/FlashcardStudyScreen';
+import FlashcardDashboardScreen from '../screens/FlashcardDashboardScreen';
 import StudyMaterialsScreen from '../screens/StudyMaterialsScreen';
 import MaterialViewerScreen from '../screens/MaterialViewerScreen';
 import AudioPlaylistsScreen from '../screens/AudioPlaylistsScreen';
@@ -53,6 +54,12 @@ import MaterialLibraryScreen from '../screens/MaterialLibraryScreen';
 import BookDetailScreen from '../screens/BookDetailScreen';
 import ChapterReaderScreen from '../screens/ChapterReaderScreen';
 import UploadModalScreen from '../screens/UploadModalScreen';
+
+// Exam Generator screens (Phase 3)
+import ExamGeneratorScreen from '../screens/ExamGeneratorScreen';
+import ExamViewerScreen from '../screens/ExamViewerScreen';
+import ExamHistoryScreen from '../screens/ExamHistoryScreen';
+import ExamResultsScreen from '../screens/ExamResultsScreen';
 
 // Subscription context and services
 import { SubscriptionProvider, useSubscription } from '../contexts/SubscriptionContext';
@@ -654,6 +661,15 @@ const NavigationStackWrapper = ({ user, userState }) => {
             </Stack.Screen>
 
             <Stack.Screen
+              name="FlashcardDashboardScreen"
+              options={{
+                ...getScreenOptions('Flashcard Studio', { gestureEnabled: true }),
+                headerShown: false
+              }}
+              component={FlashcardDashboardScreen}
+            />
+
+            <Stack.Screen
               name="FlashcardScreen"
               options={{
                 ...getScreenOptions('Study Flashcards', { gestureEnabled: true })
@@ -714,11 +730,48 @@ const NavigationStackWrapper = ({ user, userState }) => {
               {(props) => <ScheduleExamScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
-            <Stack.Screen 
-              name="ExamListScreen" 
+            <Stack.Screen
+              name="ExamListScreen"
               options={{ headerShown: false }}
             >
               {(props) => <ExamListScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            {/* Exam Generator screens */}
+            <Stack.Screen
+              name="ExamGenerator"
+              options={{
+                ...getScreenOptions('Generate Exam', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <ExamGeneratorScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="ExamViewer"
+              options={{
+                ...getScreenOptions('Exam', { gestureEnabled: false })
+              }}
+            >
+              {(props) => <ExamViewerScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="ExamHistory"
+              options={{
+                ...getScreenOptions('My Exams', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <ExamHistoryScreen {...props} user={user} subscription={subscription} />}
+            </Stack.Screen>
+
+            <Stack.Screen
+              name="ExamResults"
+              options={{
+                ...getScreenOptions('Exam Results', { gestureEnabled: true })
+              }}
+            >
+              {(props) => <ExamResultsScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
 
             <Stack.Screen
@@ -1055,6 +1108,15 @@ const NavigationStackWrapper = ({ user, userState }) => {
             >
               {(props) => <WeaknessAnalysisScreen {...props} user={user} subscription={subscription} />}
             </Stack.Screen>
+
+            <Stack.Screen
+              name="FlashcardDashboardScreen"
+              options={{
+                ...getScreenOptions('Flashcard Studio', { gestureEnabled: true }),
+                headerShown: false
+              }}
+              component={FlashcardDashboardScreen}
+            />
 
             <Stack.Screen
               name="FlashcardScreen"

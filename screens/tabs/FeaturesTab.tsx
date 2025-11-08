@@ -2,12 +2,14 @@
  * FeaturesTab - Features screen with feature cards
  *
  * Contains:
+ * - Exam Generator (Phase 1.5)
  * - Audio Playlist
  * - Schedule Exam
  * - Quiz History
  * - Study Materials
  * - Book Study
  * - Progress Tracker
+ * - Flashcards
  *
  * Features:
  * - Type-safe props
@@ -76,13 +78,22 @@ const FeaturesTab: React.FC<FeaturesTabProps> = ({ navigation, user, subscriptio
 
   const features: FeatureCard[] = [
     {
+      id: 'exam-generator',
+      title: 'Exam Generator',
+      subtitle: 'AI-powered exam creation',
+      icon: 'file-alt',
+      color: '#E74C3C',
+      route: 'ExamGenerator',
+      delay: 200,
+    },
+    {
       id: 'audio',
       title: 'Audio Playlists',
       subtitle: 'Manage audio playlists',
       icon: 'headphones',
       color: '#D4AF37',
       route: 'AudioPlaylists',
-      delay: 200,
+      delay: 250,
     },
     {
       id: 'schedule',
@@ -128,6 +139,15 @@ const FeaturesTab: React.FC<FeaturesTabProps> = ({ navigation, user, subscriptio
       color: '#3498DB',
       route: 'ProgressTracker',
       delay: 700,
+    },
+    {
+      id: 'flashcards',
+      title: 'Flashcards',
+      subtitle: 'Study with flashcards',
+      icon: 'layer-group',
+      color: '#9B59B6',
+      route: 'FlashcardDashboardScreen',
+      delay: 800,
     },
   ];
 
