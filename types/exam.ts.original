@@ -1,0 +1,323 @@
+/**
+ * Exam Generator Type Definitions
+ *
+ * Comprehensive TypeScript types for the Alexandria Exam Generator feature
+ * including API requests/responses, UI state, and navigation.
+ */
+
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+
+/**
+ * Exam question section types
+ */
+export type ExamSectionType = 'True/False' | 'Multiple Choice' | 'Written';
+
+/**
+ * Difficulty levels for exam generation
+ */
+export type ExamDifficulty = 'Easy' | 'Moderate' | 'Hard';
+
+/**
+ * Exam length options
+ */
+export type ExamLength = 'Short' | 'Standard' | 'Full-Length';
+
+/**
+ * Exam generation style/tone
+ */
+export type ExamStyle = 'Professor' | 'Conversational' | 'Formal' | 'Socratic';
+
+/**
+ * Question types in parsed exams
+ */
+export type QuestionType = 'true_false' | 'multiple_choice' | 'written';
+
+/**
+ * Exam generation request payload
+ */
+export interface ExamGenerateRequest {
+  topic: string;
+  sections: ExamSectionType[];
+  difficulty: ExamDifficulty;
+  exam_length: ExamLength;
+  style?: ExamStyle;
+}
+
+/**
+ * Metadata returned from exam generation
+ */
+export interface ExamMetadata {
+  model: string;
+  tokens_used: number;
+  sections_count: number;
+}
+
+/**
+ * Response from exam generation endpoint
+ */
+export interface ExamResponse {
+  exam_id: string;
+  exam_text: string;
+  created_at: string;
+  metadata: ExamMetadata;
+}
+
+/**
+ * Summary of an exam (for history list)
+ */
+export interface ExamSummary {
+  exam_id: string;
+  topic: string;
+  difficulty: string;
+  sections: string[];
+  created_at: string;
+  preview: string; // First 100 chars of exam
+}
+
+/**
+ * Parsed question structure from exam text
+ */
+export interface ParsedQuestion {
+  question_number: number;
+  question_text: string;
+  question_type: QuestionType;
+  options?: string[]; // For multiple choice
+  correct_answer: string;
+  section: string;
+}
+
+/**
+ * Detailed exam with parsed questions
+ */
+export interface ExamDetail {
+  exam_id: string;
+  topic: string;
+  exam_text: string;
+  parsed_questions: ParsedQuestion[];
+  sections: string[];
+  difficulty: string;
+  exam_length: string;
+  style: string;
+  created_at: string;
+}
+
+/**
+ * User's answer to a question
+ */
+export interface UserAnswer {
+  question_number: number;
+  user_answer: string;
+  is_correct?: boolean;
+  grading_result?: GradingResult; // For written responses
+}
+
+/**
+ * AI grading result for written responses
+ */
+export interface GradingResult {
+  score: number; // 0-100
+  feedback: string;
+  strengths: string[];
+  areas_for_improvement: string[];
+}
+
+/**
+ * Exam attempt (user taking an exam)
+ */
+export interface ExamAttempt {
+  attempt_id: string;
+  exam_id: string;
+  user_answers: Record<number, UserAnswer>;
+  started_at: string;
+  completed_at?: string;
+  score?: number;
+  total_questions: number;
+  correct_answers?: number;
+}
+
+/**
+ * Exam results summary
+ */
+export interface ExamResults {
+  attempt_id: string;
+  exam_id: string;
+  exam_topic: string;
+  score: number; // Overall percentage
+  total_questions: number;
+  correct_answers: number;
+  incorrect_questions: Array<{
+    question_number: number;
+    question_text: string;
+    user_answer: string;
+    correct_answer: string;
+    explanation?: string;
+  }>;
+  section_scores: Record<string, {
+    total: number;
+    correct: number;
+    percentage: number;
+  }>;
+  completed_at: string;
+}
+
+/**
+ * File attachment for exam generation
+ */
+export interface ExamFile {
+  uri: string;
+  name: string;
+  type: string; // MIME type
+  size?: number;
+}
+
+/**
+ * Exam history API response
+ */
+export interface ExamHistoryResponse {
+  exams: ExamSummary[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+/**
+ * Section header with position in exam text
+ */
+export interface SectionHeader {
+  title: string;
+  startIndex: number;
+}
+
+/**
+ * Exam mode for viewer screen
+ */
+export type ExamMode = 'take' | 'review';
+
+/**
+ * Navigation Stack for Exam Feature
+ */
+export type ExamStackParamList = {
+  ExamGenerator: undefined;
+  ExamViewer: {
+    examId: string;
+    mode: ExamMode;
+    attemptId?: string; // For review mode
+  };
+  ExamHistory: undefined;
+  ExamResults: {
+    attemptId: string;
+    examId: string;
+  };
+};
+
+/**
+ * Navigation props for Exam Generator Screen
+ */
+export type ExamGeneratorScreenNavigationProp = NativeStackNavigationProp<
+  ExamStackParamList,
+  'ExamGenerator'
+>;
+
+export interface ExamGeneratorScreenProps {
+  navigation: ExamGeneratorScreenNavigationProp;
+}
+
+/**
+ * Navigation props for Exam Viewer Screen
+ */
+export type ExamViewerScreenNavigationProp = NativeStackNavigationProp<
+  ExamStackParamList,
+  'ExamViewer'
+>;
+
+export type ExamViewerScreenRouteProp = RouteProp<ExamStackParamList, 'ExamViewer'>;
+
+export interface ExamViewerScreenProps {
+  navigation: ExamViewerScreenNavigationProp;
+  route: ExamViewerScreenRouteProp;
+}
+
+/**
+ * Navigation props for Exam History Screen
+ */
+export type ExamHistoryScreenNavigationProp = NativeStackNavigationProp<
+  ExamStackParamList,
+  'ExamHistory'
+>;
+
+export interface ExamHistoryScreenProps {
+  navigation: ExamHistoryScreenNavigationProp;
+}
+
+/**
+ * Navigation props for Exam Results Screen
+ */
+export type ExamResultsScreenNavigationProp = NativeStackNavigationProp<
+  ExamStackParamList,
+  'ExamResults'
+>;
+
+export type ExamResultsScreenRouteProp = RouteProp<ExamStackParamList, 'ExamResults'>;
+
+export interface ExamResultsScreenProps {
+  navigation: ExamResultsScreenNavigationProp;
+  route: ExamResultsScreenRouteProp;
+}
+
+/**
+ * Component Props
+ */
+
+export interface QuestionCardProps {
+  question: ParsedQuestion;
+  questionNumber: number;
+  userAnswer?: string;
+  onAnswerChange: (answer: string) => void;
+  mode: ExamMode;
+  showCorrectAnswer?: boolean;
+}
+
+export interface SectionHeaderProps {
+  title: string;
+  sectionNumber: number;
+}
+
+export interface ExamTimerProps {
+  duration: number; // seconds
+  onExpire: () => void;
+  isPaused?: boolean;
+}
+
+export interface GradingFeedbackProps {
+  result: GradingResult;
+  questionNumber: number;
+}
+
+export interface ExamCardProps {
+  exam: ExamSummary;
+  onPress: () => void;
+  onDelete: () => void;
+  onRetake: () => void;
+}
+
+/**
+ * Form state for exam generation
+ */
+export interface ExamGenerationFormState {
+  topic: string;
+  sections: ExamSectionType[];
+  difficulty: ExamDifficulty;
+  exam_length: ExamLength;
+  style: ExamStyle;
+  file?: ExamFile;
+}
+
+/**
+ * Validation errors for exam generation form
+ */
+export interface ExamGenerationFormErrors {
+  topic?: string;
+  sections?: string;
+  file?: string;
+}
