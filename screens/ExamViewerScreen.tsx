@@ -146,7 +146,7 @@ export default function ExamViewerScreen({
     );
   }
 
-  // Flatten structured exam for compatibility with ExamScreen
+  // Flatten structured exam for backward compatibility (still needed for context)
   const questions = flattenExamSections(structuredExam);
 
   // Validate we have questions after flattening
@@ -168,24 +168,27 @@ export default function ExamViewerScreen({
     );
   }
 
-  // Helper to check if metadata has Math Intelligence features
-  const hasMathFeature = (metadata: any, key: string): boolean => {
-    return metadata && typeof metadata === 'object' && key in metadata;
-  };
+  // Log Math Intelligence features
+  const hasSectionGraphs = structuredExam.sections.some(s => s.graph_image);
+  const hasQuestionLatex = questions.some(q =>
+    q.metadata && typeof q.metadata === 'object' && 'requires_latex' in q.metadata
+  );
 
   logger.info('Rendering exam with Math Intelligence features', {
     examId,
     sectionsCount: structuredExam.sections.length,
     totalQuestions: questions.length,
-    hasLatex: questions.some(q => hasMathFeature(q.metadata, 'requires_latex')),
-    hasGraphs: questions.some(q => hasMathFeature(q.metadata, 'graph_image'))
+    hasSectionGraphs,
+    hasQuestionLatex,
+    usingSectionRenderer: hasSectionGraphs || structuredExam.sections.length > 0
   });
 
-  // Render exam with scaffold
+  // Render exam with section-aware scaffold
   return (
     <ExamScreen
       examId={examId}
       questions={questions}
+      structuredSections={structuredExam.sections} // Pass structured sections
       title={structuredExam.title || structuredExam.topic || 'Exam'}
       duration={duration || null}
       mode={mode}
