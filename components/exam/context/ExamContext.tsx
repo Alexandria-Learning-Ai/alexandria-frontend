@@ -18,7 +18,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ParsedQuestion, ExamMode } from '../../../types/exam';
+import { ParsedQuestion, ExamMode, StructuredExamSection } from '../../../types/exam';
 import logger from '../../../utils/logger';
 
 /**
@@ -49,6 +49,7 @@ export interface ExamContextState {
   examId: string;
   questions: ParsedQuestion[];
   sections: ExamSection[];
+  structuredSections?: StructuredExamSection[]; // New: original structured sections
   mode: ExamMode;
 
   // Navigation state
@@ -112,6 +113,7 @@ export interface ExamProviderProps {
   children: React.ReactNode;
   examId: string;
   questions: ParsedQuestion[];
+  structuredSections?: StructuredExamSection[]; // New: pass structured sections directly
   mode?: ExamMode;
   duration?: number; // in minutes, null = no timer
   onSubmit?: (answers: Record<number, any>) => Promise<void>;
@@ -124,6 +126,7 @@ export const ExamProvider: React.FC<ExamProviderProps> = ({
   children,
   examId,
   questions,
+  structuredSections,
   mode = 'take',
   duration = null,
   onSubmit,
@@ -417,6 +420,7 @@ export const ExamProvider: React.FC<ExamProviderProps> = ({
     examId,
     questions,
     sections,
+    structuredSections, // Pass through structured sections
     mode,
     currentSectionIndex,
     currentQuestionIndex,

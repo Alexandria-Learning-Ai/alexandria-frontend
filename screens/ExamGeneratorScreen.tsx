@@ -47,6 +47,19 @@ import {
 import { colors, radius, spacing } from '../theme/tokens';
 import logger from '../utils/logger';
 
+// Math keywords for detecting math-related topics
+const MATH_KEYWORDS = [
+  'calculus',
+  'algebra',
+  'trigonometry',
+  'precalculus',
+  'geometry',
+  'math',
+  'mathematics',
+  'physics',
+  'statistics'
+];
+
 type ExamGeneratorScreenNavigationProp = NativeStackNavigationProp<any, 'ExamGenerator'>;
 
 interface ExamGeneratorScreenProps {
@@ -66,6 +79,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
   const [examLength, setExamLength] = useState<ExamLength>('Standard');
   const [style, setStyle] = useState<ExamStyle>('Professor');
   const [uploadedFile, setUploadedFile] = useState<ExamFile | undefined>(undefined);
+  const [includeGraph, setIncludeGraph] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { mutate: generate, isPending } = useGenerateExam();
@@ -75,6 +89,14 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
   const difficultyLevels: ExamDifficulty[] = ['Easy', 'Moderate', 'Hard'];
   const examLengths: ExamLength[] = ['Short', 'Standard', 'Full-Length'];
   const styleOptions: ExamStyle[] = ['Professor', 'Conversational', 'Formal', 'Socratic'];
+
+  // Detect if topic is math-related
+  const isMathTopic = useMemo(() => {
+    const topicLower = topic.toLowerCase().trim();
+    if (!topicLower) return false;
+
+    return MATH_KEYWORDS.some(keyword => topicLower.includes(keyword));
+  }, [topic]);
 
   // Handle section toggle
   const toggleSection = (section: ExamSectionType) => {
@@ -131,6 +153,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
       difficulty,
       exam_length: examLength,
       style,
+      generate_graph: includeGraph,
     };
 
     // Validate
@@ -174,6 +197,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
                   setExamLength('Standard');
                   setStyle('Professor');
                   setUploadedFile(undefined);
+                  setIncludeGraph(false);
                 },
               },
             ]
@@ -323,6 +347,37 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
               {examLength === 'Full-Length' && '40-50 questions'}
             </Text>
           </View>
+
+          {/* Graph Visualization (Math topics + Full-Length only) */}
+          {isMathTopic && examLength === 'Full-Length' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Graph Visualization (Optional)</Text>
+              <Text style={[styles.helpText, { marginBottom: spacing[12] }]}>
+                Add a visual graph to Section 3 for enhanced understanding
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.checkboxRow,
+                  includeGraph && styles.checkboxRowSelected,
+                ]}
+                onPress={() => setIncludeGraph(!includeGraph)}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    includeGraph && styles.checkboxChecked,
+                  ]}
+                >
+                  {includeGraph && (
+                    <FontAwesome5 name="check" size={12} color={colors.bg} />
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>
+                  Include graph in Section 3
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Style (Optional) */}
           <View style={styles.section}>

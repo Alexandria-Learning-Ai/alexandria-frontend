@@ -86,6 +86,10 @@ export async function generateExam(
       formData.append('style', request.style);
     }
 
+    if (request.generate_graph !== undefined) {
+      formData.append('generate_graph', request.generate_graph.toString());
+    }
+
     // Attach file if provided
     if (file) {
       formData.append('file', {

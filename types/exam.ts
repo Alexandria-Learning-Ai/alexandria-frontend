@@ -54,6 +54,7 @@ export interface ExamGenerateRequest {
   difficulty: ExamDifficulty;
   exam_length: ExamLength;
   style?: ExamStyle;
+  generate_graph?: boolean; // Optional graph generation for Section 3 (Math topics + Full-Length only)
 }
 
 /**
@@ -66,9 +67,10 @@ export interface ExamMetadata {
 }
 
 /**
- * Response from exam generation endpoint
+ * Legacy exam response format (deprecated)
+ * Old format returned raw exam_text instead of structured sections
  */
-export interface ExamResponse {
+export interface LegacyExamResponse {
   exam_id: string;
   exam_text: string;
   created_at: string;
@@ -247,11 +249,14 @@ export interface ExamDetail {
 /**
  * Structured exam section with questions
  * New format from Math Intelligence backend
+ * Sections can have shared graphs (one graph per Math section)
  */
 export interface StructuredExamSection {
   name: string;
-  type: 'multiple_choice' | 'true_false' | 'math' | 'written';
+  type: 'multiple_choice' | 'true_false' | 'math' | 'written' | 'image' | 'drag_drop' | 'diagram' | 'code';
   questions: ParsedQuestion[];
+  graph_expression?: string | null;  // Section-level graph (Math sections only)
+  graph_image?: string | null;        // Base64 PNG graph image
 }
 
 /**
@@ -273,6 +278,13 @@ export interface StructuredExamDetail {
   exam_length?: string;
   style?: string;
 }
+
+/**
+ * ExamResponse type alias
+ * POST /api/exams/generate now returns the same structured format as GET
+ * This is an alias of StructuredExamDetail for consistency
+ */
+export type ExamResponse = StructuredExamDetail;
 
 /**
  * User's answer to a question

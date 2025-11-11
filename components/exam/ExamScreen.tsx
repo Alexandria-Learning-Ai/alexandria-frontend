@@ -26,15 +26,17 @@
  * />
  */
 
-import React from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, FlatList } from 'react-native';
 import { ExamProvider, useCurrentQuestion, useExamContext } from './context/ExamContext';
 import ExamHeader from './ExamHeader';
 import ExamFooter from './ExamFooter';
 import SectionTabs from './SectionTabs';
 import QuestionRenderer from './QuestionRenderer';
-import { ParsedQuestion, ExamMode } from '../../types/exam';
-import { colors } from '../../theme/tokens';
+import SectionRenderer from './SectionRenderer';
+import { ParsedQuestion, ExamMode, StructuredExamSection } from '../../types/exam';
+import { colors, spacing } from '../../theme/tokens';
+import logger from '../../utils/logger';
 
 /**
  * ExamScreen props
@@ -42,6 +44,7 @@ import { colors } from '../../theme/tokens';
 export interface ExamScreenProps {
   examId: string;
   questions: ParsedQuestion[];
+  structuredSections?: StructuredExamSection[]; // New: structured sections with graphs
   title?: string;
   duration?: number | null; // in minutes, null = no timer
   mode?: ExamMode;
@@ -56,14 +59,23 @@ const ExamScreenContent: React.FC<{ title?: string; onExit?: () => void }> = ({
   title,
   onExit,
 }) => {
+  const { structuredSections, setAnswer, answers, mode, timer, questions } = useExamContext();
   const currentQuestion = useCurrentQuestion();
-  const { setAnswer, answers, mode, timer } = useExamContext();
 
-  if (!currentQuestion) {
-    return null;
-  }
+  // Determine if we should use section-aware rendering
+  const useSectionRendering = useMemo(() => {
+    const hasSections = structuredSections && structuredSections.length > 0;
+    const hasGraphs = structuredSections?.some(s => s.graph_image);
 
-  const userAnswer = answers[currentQuestion.question_number];
+    if (hasSections) {
+      logger.info('Using section-aware rendering', {
+        sectionCount: structuredSections.length,
+        hasGraphs
+      });
+    }
+
+    return hasSections;
+  }, [structuredSections]);
 
   /**
    * Handle answer change
@@ -71,6 +83,64 @@ const ExamScreenContent: React.FC<{ title?: string; onExit?: () => void }> = ({
   const handleAnswer = (questionNumber: number, answer: any) => {
     setAnswer(questionNumber, answer);
   };
+
+  // Section-aware rendering (new Math Intelligence format)
+  if (useSectionRendering && structuredSections) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header: Title + Timer + Progress */}
+        <ExamHeader
+          title={title}
+          showTimer={timer.duration > 0}
+          showProgress={true}
+          showPauseButton={false}
+        />
+
+        {/* Section Tabs */}
+        <SectionTabs showCompletion={true} />
+
+        {/* Section-based Content */}
+        <FlatList
+          data={structuredSections}
+          renderItem={({ item, index }) => {
+            // Calculate starting question number for this section
+            const startingQuestionNumber = structuredSections
+              .slice(0, index)
+              .reduce((sum, section) => sum + (section.questions?.length || 0), 0) + 1;
+
+            return (
+              <SectionRenderer
+                section={item}
+                sectionIndex={index}
+                onAnswerChange={handleAnswer}
+                startingQuestionNumber={startingQuestionNumber}
+                userAnswers={answers}
+                mode={mode}
+              />
+            );
+          }}
+          keyExtractor={(item, index) => `section-${index}`}
+          style={styles.questionContainer}
+          contentContainerStyle={styles.sectionContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+
+        {/* Footer: Navigation + Submit */}
+        <ExamFooter onSubmit={onExit} showQuestionNumber={true} />
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Legacy question-by-question rendering (backward compatibility)
+  if (!currentQuestion) {
+    return null;
+  }
+
+  const userAnswer = answers[currentQuestion.question_number];
 
   return (
     <KeyboardAvoidingView
@@ -88,7 +158,7 @@ const ExamScreenContent: React.FC<{ title?: string; onExit?: () => void }> = ({
       {/* Section Tabs */}
       <SectionTabs showCompletion={true} />
 
-      {/* Question Content */}
+      {/* Question Content (Legacy) */}
       <ScrollView
         style={styles.questionContainer}
         contentContainerStyle={styles.questionContent}
@@ -115,6 +185,7 @@ const ExamScreenContent: React.FC<{ title?: string; onExit?: () => void }> = ({
 const ExamScreen: React.FC<ExamScreenProps> = ({
   examId,
   questions,
+  structuredSections,
   title,
   duration = null,
   mode = 'take',
@@ -125,6 +196,7 @@ const ExamScreen: React.FC<ExamScreenProps> = ({
     <ExamProvider
       examId={examId}
       questions={questions}
+      structuredSections={structuredSections}
       mode={mode}
       duration={duration}
       onSubmit={onSubmit}
@@ -145,6 +217,10 @@ const styles = StyleSheet.create({
   questionContent: {
     padding: 20,
     paddingBottom: 40,
+  },
+  sectionContent: {
+    padding: spacing[20],
+    paddingBottom: spacing[32],
   },
 });
 
