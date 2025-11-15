@@ -57,39 +57,9 @@ const QuizConfiguration: React.FC<QuizConfigurationProps> = ({
   const slideAnim = useRef(new Animated.Value(20)).current;
   const sliderThumbScale = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 60,
-        friction: 10,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+  
 
-  // Animate slider thumb on value change
-  useEffect(() => {
-    Animated.sequence([
-      Animated.spring(sliderThumbScale, {
-        toValue: 1.2,
-        tension: 300,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-      Animated.spring(sliderThumbScale, {
-        toValue: 1,
-        tension: 200,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [numQuestions]);
+  
 
   // Get difficulty color
   const getDifficultyColor = (level: string) => {
@@ -131,16 +101,8 @@ const QuizConfiguration: React.FC<QuizConfigurationProps> = ({
   };
 
   return (
-    <Animated.View
-      style={[
-        enhancedStyles.container,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
-    >
-      {/* Configuration Card */}
+    <>
+    {/* Configuration Card */}
       <View style={enhancedStyles.card}>
         {/* Card Header */}
         <View style={enhancedStyles.cardHeader}>
@@ -251,15 +213,15 @@ const QuizConfiguration: React.FC<QuizConfigurationProps> = ({
           {/* Enhanced Slider Container */}
           <View style={enhancedStyles.sliderWrapper}>
             <View style={enhancedStyles.sliderTrack}>
-              <View style={styles.sliderContainer}>
+              <View style={enhancedStyles.sliderContainer}>
                 <Text style={[styles.sliderLabel, enhancedStyles.sliderLabel]}>5</Text>
                 <Slider
-                  style={styles.slider}
+                  style={enhancedStyles.slider}
                   minimumValue={5}
                   maximumValue={20}
                   step={1}
                   value={numQuestions}
-                  onValueChange={setNumQuestions}
+                  onSlidingComplete={setNumQuestions}
                   minimumTrackTintColor="#D4AF37"
                   maximumTrackTintColor="rgba(248, 244, 227, 0.2)"
                   thumbTintColor="#D4AF37"
@@ -310,7 +272,7 @@ const QuizConfiguration: React.FC<QuizConfigurationProps> = ({
           </View>
         </View>
       </View>
-    </Animated.View>
+    </>
   );
 };
 
@@ -420,10 +382,23 @@ const enhancedStyles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
   },
+
+  sliderContainer: {
+    display: "flex",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+
+  slider: {
+    width: "85%"
+  },
+
   sliderLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#CBD5E0',
+    paddingHorizontal: 8
   },
   milestonesContainer: {
     flexDirection: 'row',

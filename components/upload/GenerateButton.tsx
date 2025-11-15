@@ -52,7 +52,6 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
   const disabled = isUploading || filesCount === 0 || isDisabled;
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   const iconBounce = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
@@ -139,10 +138,7 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
     }).start();
   };
 
-  const shimmerTranslateX = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-300, 300],
-  });
+  
 
   return (
     <Animated.View
@@ -184,14 +180,6 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
         }
         accessibilityState={{ disabled, busy: isUploading }}
       >
-        <Animated.View
-          style={[
-            enhancedStyles.glowContainer,
-            {
-              shadowOpacity: disabled ? 0 : glowAnim,
-            },
-          ]}
-        >
           <LinearGradient
             colors={
               disabled
@@ -202,24 +190,6 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            {/* Shimmer Overlay */}
-            {!disabled && !isUploading && (
-              <Animated.View
-                style={[
-                  enhancedStyles.shimmerOverlay,
-                  {
-                    transform: [{ translateX: shimmerTranslateX }],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={['transparent', 'rgba(255,255,255,0.5)', 'transparent']} // 67% brighter
-                  style={enhancedStyles.shimmerGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                />
-              </Animated.View>
-            )}
 
             {isUploading ? (
               <View style={[styles.loadingContent, enhancedStyles.loadingContent]}>
@@ -263,7 +233,6 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
               </View>
             )}
           </LinearGradient>
-        </Animated.View>
       </TouchableOpacity>
     </Animated.View>
   );

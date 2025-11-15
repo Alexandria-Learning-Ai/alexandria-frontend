@@ -93,9 +93,10 @@ const HierarchicalCourseSelector: React.FC<HierarchicalCourseSelectorProps> = ({
       {/* Selection Summary */}
       {selectedSubject && selectedCourse && (
         <View style={styles.selectionSummary}>
-          <FontAwesome5 name="check-circle" size={16} color="#28a745" />
           <Text style={styles.summaryText}>
-            {selectedSubject} → {selectedCourse}
+            <FontAwesome5 name="check-circle" size={16} color="#28a745" />
+            {` ${selectedSubject} → ${selectedCourse}`}
+            
           </Text>
         </View>
       )}

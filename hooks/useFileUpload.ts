@@ -207,11 +207,11 @@ export const useFileUpload = (t: (key: string) => string, onFilesAdded?: (files:
       "From which archives would you like to gather wisdom?",
       [
         {
-          text: "📸 Photo Scrolls",
+          text: "Upload Image",
           onPress: pickFromGallery,
         },
         {
-          text: "📄 Document Codex",
+          text: "Upload Document",
           onPress: pickDocument,
         },
         {

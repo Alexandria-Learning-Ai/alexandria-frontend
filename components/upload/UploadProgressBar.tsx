@@ -227,20 +227,6 @@ const UploadProgressBar: React.FC<UploadProgressBarProps> = ({
               >
                 {stage.label}
               </Text>
-
-              {/* Connector Line */}
-              {index < stages.length - 1 && (
-                <View
-                  style={[
-                    enhancedStyles.stageConnector,
-                    {
-                      backgroundColor: isComplete
-                        ? themeColors.alexandriaGold
-                        : 'rgba(248, 244, 227, 0.2)',
-                    },
-                  ]}
-                />
-              )}
             </View>
           );
         })}

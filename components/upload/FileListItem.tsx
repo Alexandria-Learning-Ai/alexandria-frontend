@@ -115,12 +115,6 @@ const FileListItem: React.FC<FileListItemProps> = React.memo(({
               color="#1A2C5B"
             />
           </LinearGradient>
-          {/* File Type Badge */}
-          <View style={enhancedStyles.fileTypeBadge}>
-            <Text style={enhancedStyles.fileTypeBadgeText}>
-              {getFileTypeLabel(item.name)}
-            </Text>
-          </View>
         </View>
 
         {/* File Details */}
