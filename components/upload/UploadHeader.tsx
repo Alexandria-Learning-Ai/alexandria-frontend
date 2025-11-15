@@ -2,8 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { NavigationProp } from '@react-navigation/native';
-import NavigationHelper from '../../utils/NavigationHelper';
+import { NavigationProp, CommonActions } from '@react-navigation/native';
 
 interface ThemeColors {
   text: string;
@@ -89,12 +88,39 @@ const UploadHeader: React.FC<UploadHeaderProps> = ({
       toValue: 0,
       duration: 200,
       useNativeDriver: true,
-    }).start(() => NavigationHelper.safeGoBack(navigation));
+    }).start(({ finished }) => {
+      if (!finished) return;
+
+      const attemptGoBack = (nav?: NavigationProp<any>) => {
+        if (nav?.canGoBack?.()) {
+          nav.goBack();
+          return true;
+        }
+        return false;
+      };
+
+      // Try current navigator first, then parent navigator (covers nested stacks)
+      const parentNavigation = navigation?.getParent?.();
+      const navigated =
+        attemptGoBack(navigation) ||
+        attemptGoBack(parentNavigation);
+
+      if (!navigated) {
+        const targetNav = parentNavigation || navigation;
+        targetNav?.dispatch?.(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          })
+        );
+      }
+    });
   };
 
   return (
     <>
       {/* Enhanced Back Button */}
+      <Text onPress={}>Back</Text>
       <Animated.View style={{ transform: [{ scale: backButtonScale }] }}>
         <TouchableOpacity
           style={[styles.backButton, enhancedStyles.backButton]}
