@@ -430,6 +430,7 @@ const NavigationStackWrapper = ({ user, userState }) => {
 
   // Common screen options with subscription awareness
   const getScreenOptions = (title, options = {}) => ({
+    headerShown: false,
     title,
     headerStyle: {
       backgroundColor: colors.surface,

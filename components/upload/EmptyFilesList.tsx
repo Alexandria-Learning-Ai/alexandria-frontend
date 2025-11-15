@@ -136,12 +136,6 @@ const EmptyFilesList: React.FC<EmptyFilesListProps> = ({
       </Text>
 
       <View style={enhancedStyles.subtextContainer}>
-        <FontAwesome5
-          name="arrow-up"
-          size={14}
-          color={themeColors.alexandriaGold}
-          style={enhancedStyles.arrowIcon}
-        />
         <Text
           style={[
             styles.emptyStateSubtext,

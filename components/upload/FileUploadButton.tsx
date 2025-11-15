@@ -39,30 +39,7 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const badgeScale = useRef(new Animated.Value(0)).current;
-  const iconRotate = useRef(new Animated.Value(0)).current;
-
-  // Pulse animation when empty
-  useEffect(() => {
-    if (files.length === 0) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.02,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [files.length]);
-
+  
   // Badge animation when files selected
   useEffect(() => {
     if (files.length > 0) {
@@ -77,19 +54,6 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
     }
   }, [files.length]);
 
-  // Icon rotation on file selection
-  useEffect(() => {
-    if (files.length > 0) {
-      Animated.spring(iconRotate, {
-        toValue: 1,
-        tension: 80,
-        friction: 8,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      iconRotate.setValue(0);
-    }
-  }, [files.length]);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -108,11 +72,6 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
       useNativeDriver: true,
     }).start();
   };
-
-  const iconRotation = iconRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
-  });
 
   return (
     <View style={styles.inputContainer}>
@@ -165,7 +124,6 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
             {/* Icon with Animation */}
             <Animated.View
               style={{
-                transform: [{ rotate: iconRotation }],
                 marginRight: 12,
               }}
             >
@@ -186,35 +144,8 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
                 files.length > 0 && styles.uploadButtonTextActive,
               ]}
             >
-              {files.length > 0
-                ? `${files.length} file${files.length > 1 ? 's' : ''} selected`
-                : t('upload.selectTexts')}
-            </Text>
-
-            {/* Badge Counter */}
-            {files.length > 0 && (
-              <Animated.View
-                style={[
-                  enhancedStyles.badge,
-                  { transform: [{ scale: badgeScale }] },
-                ]}
-              >
-                <LinearGradient
-                  colors={['#28a745', '#20803a']}
-                  style={enhancedStyles.badgeGradient}
-                >
-                  <Text style={enhancedStyles.badgeText}>{files.length}</Text>
-                </LinearGradient>
-              </Animated.View>
-            )}
-
-            {/* Chevron */}
-            <FontAwesome5
-              name="chevron-down"
-              size={14}
-              color={files.length > 0 ? '#D4AF37' : '#CBD5E0'}
-              style={enhancedStyles.chevron}
-            />
+              {files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''} selected`:t('upload.selectTexts')}
+            </Text>          
           </View>
         </TouchableOpacity>
       </Animated.View>
