@@ -25,6 +25,7 @@ import axios from 'axios';
 import logger from '../utils/logger';
 import { styles } from '../styles/MaterialViewerScreenStyles';
 import AddToPlaylistModal from '../components/playlist/AddToPlaylistModal';
+import { useAudioPlayer } from '../hooks/useAudioPlayer';
 
 const { width, height } = Dimensions.get('window');
 
@@ -247,11 +248,12 @@ const MaterialViewerScreen = () => {
 
     const { material, mode } = route.params || {};
 
+    // Audio Player Service integration
+    const audioPlayer = useAudioPlayer();
+
     const [viewMode, setViewMode] = useState(mode || 'read'); // 'read', 'summary', 'listen', 'deep_study', 'quick_review', 'hybrid'
     const [isLoading, setIsLoading] = useState(false);
     const [summaryContent, setSummaryContent] = useState(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [currentPosition, setCurrentPosition] = useState(0);
     const [fontSize, setFontSize] = useState(16);
     const [audioUrl, setAudioUrl] = useState(null);
     const [audioDuration, setAudioDuration] = useState(0);
@@ -262,8 +264,6 @@ const MaterialViewerScreen = () => {
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryType, setSummaryType] = useState('comprehensive'); // 'brief', 'comprehensive', 'key_points'
     const [selectedVoice, setSelectedVoice] = useState('default'); // 'default', 'male', 'female', 'neutral'
-    const [sound, setSound] = useState(null);
-    const [soundPosition, setSoundPosition] = useState(0);
 
     // New states for enhanced study modes
     const [contentAnalysis, setContentAnalysis] = useState(null);
@@ -316,12 +316,10 @@ const MaterialViewerScreen = () => {
     // Cleanup audio on component unmount
     useEffect(() => {
         return () => {
-            if (sound) {
-                logger.info('🔇 Cleaning up audio on unmount');
-                sound.unloadAsync().catch(err => logger.error('Error unloading sound:', err));
-            }
+            // AudioPlayerService handles its own cleanup
+            logger.info('🔇 MaterialViewerScreen unmounting');
         };
-    }, [sound]);
+    }, []);
 
     const checkExistingContent = async () => {
         if (!material) return;
@@ -491,26 +489,37 @@ const MaterialViewerScreen = () => {
     };
 
     const handleToggleAudio = async () => {
-        if (isPlaying) {
-            // Pause audio
-            if (sound) {
-                await sound.pauseAsync();
-            }
-            setIsPlaying(false);
-        } else {
-            // Generate audio if not already available
-            if (!audioUrl) {
-                await handleGenerateAudio();
+        try {
+            // Check if AudioPlayerService is already playing
+            if (audioPlayer.isPlaying) {
+                // Pause audio
+                await audioPlayer.pause();
+                logger.info('⏸️ Audio paused via AudioPlayerService');
             } else {
-                // Resume or start audio playback
-                if (sound) {
-                    await sound.playAsync();
+                // Generate audio if not already available
+                if (!audioUrl) {
+                    await handleGenerateAudio();
                 } else {
-                    await loadAndPlaySound(audioUrl);
+                    // Check if current track is already loaded
+                    if (audioPlayer.currentTrack?.id === audioId) {
+                        // Resume playback
+                        await audioPlayer.resume();
+                    } else {
+                        // Load and play new track
+                        await audioPlayer.playTrack({
+                            id: audioId || material.id,
+                            title: material.title,
+                            audio_url: audioUrl,
+                            duration: audioDuration
+                        });
+                    }
+                    setViewMode('listen');
+                    logger.info('▶️ Audio playing via AudioPlayerService');
                 }
-                setIsPlaying(true);
-                setViewMode('listen');
             }
+        } catch (error) {
+            logger.error('❌ Error toggling audio:', error);
+            Alert.alert('Playback Error', 'Unable to play audio. Please try again.');
         }
     };
 
@@ -582,7 +591,6 @@ const MaterialViewerScreen = () => {
                 setAudioUrl(serverAudioUrl);
                 setAudioDuration(response.data.duration || 0);
                 setAudioId(serverAudioId);
-                setIsPlaying(true);
                 setViewMode('listen');
                 setAudioError(null);
 
@@ -594,8 +602,13 @@ const MaterialViewerScreen = () => {
                     `Audio narration ready! Duration: ${Math.round(response.data.duration / 60)} minutes`
                 );
 
-                // Start actual audio playback - pass URL directly to avoid stale state
-                await loadAndPlaySound(serverAudioUrl);
+                // Start playback via AudioPlayerService
+                await audioPlayer.playTrack({
+                    id: serverAudioId,
+                    title: material.title,
+                    audio_url: serverAudioUrl,
+                    duration: response.data.duration
+                });
 
             } else {
                 throw new Error('Invalid response format from server');
@@ -658,65 +671,6 @@ const MaterialViewerScreen = () => {
         }
     };
 
-    const loadAndPlaySound = async (uri = audioUrl) => {
-        try {
-            logger.info(`🔊 Loading audio from: ${uri}`);
-
-            // Validate URI before attempting to load
-            if (!uri) {
-                logger.error('❌ No audio URI provided');
-                setAudioError('Audio URL not available');
-                setIsPlaying(false);
-                return;
-            }
-
-            // Unload previous sound if exists
-            if (sound) {
-                await sound.unloadAsync();
-            }
-
-            // Configure audio mode for playback
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                playsInSilentModeIOS: true,
-                staysActiveInBackground: false,
-                shouldDuckAndroid: true,
-            });
-
-            // Use S3 URL directly
-            let audioUri = uri;
-            logger.info(`🔊 Playing from S3: ${audioUri}`);
-
-            // Load and play the sound
-            const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: audioUri },
-                { shouldPlay: true, progressUpdateIntervalMillis: 1000 },
-                onPlaybackStatusUpdate
-            );
-
-            setSound(newSound);
-            setIsPlaying(true);
-            logger.info('✅ Audio loaded and playing');
-
-        } catch (error) {
-            logger.error('❌ Error playing audio:', error);
-            Alert.alert('Playback Error', 'Unable to play audio. Please try again.');
-            setIsPlaying(false);
-        }
-    };
-
-    const onPlaybackStatusUpdate = (status) => {
-        if (status.isLoaded) {
-            setSoundPosition(status.positionMillis / 1000); // Convert to seconds
-            setCurrentPosition(Math.floor(status.positionMillis / 1000));
-
-            if (status.didJustFinish) {
-                setIsPlaying(false);
-                setSoundPosition(0);
-                setCurrentPosition(0);
-            }
-        }
-    };
 
     const handleAudioOptions = () => {
         Alert.alert(
@@ -1003,7 +957,7 @@ const MaterialViewerScreen = () => {
                         <ActivityIndicator size="small" color={themeStyles.textPrimary.color} />
                     ) : (
                         <FontAwesome5
-                            name={isPlaying ? "pause" : "play"}
+                            name={audioPlayer.isPlaying ? "pause" : "play"}
                             size={14}
                             color={viewMode === 'listen' ? '#FFFFFF' : themeStyles.textPrimary.color}
                         />
@@ -1016,30 +970,6 @@ const MaterialViewerScreen = () => {
                     </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={[
-                        styles.modeButton,
-                        themeStyles.buttonSecondary,
-                    ]}
-                    onPress={() => {
-                        navigation.navigate('ProgressivePlaylist', {
-                            materialId: material.id,
-                            materialTitle: material.title
-                        });
-                    }}
-                >
-                    <FontAwesome5
-                        name="list-music"
-                        size={14}
-                        color={themeStyles.textPrimary.color}
-                    />
-                    <Text style={[
-                        styles.modeButtonText,
-                        { color: themeStyles.textPrimary.color }
-                    ]}>
-                        Audio Playlist
-                    </Text>
-                </TouchableOpacity>
 
                 <TouchableOpacity
                     style={[
@@ -1281,12 +1211,9 @@ const MaterialViewerScreen = () => {
                                 <TouchableOpacity
                                     style={[styles.audioButton, themeStyles.buttonPrimary]}
                                     onPress={async () => {
-                                        if (sound) {
-                                            const status = await sound.getStatusAsync();
-                                            if (status.isLoaded) {
-                                                const newPosition = Math.max(0, status.positionMillis - 15000);
-                                                await sound.setPositionAsync(newPosition);
-                                            }
+                                        if (audioPlayer.currentTrack) {
+                                            const newPosition = Math.max(0, audioPlayer.positionMillis - 15000);
+                                            await audioPlayer.seekTo(newPosition);
                                         }
                                     }}
                                     disabled={!audioUrl}
@@ -1300,7 +1227,7 @@ const MaterialViewerScreen = () => {
                                 >
                                     {audioUrl ? (
                                         <FontAwesome5
-                                            name={isPlaying ? "pause" : "play"}
+                                            name={audioPlayer.isPlaying ? "pause" : "play"}
                                             size={32}
                                             color="#FFFFFF"
                                         />
@@ -1312,12 +1239,9 @@ const MaterialViewerScreen = () => {
                                 <TouchableOpacity
                                     style={[styles.audioButton, themeStyles.buttonPrimary]}
                                     onPress={async () => {
-                                        if (sound) {
-                                            const status = await sound.getStatusAsync();
-                                            if (status.isLoaded) {
-                                                const newPosition = Math.min(status.durationMillis, status.positionMillis + 15000);
-                                                await sound.setPositionAsync(newPosition);
-                                            }
+                                        if (audioPlayer.currentTrack) {
+                                            const newPosition = Math.min(audioPlayer.durationMillis, audioPlayer.positionMillis + 15000);
+                                            await audioPlayer.seekTo(newPosition);
                                         }
                                     }}
                                     disabled={!audioUrl}
@@ -1330,12 +1254,12 @@ const MaterialViewerScreen = () => {
                                 <View style={[styles.progressBar, themeStyles.border]}>
                                     <View style={[
                                         styles.progressFill,
-                                        { width: audioUrl && audioDuration > 0 ? `${(currentPosition / audioDuration) * 100}%` : '0%' }
+                                        { width: audioPlayer.durationMillis > 0 ? `${(audioPlayer.positionMillis / audioPlayer.durationMillis) * 100}%` : '0%' }
                                     ]} />
                                 </View>
                                 <Text style={[styles.timeText, themeStyles.textSecondary]}>
                                     {audioUrl
-                                        ? `${Math.floor(currentPosition / 60)}:${String(Math.floor(currentPosition % 60)).padStart(2, '0')} / ${Math.floor(audioDuration / 60)}:${String(Math.floor(audioDuration % 60)).padStart(2, '0')}`
+                                        ? `${audioPlayer.formatTime(audioPlayer.positionMillis)} / ${audioPlayer.formatTime(audioPlayer.durationMillis)}`
                                         : 'Audio not generated yet'
                                     }
                                 </Text>
@@ -1343,13 +1267,13 @@ const MaterialViewerScreen = () => {
 
                             <View style={styles.audioStatusContainer}>
                                 <FontAwesome5
-                                    name={audioUrl ? (isPlaying ? "volume-up" : "pause-circle") : "headphones"}
+                                    name={audioUrl ? (audioPlayer.isPlaying ? "volume-up" : "pause-circle") : "headphones"}
                                     size={20}
                                     color="#D4AF37"
                                 />
                                 <Text style={[styles.audioStatusText, themeStyles.textSecondary]}>
                                     {audioUrl
-                                        ? (isPlaying ? "Playing..." : "Paused")
+                                        ? (audioPlayer.isPlaying ? "Playing..." : "Paused")
                                         : "Tap play to generate audio"
                                     }
                                 </Text>
@@ -1647,7 +1571,7 @@ const MaterialViewerScreen = () => {
                     onPress={handleToggleAudio}
                 >
                     <FontAwesome5
-                        name={isPlaying ? "pause" : "play"}
+                        name={audioPlayer.isPlaying ? "pause" : "play"}
                         size={20}
                         color="#FFFFFF"
                     />
@@ -1656,14 +1580,14 @@ const MaterialViewerScreen = () => {
                 <View style={styles.hybridProgress}>
                     <Text style={[styles.hybridProgressText, themeStyles.textSecondary]}>
                         {audioUrl
-                            ? `${Math.floor(currentPosition / 60)}:${String(Math.floor(currentPosition % 60)).padStart(2, '0')} / ${Math.floor(audioDuration / 60)}:${String(Math.floor(audioDuration % 60)).padStart(2, '0')}`
+                            ? `${audioPlayer.formatTime(audioPlayer.positionMillis)} / ${audioPlayer.formatTime(audioPlayer.durationMillis)}`
                             : 'Audio not ready'
                         }
                     </Text>
                     <View style={styles.hybridProgressBar}>
                         <View style={[
                             styles.hybridProgressFill,
-                            { width: audioUrl ? `${(currentPosition / audioDuration) * 100}%` : '0%' }
+                            { width: audioPlayer.durationMillis > 0 ? `${(audioPlayer.positionMillis / audioPlayer.durationMillis) * 100}%` : '0%' }
                         ]} />
                     </View>
                 </View>
@@ -1732,9 +1656,10 @@ const MaterialViewerScreen = () => {
 
                 <TouchableOpacity
                     style={styles.hybridFeatureButton}
-                    onPress={() => {
+                    onPress={async () => {
                         // Replay last 30 seconds
-                        setCurrentPosition(Math.max(0, currentPosition - 30));
+                        const newPosition = Math.max(0, audioPlayer.positionMillis - 30000);
+                        await audioPlayer.seekTo(newPosition);
                     }}
                 >
                     <FontAwesome5 name="undo" size={14} color="#D4AF37" />

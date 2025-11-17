@@ -25,6 +25,8 @@ import axios from 'axios';
 import PlaylistCard from '../components/playlist/PlaylistCard';
 import CreatePlaylistModal from '../components/playlist/CreatePlaylistModal';
 import { usePlaylistStore } from '../stores/playlistStore';
+import MiniAudioPlayer from '../components/audio/MiniAudioPlayer';
+import AudioMaterialsList from '../components/audio/AudioMaterialsList';
 
 export default function AudioPlaylistsScreen({ navigation }) {
   // Global playlist store
@@ -356,7 +358,7 @@ export default function AudioPlaylistsScreen({ navigation }) {
         colors={[themeColors.background, themeColors.backgroundSecondary]}
         style={styles.innerContainer}
       >
-        {/* Header */}
+        {/* Header - Audio Studio */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -367,65 +369,31 @@ export default function AudioPlaylistsScreen({ navigation }) {
           </TouchableOpacity>
 
           <View style={styles.headerContent}>
-            <Text style={styles.title}>Audio Playlists</Text>
+            <Text style={styles.title}>Audio Studio</Text>
             <Text style={styles.subtitle}>
-              {playlists.length} playlist{playlists.length !== 1 ? 's' : ''}
+              Your audio learning hub
             </Text>
           </View>
 
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.uploadButton]}
-              onPress={handleUploadForAudio}
-              activeOpacity={0.8}
-              disabled={uploadingForAudio}
-            >
-              {uploadingForAudio ? (
-                <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
-              ) : (
-                <>
-                  <FontAwesome5 name="upload" size={16} color={themeColors.alexandriaGold} />
-                  <Text style={styles.uploadButtonText}>Upload</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setCreateModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <FontAwesome5 name="plus" size={20} color={themeColors.alexandriaGold} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.uploadButton]}
+            onPress={handleUploadForAudio}
+            activeOpacity={0.8}
+            disabled={uploadingForAudio}
+          >
+            {uploadingForAudio ? (
+              <ActivityIndicator size="small" color={themeColors.alexandriaGold} />
+            ) : (
+              <>
+                <FontAwesome5 name="upload" size={16} color={themeColors.alexandriaGold} />
+                <Text style={styles.uploadButtonText}>Upload</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <FontAwesome5 name="search" size={16} color={themeColors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search playlists..."
-            placeholderTextColor={themeColors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              style={styles.clearSearchButton}
-            >
-              <FontAwesome5 name="times" size={14} color={themeColors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Playlists List */}
-        <FlatList
-          data={filteredPlaylists}
-          keyExtractor={(item) => item.id}
-          renderItem={renderPlaylistCard}
-          contentContainerStyle={styles.playlistsList}
+        {/* Main Content - 3 Sections */}
+        <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -434,8 +402,100 @@ export default function AudioPlaylistsScreen({ navigation }) {
               tintColor={themeColors.alexandriaGold}
             />
           }
-          ListEmptyComponent={renderEmptyState}
-        />
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* SECTION 1: My Audio Materials (Placeholder) */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <FontAwesome5 name="file-audio" size={18} color={themeColors.alexandriaGold} />
+                <Text style={styles.sectionTitle}>My Audio Materials</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.seeAllButton}
+                onPress={() => {
+                  logger.info('Navigate to Audio Materials');
+                }}
+              >
+                <Text style={styles.seeAllText}>See All</Text>
+                <FontAwesome5 name="chevron-right" size={12} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Audio Materials List */}
+            <AudioMaterialsList />
+          </View>
+
+          {/* SECTION 2: My Playlists */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <FontAwesome5 name="list-music" size={18} color={themeColors.alexandriaGold} />
+                <Text style={styles.sectionTitle}>My Playlists</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.createPlaylistButton}
+                onPress={() => setCreateModalVisible(true)}
+              >
+                <FontAwesome5 name="plus-circle" size={14} color={themeColors.alexandriaGold} />
+                <Text style={styles.createPlaylistText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Bar for Playlists */}
+            <View style={styles.searchContainer}>
+              <FontAwesome5 name="search" size={14} color={themeColors.textSecondary} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search playlists..."
+                placeholderTextColor={themeColors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearSearchButton}
+                >
+                  <FontAwesome5 name="times" size={12} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Playlists List */}
+            {loading ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator size="large" color={themeColors.alexandriaGold} />
+                <Text style={styles.loadingText}>Loading playlists...</Text>
+              </View>
+            ) : filteredPlaylists.length === 0 ? (
+              renderEmptyState()
+            ) : (
+              filteredPlaylists.map((item, index) => (
+                <Animatable.View
+                  key={item.id}
+                  animation="fadeInUp"
+                  delay={index * 100}
+                  duration={600}
+                >
+                  <PlaylistCard
+                    id={item.id}
+                    name={item.name}
+                    description={item.description}
+                    itemCount={item.item_count}
+                    totalDuration={item.total_duration}
+                    thumbnailColor={item.thumbnail_color}
+                    onPress={() => handlePlaylistPress(item)}
+                    onLongPress={() => handlePlaylistLongPress(item)}
+                  />
+                </Animatable.View>
+              ))
+            )}
+          </View>
+
+          {/* Bottom padding for mini player */}
+          <View style={styles.miniPlayerSpacer} />
+        </ScrollView>
 
         {/* Create Playlist Modal */}
         <CreatePlaylistModal
@@ -443,6 +503,9 @@ export default function AudioPlaylistsScreen({ navigation }) {
           onClose={() => setCreateModalVisible(false)}
           onSubmit={handleCreatePlaylist}
         />
+
+        {/* Mini Audio Player (sticky footer) */}
+        <MiniAudioPlayer />
       </LinearGradient>
     </SafeAreaView>
   );
@@ -479,11 +542,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#CBD5E0',
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   actionButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -502,18 +560,83 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#D4AF37',
   },
-  addButton: {
-    padding: 8,
+  scrollContent: {
+    paddingBottom: 100, // Space for mini player
+  },
+  section: {
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#F8F4E3',
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#CBD5E0',
+  },
+  createPlaylistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  createPlaylistText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#D4AF37',
+  },
+  placeholderContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(248, 244, 227, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderStyle: 'dashed',
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#CBD5E0',
+    marginTop: 12,
+  },
+  miniPlayerSpacer: {
+    height: 80,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(248, 244, 227, 0.1)',
     borderRadius: 12,
-    marginHorizontal: 20,
     marginBottom: 16,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.3)',
   },
@@ -528,42 +651,36 @@ const styles = StyleSheet.create({
   clearSearchButton: {
     padding: 4,
   },
-  playlistsList: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
   loadingState: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#CBD5E0',
-    marginTop: 16,
+    marginTop: 12,
   },
   emptyState: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   emptyStateTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#F8F4E3',
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
   },
   emptyStateText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#CBD5E0',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+    lineHeight: 20,
+    marginBottom: 24,
   },
   createButton: {
     borderRadius: 20,
