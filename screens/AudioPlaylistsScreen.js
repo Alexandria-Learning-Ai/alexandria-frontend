@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   StatusBar,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
