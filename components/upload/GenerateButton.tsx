@@ -141,18 +141,8 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
   
 
   return (
-    <Animated.View
-      style={[
-        enhancedStyles.container,
-        {
-          transform: [{ scale: scaleAnim }],
-          opacity: disabled ? 0.6 : 1,
-        },
-      ]}
-    >
       <TouchableOpacity
         style={[
-          styles.generateButton,
           enhancedStyles.generateButton,
           disabled && enhancedStyles.generateButtonDisabled,
         ]}
@@ -234,15 +224,10 @@ const GenerateButton: React.FC<GenerateButtonProps> = ({
             )}
           </LinearGradient>
       </TouchableOpacity>
-    </Animated.View>
   );
 };
 
 const enhancedStyles = StyleSheet.create({
-  container: {
-    marginTop: 32, // ENHANCED: 4x more spacing above for isolation
-    marginBottom: 16, // More spacing below too
-  },
   generateButton: {
     borderRadius: 20,
     overflow: 'visible',
@@ -258,23 +243,10 @@ const enhancedStyles = StyleSheet.create({
     elevation: 12, // Higher elevation
   },
   generateButtonGradient: {
-    paddingVertical: 28, // ENHANCED: 40% taller button
-    paddingHorizontal: 32, // More horizontal padding
+    paddingVertical: 16, // ENHANCED: 40% taller button
     borderRadius: 20,
     position: 'relative',
     overflow: 'hidden',
-  },
-  shimmerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: -100,
-    right: -100,
-    bottom: 0,
-    width: 200,
-  },
-  shimmerGradient: {
-    flex: 1,
-    width: '100%',
   },
   buttonContent: {
     flexDirection: 'row',

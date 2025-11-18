@@ -675,7 +675,8 @@ export default function UploadScreen({ navigation }) {
 			/>
 
 			{/* Form Container */}
-			<View style={styles.formContainer}>
+			{!isAsyncGenerating && (
+				<View style={styles.formContainer}>
 				{/* ✅ Drag & Drop Zone for Web, FileUploadButton for Mobile */}
 				{Platform.OS === "web" ? (
 					<DragDropZone
@@ -874,6 +875,8 @@ export default function UploadScreen({ navigation }) {
 					</>
 				)}
 			</View>
+			)}
+			
 		</View>
 	);
 
@@ -931,15 +934,15 @@ export default function UploadScreen({ navigation }) {
 				<FlatList
 					data={files}
 					keyExtractor={(item) => item.uri}
-					renderItem={({ item, index }) => (
-						<FileListItem
+					renderItem={({ item, index }) => (!isAsyncGenerating &&
+						(<FileListItem
 							item={item}
 							index={index}
 							onRemove={removeFile}
 							getFileIcon={getFileIcon}
 							themeColors={themeColors}
 							styles={styles}
-						/>
+						/>)
 					)}
 					ListHeaderComponent={ListHeader}
 					ListFooterComponent={ListFooter}
@@ -968,7 +971,7 @@ export default function UploadScreen({ navigation }) {
 				/>
 
 				{/* ✅ Sticky Generate Button at bottom */}
-				<View style={styles.stickyFooter}>
+				{!isAsyncGenerating &&(<View style={styles.stickyFooter}>
 					<GenerateButton
 						uploadPurpose={uploadPurpose}
 						isUploading={uiState.uploading}
@@ -979,7 +982,7 @@ export default function UploadScreen({ navigation }) {
 						styles={styles}
 						t={safeT}
 					/>
-				</View>
+				</View>)}
 			</LinearGradient>
 
 			{/* ✅ NEW: Subject Selector Modal */}
