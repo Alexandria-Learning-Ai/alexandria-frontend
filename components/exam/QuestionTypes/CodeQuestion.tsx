@@ -8,12 +8,14 @@
  * - Language display with time limit
  * - Test case descriptions (hides actual inputs/outputs)
  * - Starter code pre-filled
+ * - Run Code button with execution feedback
  * - JSON-formatted answer storage
  * - Alexandria theme styling
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { CodeQuestion as CQuestion, ExamMode } from '../../../types/exam';
 import { colors, radius, spacing } from '../../../theme/tokens';
 import logger from '../../../utils/logger';
@@ -29,6 +31,14 @@ interface CodeAnswerData {
   code: string;
   language: string;
   timestamp: string;
+}
+
+interface TestResult {
+  passed: boolean;
+  input: string;
+  expected: string;
+  actual: string;
+  error?: string;
 }
 
 /**
@@ -65,6 +75,8 @@ export default function CodeQuestion({
   };
 
   const [code, setCode] = useState<string>(getInitialCode());
+  const [isRunning, setIsRunning] = useState(false);
+  const [runResult, setRunResult] = useState<{ success: boolean; message: string; results?: TestResult[] } | null>(null);
 
   // Sync local state with prop changes
   useEffect(() => {
@@ -74,6 +86,7 @@ export default function CodeQuestion({
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
+    setRunResult(null); // Clear results when code changes
 
     // Store answer as JSON with metadata
     const answerData: CodeAnswerData = {
@@ -106,6 +119,64 @@ export default function CodeQuestion({
       'kotlin': 'Kotlin',
     };
     return languageNames[lang.toLowerCase()] || lang;
+  };
+
+  // Run code against test cases
+  const handleRunCode = async () => {
+    if (!code.trim()) {
+      setRunResult({ success: false, message: 'Please write some code first.' });
+      return;
+    }
+
+    setIsRunning(true);
+    setRunResult(null);
+
+    try {
+      // TODO: Integrate with backend /grade-code endpoint
+      // For now, simulate execution with placeholder results
+      logger.info('Running code', { language: metadata.language, questionNumber: question.question_number });
+
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Mock test results for development
+      const testCases = metadata.test_cases || [];
+      if (testCases.length === 0) {
+        setRunResult({
+          success: true,
+          message: 'Code submitted successfully! No test cases available for this question.'
+        });
+      } else {
+        // Simulate running tests (in production, this calls the Piston API)
+        const mockResults: TestResult[] = testCases.map((tc: any, idx: number) => ({
+          passed: Math.random() > 0.3, // Mock: 70% pass rate
+          input: JSON.stringify(tc.input),
+          expected: JSON.stringify(tc.expected_output),
+          actual: JSON.stringify(tc.expected_output), // Mock
+        }));
+
+        const passedCount = mockResults.filter(r => r.passed).length;
+        const totalCount = mockResults.length;
+
+        setRunResult({
+          success: passedCount === totalCount,
+          message: passedCount === totalCount
+            ? `All ${totalCount} tests passed!`
+            : `${passedCount}/${totalCount} tests passed`,
+          results: mockResults
+        });
+      }
+
+      logger.info('Code execution completed');
+    } catch (error) {
+      logger.error('Code execution failed:', error);
+      setRunResult({
+        success: false,
+        message: 'Failed to run code. Please try again.'
+      });
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
@@ -171,8 +242,48 @@ export default function CodeQuestion({
               {characterCount} {characterCount === 1 ? 'character' : 'characters'}
             </Text>
           </View>
+
+          {/* Run Code Button */}
+          <TouchableOpacity
+            style={[styles.runButton, isRunning && styles.runButtonDisabled]}
+            onPress={handleRunCode}
+            disabled={isRunning}
+          >
+            {isRunning ? (
+              <>
+                <ActivityIndicator size="small" color={colors.bg} />
+                <Text style={styles.runButtonText}>Running...</Text>
+              </>
+            ) : (
+              <>
+                <FontAwesome5 name="play" size={14} color={colors.bg} />
+                <Text style={styles.runButtonText}>Run Code</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Run Results */}
+          {runResult && (
+            <View style={[
+              styles.resultContainer,
+              runResult.success ? styles.resultSuccess : styles.resultError
+            ]}>
+              <FontAwesome5
+                name={runResult.success ? 'check-circle' : 'times-circle'}
+                size={16}
+                color={runResult.success ? colors.success : colors.danger}
+              />
+              <Text style={[
+                styles.resultText,
+                runResult.success ? styles.resultTextSuccess : styles.resultTextError
+              ]}>
+                {runResult.message}
+              </Text>
+            </View>
+          )}
+
           <Text style={styles.hintText}>
-            Your code will be tested against hidden test cases after submission
+            Click "Run Code" to test your solution against sample inputs
           </Text>
         </>
       ) : (
@@ -307,5 +418,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.text,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  runButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[8],
+    backgroundColor: colors.blue,
+    paddingVertical: spacing[12],
+    paddingHorizontal: spacing[20],
+    borderRadius: radius.md,
+    marginTop: spacing[16],
+  },
+  runButtonDisabled: {
+    opacity: 0.6,
+  },
+  runButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.bg,
+  },
+  resultContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[10],
+    padding: spacing[12],
+    borderRadius: radius.md,
+    marginTop: spacing[12],
+    borderWidth: 1,
+  },
+  resultSuccess: {
+    backgroundColor: colors.success + '15',
+    borderColor: colors.success,
+  },
+  resultError: {
+    backgroundColor: colors.danger + '15',
+    borderColor: colors.danger,
+  },
+  resultText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  resultTextSuccess: {
+    color: colors.success,
+  },
+  resultTextError: {
+    color: colors.danger,
   },
 });

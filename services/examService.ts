@@ -90,6 +90,10 @@ export async function generateExam(
       formData.append('generate_graph', request.generate_graph.toString());
     }
 
+    if (request.include_code_challenge !== undefined) {
+      formData.append('include_code_challenge', request.include_code_challenge.toString());
+    }
+
     // Attach file if provided
     if (file) {
       formData.append('file', {

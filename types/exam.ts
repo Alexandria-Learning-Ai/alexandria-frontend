@@ -55,6 +55,7 @@ export interface ExamGenerateRequest {
   exam_length: ExamLength;
   style?: ExamStyle;
   generate_graph?: boolean; // Optional graph generation for Section 3 (Math topics + Full-Length only)
+  include_code_challenge?: boolean; // Optional code challenge for Section 3 (CS topics + Full-Length only)
 }
 
 /**

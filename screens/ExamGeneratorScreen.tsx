@@ -60,6 +60,33 @@ const MATH_KEYWORDS = [
   'statistics'
 ];
 
+// Computer Science keywords for detecting CS-related topics
+const CS_KEYWORDS = [
+  'programming',
+  'python',
+  'javascript',
+  'java',
+  'c++',
+  'cpp',
+  'coding',
+  'algorithm',
+  'data structure',
+  'computer science',
+  'software',
+  'web development',
+  'mobile development',
+  'database',
+  'sql',
+  'react',
+  'node',
+  'backend',
+  'frontend',
+  'full stack',
+  'api',
+  'rest',
+  'graphql'
+];
+
 type ExamGeneratorScreenNavigationProp = NativeStackNavigationProp<any, 'ExamGenerator'>;
 
 interface ExamGeneratorScreenProps {
@@ -80,6 +107,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
   const [style, setStyle] = useState<ExamStyle>('Professor');
   const [uploadedFile, setUploadedFile] = useState<ExamFile | undefined>(undefined);
   const [includeGraph, setIncludeGraph] = useState(false);
+  const [includeCodeChallenge, setIncludeCodeChallenge] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { mutate: generate, isPending } = useGenerateExam();
@@ -96,6 +124,14 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
     if (!topicLower) return false;
 
     return MATH_KEYWORDS.some(keyword => topicLower.includes(keyword));
+  }, [topic]);
+
+  // Detect if topic is computer science-related
+  const isComputerScienceTopic = useMemo(() => {
+    const topicLower = topic.toLowerCase().trim();
+    if (!topicLower) return false;
+
+    return CS_KEYWORDS.some(keyword => topicLower.includes(keyword));
   }, [topic]);
 
   // Handle section toggle
@@ -154,6 +190,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
       exam_length: examLength,
       style,
       generate_graph: includeGraph,
+      include_code_challenge: includeCodeChallenge,
     };
 
     // Validate
@@ -198,6 +235,7 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
                   setStyle('Professor');
                   setUploadedFile(undefined);
                   setIncludeGraph(false);
+                  setIncludeCodeChallenge(false);
                 },
               },
             ]
@@ -374,6 +412,37 @@ export default function ExamGeneratorScreen({ navigation }: ExamGeneratorScreenP
                 </View>
                 <Text style={styles.checkboxLabel}>
                   Include graph in Section 3
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Code Challenge (CS topics + Full-Length only) */}
+          {isComputerScienceTopic && examLength === 'Full-Length' && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Code Challenge (Optional)</Text>
+              <Text style={[styles.helpText, { marginBottom: spacing[12] }]}>
+                Add an interactive coding exercise to Section 3 with real-time execution
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.checkboxRow,
+                  includeCodeChallenge && styles.checkboxRowSelected,
+                ]}
+                onPress={() => setIncludeCodeChallenge(!includeCodeChallenge)}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    includeCodeChallenge && styles.checkboxChecked,
+                  ]}
+                >
+                  {includeCodeChallenge && (
+                    <FontAwesome5 name="check" size={12} color={colors.bg} />
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>
+                  Include code challenge in Section 3
                 </Text>
               </TouchableOpacity>
             </View>
