@@ -16,8 +16,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { CodeQuestion as CQuestion, ExamMode } from '../../../types/exam';
+import { CodeQuestion as CQuestion, ExamMode, CodeTestResult } from '../../../types/exam';
 import { colors, radius, spacing } from '../../../theme/tokens';
+import { gradeCodeResponse } from '../../../services/examService';
+import { useExamContext } from '../context/ExamContext';
 import logger from '../../../utils/logger';
 
 interface CodeQuestionProps {
@@ -39,6 +41,7 @@ interface TestResult {
   expected: string;
   actual: string;
   error?: string;
+  execution_time_ms?: number;
 }
 
 /**
@@ -59,6 +62,7 @@ export default function CodeQuestion({
 }: CodeQuestionProps) {
   const isReview = mode === 'review';
   const metadata = question.metadata;
+  const { examId } = useExamContext();
 
   // Parse existing answer or use starter code
   const getInitialCode = (): string => {
@@ -121,7 +125,7 @@ export default function CodeQuestion({
     return languageNames[lang.toLowerCase()] || lang;
   };
 
-  // Run code against test cases
+  // Run code against test cases via Piston API
   const handleRunCode = async () => {
     if (!code.trim()) {
       setRunResult({ success: false, message: 'Please write some code first.' });
@@ -132,47 +136,48 @@ export default function CodeQuestion({
     setRunResult(null);
 
     try {
-      // TODO: Integrate with backend /grade-code endpoint
-      // For now, simulate execution with placeholder results
-      logger.info('Running code', { language: metadata.language, questionNumber: question.question_number });
+      logger.info('Running code via Piston API', {
+        language: metadata.language,
+        questionNumber: question.question_number,
+        examId
+      });
 
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the real Piston API via backend
+      const result = await gradeCodeResponse(
+        examId,
+        question.question_number,
+        code,
+        metadata.language || 'python'
+      );
 
-      // Mock test results for development
-      const testCases = metadata.test_cases || [];
-      if (testCases.length === 0) {
-        setRunResult({
-          success: true,
-          message: 'Code submitted successfully! No test cases available for this question.'
-        });
-      } else {
-        // Simulate running tests (in production, this calls the Piston API)
-        const mockResults: TestResult[] = testCases.map((tc: any, idx: number) => ({
-          passed: Math.random() > 0.3, // Mock: 70% pass rate
-          input: JSON.stringify(tc.input),
-          expected: JSON.stringify(tc.expected_output),
-          actual: JSON.stringify(tc.expected_output), // Mock
-        }));
+      // Map API response to our TestResult format
+      const testResults: TestResult[] = result.test_results.map((tr: CodeTestResult) => ({
+        passed: tr.passed,
+        input: tr.test_case_input,
+        expected: tr.expected_output,
+        actual: tr.actual_output,
+        error: tr.stderr || undefined,
+        execution_time_ms: tr.execution_time_ms
+      }));
 
-        const passedCount = mockResults.filter(r => r.passed).length;
-        const totalCount = mockResults.length;
+      setRunResult({
+        success: result.is_correct,
+        message: result.is_correct
+          ? `All ${result.tests_total} tests passed!`
+          : `${result.tests_passed}/${result.tests_total} tests passed`,
+        results: testResults
+      });
 
-        setRunResult({
-          success: passedCount === totalCount,
-          message: passedCount === totalCount
-            ? `All ${totalCount} tests passed!`
-            : `${passedCount}/${totalCount} tests passed`,
-          results: mockResults
-        });
-      }
-
-      logger.info('Code execution completed');
-    } catch (error) {
+      logger.info('Code execution completed', {
+        score: result.score,
+        passed: result.tests_passed,
+        total: result.tests_total
+      });
+    } catch (error: any) {
       logger.error('Code execution failed:', error);
       setRunResult({
         success: false,
-        message: 'Failed to run code. Please try again.'
+        message: error.message || 'Failed to run code. Please try again.'
       });
     } finally {
       setIsRunning(false);

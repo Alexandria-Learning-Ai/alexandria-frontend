@@ -23,6 +23,7 @@ import {
   ExamDetail,
   StructuredExamDetail,
   GradingResult,
+  CodeGradingResult,
   ExamFile,
   ParsedQuestion
 } from '../types/exam';
@@ -623,6 +624,80 @@ export async function gradeDiagramResponse(
     }
 
     throw new Error('Failed to grade response. Please try again.');
+  }
+}
+
+/**
+ * Grade a code question response using Piston API
+ *
+ * Executes user code against test cases and returns pass/fail results.
+ *
+ * @param examId - UUID of the exam
+ * @param questionNumber - Question number (1-indexed)
+ * @param code - User's source code
+ * @param language - Programming language (python, javascript, etc.)
+ * @returns Code execution results with test case pass/fail status
+ */
+export async function gradeCodeResponse(
+  examId: string,
+  questionNumber: number,
+  code: string,
+  language: string
+): Promise<CodeGradingResult> {
+  try {
+    logger.info('Grading code response:', {
+      examId,
+      questionNumber,
+      codeLength: code.length,
+      language
+    });
+
+    const headers = await getAuthHeaders();
+
+    const response = await axios.post(
+      `${EXAMS_API_BASE}/${examId}/grade-code`,
+      {
+        code,
+        language
+      },
+      {
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        params: {
+          question_number: questionNumber
+        },
+        timeout: 30000, // 30 second timeout for code execution
+      }
+    );
+
+    logger.info('Code response graded:', {
+      examId,
+      questionNumber,
+      score: response.data.data.score,
+      passed: response.data.data.tests_passed,
+      total: response.data.data.tests_total
+    });
+
+    return response.data.data;
+  } catch (error) {
+    logger.error('Error grading code response:', error);
+
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 404) {
+        throw new Error('Question not found.');
+      }
+      if (error.response?.status === 400) {
+        throw new Error(error.response.data?.detail || 'Invalid code or question type.');
+      }
+      // Piston API or execution errors
+      if (error.response?.data?.detail) {
+        throw new Error(error.response.data.detail);
+      }
+    }
+
+    throw new Error('Failed to execute code. Please try again.');
   }
 }
 

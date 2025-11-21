@@ -308,6 +308,32 @@ export interface GradingResult {
 }
 
 /**
+ * Individual test case result from code execution
+ */
+export interface CodeTestResult {
+  passed: boolean;
+  test_case_input: string;
+  expected_output: string;
+  actual_output: string;
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  execution_time_ms: number;
+}
+
+/**
+ * Code grading result from Piston API execution
+ */
+export interface CodeGradingResult {
+  score: number; // 0-100
+  is_correct: boolean;
+  feedback: string;
+  test_results: CodeTestResult[];
+  tests_passed: number;
+  tests_total: number;
+}
+
+/**
  * Exam attempt (user taking an exam)
  */
 export interface ExamAttempt {
