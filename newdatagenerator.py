@@ -14,7 +14,7 @@ fake = Faker('en_US')
 
 # --- Configuration for LLM API Integration ---
 # IMPORTANT: Use environment variables for sensitive data
-RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "rpa_SAZQ3AZ1G7M3K7BPLYDA4FIMOAIY16IRXCCO15EF1nhf8f")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 LLM_API_URL = "https://api.runpod.ai/v2/sp8aazt1opjvs4/openai/v1/chat/completions"  # Updated to chat endpoint
 
 LLM_VERSION_TAG = "guardian-voice-v5.0-yi-34b-weekly-summary"
