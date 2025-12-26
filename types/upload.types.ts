@@ -81,10 +81,11 @@ export type CourseSelectionMode = 'profile' | 'hierarchical';
 export interface SelectedSubject {
   key: string;
   name: string;
-  type: 'profile_course' | 'hierarchical' | 'custom' | 'guest' | 'predefined';
+  type: 'profile_course' | 'hierarchical' | 'custom' | 'guest' | 'predefined' | 'smart_default';
   icon?: string;
   color?: string;
   source?: string;
+  confidence?: number; // For smart_default type
 }
 
 /**
@@ -524,4 +525,118 @@ export interface ResponseMessageProps {
   message: string | null;
   themeColors: ThemeColors;
   styles: any;
+}
+
+/**
+ * ============================================================
+ * Task 2.1: useReducer State Consolidation Types
+ * ============================================================
+ */
+
+/**
+ * Quiz Configuration State
+ */
+export interface QuizConfig {
+  types: QuizType[];
+  difficulty: DifficultyLevel;
+  numQuestions: number;
+  visualEnhancement: VisualEnhancement;
+  topic: string;
+  subject: string;
+  details: string;
+  selectedSubject: SelectedSubject | null;
+  selectedCourse: SelectedCourse | null;
+  selectedHierarchicalSubject: string | null;
+  selectedHierarchicalCourse: string | null;
+  courseSelectionMode: CourseSelectionMode;
+}
+
+/**
+ * Study Configuration State
+ */
+export interface StudyConfig {
+  title: string;
+  description: string;
+  enableStudyMode: boolean;
+}
+
+/**
+ * Consolidated Upload State for useReducer
+ */
+export interface UploadState {
+  files: UploadFile[];
+  uploadPurpose: UploadPurpose;
+  quizConfig: QuizConfig;
+  studyConfig: StudyConfig;
+  uiState: UIState;
+  modalState: ModalState;
+  textExtractionState: TextExtractionState;
+  useAsyncMode: boolean;
+  showQuickQuiz: boolean;
+}
+
+/**
+ * Upload Action Types
+ */
+export type UploadAction =
+  // File actions
+  | { type: 'SET_FILES'; payload: UploadFile[] }
+  | { type: 'ADD_FILE'; payload: UploadFile }
+  | { type: 'REMOVE_FILE'; payload: string }
+  | { type: 'CLEAR_FILES' }
+
+  // Upload purpose
+  | { type: 'SET_UPLOAD_PURPOSE'; payload: UploadPurpose }
+
+  // Quiz config updates
+  | { type: 'UPDATE_QUIZ_CONFIG'; payload: Partial<QuizConfig> }
+  | { type: 'SET_QUIZ_TYPES'; payload: QuizType[] }
+  | { type: 'SET_DIFFICULTY'; payload: DifficultyLevel }
+  | { type: 'SET_NUM_QUESTIONS'; payload: number }
+  | { type: 'SET_VISUAL_ENHANCEMENT'; payload: VisualEnhancement }
+  | { type: 'SET_SELECTED_SUBJECT'; payload: SelectedSubject | null }
+  | { type: 'SET_SELECTED_COURSE'; payload: SelectedCourse | null }
+  | { type: 'SET_HIERARCHICAL_SUBJECT'; payload: string | null }
+  | { type: 'SET_HIERARCHICAL_COURSE'; payload: string | null }
+  | { type: 'SET_COURSE_SELECTION_MODE'; payload: CourseSelectionMode }
+
+  // Study config updates
+  | { type: 'UPDATE_STUDY_CONFIG'; payload: Partial<StudyConfig> }
+
+  // UI state updates
+  | { type: 'UPDATE_UI_STATE'; payload: Partial<UIState> }
+  | { type: 'SET_UPLOADING'; payload: boolean }
+  | { type: 'SET_TRANSITIONING'; payload: boolean }
+
+  // Modal state updates
+  | { type: 'UPDATE_MODAL_STATE'; payload: Partial<ModalState> }
+  | { type: 'OPEN_MODAL'; payload: keyof ModalState }
+  | { type: 'CLOSE_MODAL'; payload: keyof ModalState }
+  | { type: 'CLOSE_ALL_MODALS' }
+
+  // Text extraction
+  | { type: 'UPDATE_TEXT_EXTRACTION'; payload: Partial<TextExtractionState> }
+
+  // Async mode
+  | { type: 'SET_ASYNC_MODE'; payload: boolean }
+
+  // Quick Quiz
+  | { type: 'SET_SHOW_QUICK_QUIZ'; payload: boolean }
+
+  // Smart defaults application
+  | { type: 'APPLY_SMART_DEFAULTS'; payload: SmartDefaultsPayload }
+
+  // Reset
+  | { type: 'RESET_STATE' }
+  | { type: 'RESET_QUIZ_CONFIG' }
+  | { type: 'RESET_AFTER_UPLOAD' };
+
+/**
+ * Smart Defaults Payload
+ */
+export interface SmartDefaultsPayload {
+  difficulty: DifficultyLevel;
+  numQuestions: number;
+  quizTypes: QuizType[];
+  subject?: SelectedSubject;
 }

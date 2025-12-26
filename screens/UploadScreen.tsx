@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from "react";
 import * as Animatable from "react-native-animatable";
 import QuizLoadingScreen from "../components/QuizLoadingScreen";
 import {
@@ -71,7 +71,10 @@ import type {
 	SelectedCourse,
 	UIState,
 	ThemeColors,
+	UploadState,
+	UploadAction,
 } from '../types/upload.types';
+import { uploadReducer, initialUploadState } from '../reducers/uploadReducer';
 
 // Type definitions for UploadScreen
 type UploadScreenProps = NativeStackScreenProps<RootStackParamList, 'Upload'>;
@@ -94,7 +97,11 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function UploadScreen({ navigation, route }: UploadScreenComponentProps) {
 	const { t, i18n } = useTranslation();
-	const [configModalVisible, setConfigModalVisible] = useState<boolean>(false);
+
+	// ============================================================
+	// Task 2.1: Consolidated State with useReducer
+	// ============================================================
+	const [state, dispatch] = useReducer(uploadReducer, initialUploadState);
 
 	// Safety wrapper for translations to prevent undefined rendering
 	const safeT = (key: string, options?: Record<string, any>): string => {
@@ -103,17 +110,22 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	};
 
 	// ✅ Custom Hooks
+	// Note: We still use useFileUpload hook for file picking functionality,
+	// but sync its files state with our reducer
 	const {
-		files,
-		setFiles,
+		files: filesFromHook,
+		setFiles: setFilesHook,
 		pickFromGallery,
 		pickDocument,
 		handleSelectFiles,
 		removeFile: removeFileOriginal,
 		getFileIcon,
 	} = useFileUpload(t, async (newFiles) => {
+		// Sync files to reducer
+		dispatch({ type: 'SET_FILES', payload: newFiles });
+
 		// Analyze files after mobile selection
-		if (uploadPurpose === "quiz" && newFiles.length > 0) {
+		if (state.uploadPurpose === "quiz" && newFiles.length > 0) {
 			const currentUserId = auth.currentUser?.uid;
 			if (!currentUserId) {
 				safeAlert("Sign In Required", "Please sign in to generate personalized quizzes");
@@ -122,12 +134,144 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			logger.info("🔍 Analyzing file for Smart Defaults (mobile)...");
 			try {
 				await analyzeFile(newFiles[0], currentUserId);
-				setShowQuickQuiz(true);
+				dispatch({ type: 'SET_SHOW_QUICK_QUIZ', payload: true });
 			} catch (error) {
 				logger.error("❌ Analysis failed:", error);
 			}
 		}
 	});
+
+	// Sync reducer files state with hook whenever it changes
+	useEffect(() => {
+		if (filesFromHook !== state.files) {
+			setFilesHook(state.files);
+		}
+	}, [state.files]);
+
+	// ============================================================
+	// Task 2.1: Wrapper functions for state updates via dispatch
+	// ============================================================
+	const setFiles = useCallback((files: any[]) => {
+		dispatch({ type: 'SET_FILES', payload: files });
+	}, []);
+
+	const setUploadPurpose = useCallback((purpose: UploadPurpose) => {
+		dispatch({ type: 'SET_UPLOAD_PURPOSE', payload: purpose });
+	}, []);
+
+	const setQuizTypes = useCallback((types: QuizType[]) => {
+		dispatch({ type: 'SET_QUIZ_TYPES', payload: types });
+	}, []);
+
+	const setDifficulty = useCallback((difficulty: DifficultyLevel) => {
+		dispatch({ type: 'SET_DIFFICULTY', payload: difficulty });
+	}, []);
+
+	const setNumQuestions = useCallback((num: number) => {
+		dispatch({ type: 'SET_NUM_QUESTIONS', payload: num });
+	}, []);
+
+	const setVisualEnhancement = useCallback((enhancement: VisualEnhancement) => {
+		dispatch({ type: 'SET_VISUAL_ENHANCEMENT', payload: enhancement });
+	}, []);
+
+	// Removed - setSelectedSubject is defined later after hooks to avoid redeclaration
+	// Removed - setSelectedCourse is defined later after hooks to avoid redeclaration
+
+	const setUiState = useCallback((updater: ((prev: UIState) => UIState) | Partial<UIState>) => {
+		if (typeof updater === 'function') {
+			// Handle functional updates
+			const newState = updater(state.uiState);
+			dispatch({ type: 'UPDATE_UI_STATE', payload: newState });
+		} else {
+			dispatch({ type: 'UPDATE_UI_STATE', payload: updater });
+		}
+	}, [state.uiState]);
+
+	const setSubjectSelectorVisible = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { subjectSelector: visible } });
+	}, []);
+
+	const setCourseModalVisible = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { course: visible } });
+	}, []);
+
+	const setQuizTypeModalVisible = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { quizType: visible } });
+	}, []);
+
+	const setDifficultyModalVisible = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { difficulty: visible } });
+	}, []);
+
+	const setHierarchicalCourseModalVisible = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { hierarchicalCourse: visible } });
+	}, []);
+
+	const setShowTextPreview = useCallback((visible: boolean) => {
+		dispatch({ type: 'UPDATE_MODAL_STATE', payload: { textPreview: visible } });
+	}, []);
+
+	const setShowQuickQuiz = useCallback((show: boolean) => {
+		dispatch({ type: 'SET_SHOW_QUICK_QUIZ', payload: show });
+	}, []);
+
+	const setExtractedText = useCallback((text: string) => {
+		dispatch({ type: 'UPDATE_TEXT_EXTRACTION', payload: { extractedText: text } });
+	}, []);
+
+	const setTextExtractionProgress = useCallback((progress: number) => {
+		dispatch({ type: 'UPDATE_TEXT_EXTRACTION', payload: { progress } });
+	}, []);
+
+	const setExtractionQuality = useCallback((quality: number | null) => {
+		dispatch({ type: 'UPDATE_TEXT_EXTRACTION', payload: { quality } });
+	}, []);
+
+	const setEnableStudyMode = useCallback((enable: boolean) => {
+		dispatch({ type: 'UPDATE_STUDY_CONFIG', payload: { enableStudyMode: enable } });
+	}, []);
+
+	const setConfigModalVisible = useCallback((visible: boolean) => {
+		if (visible) {
+			dispatch({ type: 'OPEN_MODAL', payload: 'quizType' });
+		} else {
+			dispatch({ type: 'CLOSE_MODAL', payload: 'quizType' });
+		}
+	}, []);
+
+	// ============================================================
+	// Task 2.1: State Destructuring for Easier Access
+	// ============================================================
+	// Extract commonly used state values for cleaner code
+	const files = state.files;
+	const uploadPurpose = state.uploadPurpose;
+	const quizTypes = state.quizConfig.types;
+	const difficulty = state.quizConfig.difficulty;
+	const numQuestions = state.quizConfig.numQuestions;
+	const visualEnhancement = state.quizConfig.visualEnhancement;
+	const selectedSubject = state.quizConfig.selectedSubject;
+	const selectedCourse = state.quizConfig.selectedCourse;
+	const selectedHierarchicalSubject = state.quizConfig.selectedHierarchicalSubject;
+	const selectedHierarchicalCourse = state.quizConfig.selectedHierarchicalCourse;
+	const courseSelectionMode = state.quizConfig.courseSelectionMode;
+	const uiState = state.uiState;
+	const showQuickQuiz = state.showQuickQuiz;
+	const useAsyncMode = state.useAsyncMode;
+	const enableStudyMode = state.studyConfig.enableStudyMode;
+	const extractedText = state.textExtractionState.extractedText;
+	const textExtractionProgress = state.textExtractionState.progress;
+	const extractionQuality = state.textExtractionState.quality;
+	const subjectSelectorVisible = state.modalState.subjectSelector;
+	const courseModalVisible = state.modalState.course;
+	const quizTypeModalVisible = state.modalState.quizType;
+	const difficultyModalVisible = state.modalState.difficulty;
+	const hierarchicalCourseModalVisible = state.modalState.hierarchicalCourse;
+	const showTextPreview = state.modalState.textPreview;
+	const topic = state.quizConfig.topic;
+	const subject = state.quizConfig.subject;
+	const details = state.quizConfig.details;
+	const configModalVisible = state.modalState.quizType; // QuizConfigModal visibility
 
 	const {
 		isUploading: uploadingFromHook,
@@ -152,31 +296,69 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		cancelGeneration,
 	} = useAsyncQuizGeneration();
 
+	// Note: These hooks return values that we'll integrate with the reducer state
 	const {
-		selectedSubject,
-		setSelectedSubject,
+		selectedSubject: selectedSubjectFromHook,
+		setSelectedSubject: setSelectedSubjectHook,
 		subjectValidation,
 		validatingSubject,
-		handleSubjectSelect,
-		clearSelectedSubject,
+		handleSubjectSelect: handleSubjectSelectHook,
+		clearSelectedSubject: clearSelectedSubjectHook,
 	} = useSubjectValidation();
 
 	const {
 		userCourses,
 		hasProfileCourses,
-		selectedCourse,
-		setSelectedCourse,
-		courseSelectionMode,
-		setCourseSelectionMode,
+		selectedCourse: selectedCourseFromHook,
+		setSelectedCourse: setSelectedCourseHook,
+		courseSelectionMode: courseSelectionModeFromHook,
+		setCourseSelectionMode: setCourseSelectionModeHook,
 		availableSubjects,
-		selectedHierarchicalSubject,
-		setSelectedHierarchicalSubject,
+		selectedHierarchicalSubject: selectedHierarchicalSubjectFromHook,
+		setSelectedHierarchicalSubject: setSelectedHierarchicalSubjectHook,
 		availableCourses,
-		selectedHierarchicalCourse,
-		setSelectedHierarchicalCourse,
-		handleHierarchicalSubjectSelect,
-		handleHierarchicalCourseSelect,
+		selectedHierarchicalCourse: selectedHierarchicalCourseFromHook,
+		setSelectedHierarchicalCourse: setSelectedHierarchicalCourseHook,
+		handleHierarchicalSubjectSelect: handleHierarchicalSubjectSelectHook,
+		handleHierarchicalCourseSelect: handleHierarchicalCourseSelectHook,
 	} = useHierarchicalCourses();
+
+	// Wrapper functions to sync hook values with reducer
+	const handleSubjectSelect = useCallback((subjectData: SelectedSubject) => {
+		handleSubjectSelectHook(subjectData);
+		setSelectedSubject(subjectData);
+	}, [handleSubjectSelectHook]);
+
+	const clearSelectedSubject = useCallback(() => {
+		clearSelectedSubjectHook();
+		setSelectedSubject(null);
+	}, [clearSelectedSubjectHook]);
+
+	const handleHierarchicalSubjectSelect = useCallback((subjectName: string) => {
+		handleHierarchicalSubjectSelectHook(subjectName);
+		dispatch({ type: 'SET_HIERARCHICAL_SUBJECT', payload: subjectName });
+	}, [handleHierarchicalSubjectSelectHook]);
+
+	const handleHierarchicalCourseSelect = useCallback((courseName: string) => {
+		handleHierarchicalCourseSelectHook(courseName);
+		dispatch({ type: 'SET_HIERARCHICAL_COURSE', payload: courseName });
+	}, [handleHierarchicalCourseSelectHook]);
+
+	const setCourseSelectionMode = useCallback((mode: typeof courseSelectionMode) => {
+		setCourseSelectionModeHook(mode);
+		dispatch({ type: 'SET_COURSE_SELECTION_MODE', payload: mode });
+	}, [setCourseSelectionModeHook]);
+
+	// Wrapper functions for subject/course selection (defined here to avoid redeclaration)
+	const setSelectedSubject = useCallback((subject: SelectedSubject | null) => {
+		setSelectedSubjectHook(subject);
+		dispatch({ type: 'SET_SELECTED_SUBJECT', payload: subject });
+	}, [setSelectedSubjectHook]);
+
+	const setSelectedCourse = useCallback((course: SelectedCourse | null) => {
+		setSelectedCourseHook(course);
+		dispatch({ type: 'SET_SELECTED_COURSE', payload: course });
+	}, [setSelectedCourseHook]);
 
 	// ✅ NEW: Smart Defaults / Quick Quiz hook
 	const {
@@ -191,55 +373,22 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ NEW: Onboarding hook
 	const { isFirstTime, markAsComplete } = useOnboarding();
 
-	// Consolidated state to prevent flashing
-	const [uiState, setUiState] = useState<UIState>({
-		uploading: false,
-		isDarkMode: false,
-		showFreshnessIndicator: false,
-		isTransitioning: false,
-	});
-
-	// ✅ NEW: Subject selector states
-	const [subjectSelectorVisible, setSubjectSelectorVisible] = useState<boolean>(false);
-
-	// ✅ NEW: Ask Alexandria state variables
-	const [topic, setTopic] = useState<string>("");
-	const [subject, setSubject] = useState<string>("");
-	const [quizTypes, setQuizTypes] = useState<QuizType[]>(["all"]);
-	const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium");
-	const [numQuestions, setNumQuestions] = useState<number>(10);
-	const [details, setDetails] = useState<string>("");
-
-	// Modal states - simplified
-	const [courseModalVisible, setCourseModalVisible] = useState<boolean>(false);
-	const [quizTypeModalVisible, setQuizTypeModalVisible] = useState<boolean>(false);
-	const [difficultyModalVisible, setDifficultyModalVisible] = useState<boolean>(false);
-	const [hierarchicalCourseModalVisible, setHierarchicalCourseModalVisible] = useState<boolean>(false);
-
-	// ✅ REMOVED: quizTypeOptions and difficultyOptions moved to constants/uploadOptions.ts
-
-	// ✅ REMOVED: The inline options arrays - now imported from constants
+	// ============================================================
+	// Task 2.1: REMOVED - All state now managed by useReducer
+	// ============================================================
+	// The following useState calls have been consolidated into the reducer:
+	// - uiState, setUiState
+	// - subjectSelectorVisible, setSubjectSelectorVisible
+	// - topic, subject, quizTypes, difficulty, numQuestions, details
+	// - courseModalVisible, quizTypeModalVisible, difficultyModalVisible, hierarchicalCourseModalVisible
+	// - visualEnhancement, setVisualEnhancement
+	// - extractedText, textExtractionProgress, extractionQuality, showTextPreview
+	// - enableStudyMode, setEnableStudyMode
+	// - uploadPurpose, setUploadPurpose
+	// - useAsyncMode, setUseAsyncMode
+	// - showQuickQuiz, setShowQuickQuiz
 
 	logger.info("🔧 Direct config check - API_BASE_URL:", API_BASE_URL);
-
-	// ✅ NEW: Visual enhancement preference
-	const [visualEnhancement, setVisualEnhancement] = useState<VisualEnhancement>("auto");
-
-	// ✅ NEW: Text extraction states for Study Reformatter + Reader foundation
-	const [extractedText, setExtractedText] = useState<string>("");
-	const [textExtractionProgress, setTextExtractionProgress] = useState<number>(0);
-	const [extractionQuality, setExtractionQuality] = useState<number | null>(null);
-	const [showTextPreview, setShowTextPreview] = useState<boolean>(false);
-	const [enableStudyMode, setEnableStudyMode] = useState<boolean>(true);
-
-	// ✅ NEW: Upload purpose selection - Study vs Quiz
-	const [uploadPurpose, setUploadPurpose] = useState<UploadPurpose>("study");
-
-	// ✅ NEW: Async mode toggle (default to async for better UX)
-	const [useAsyncMode, setUseAsyncMode] = useState<boolean>(true);
-
-	// ✅ NEW: Quick Quiz flow state
-	const [showQuickQuiz, setShowQuickQuiz] = useState<boolean>(false);
 
 	// Smooth animation refs
 	const uploadProgress = useRef(new Animated.Value(0)).current;
