@@ -114,13 +114,14 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	} = useFileUpload(t, async (newFiles) => {
 		// Analyze files after mobile selection
 		if (uploadPurpose === "quiz" && newFiles.length > 0) {
-			if (!auth.currentUser?.uid) {
-				Alert.alert("Sign In Required", "Sign in to generate personalized quizzes");
+			const currentUserId = auth.currentUser?.uid;
+			if (!currentUserId) {
+				Alert.alert("Sign In Required", "Please sign in to generate personalized quizzes");
 				return;
 			}
 			logger.info("🔍 Analyzing file for Smart Defaults (mobile)...");
 			try {
-				await analyzeFile(newFiles[0], auth.currentUser.uid);
+				await analyzeFile(newFiles[0], currentUserId);
 				setShowQuickQuiz(true);
 			} catch (error) {
 				logger.error("❌ Analysis failed:", error);
@@ -428,10 +429,11 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			// ✅ NEW: Analyze file for Smart Defaults (only for quiz purpose)
 			if (uploadPurpose === "quiz") {
 				// ✅ FIX: Check authentication before analyzing file
-				if (!auth.currentUser?.uid) {
+				const currentUserId = auth.currentUser?.uid;
+				if (!currentUserId) {
 					Alert.alert(
 						"Sign In Required",
-						"Sign in to generate personalized quizzes and track your progress",
+						"Please sign in to generate personalized quizzes and track your progress",
 						[
 							{ text: "Not Now", style: "cancel" },
 							{ text: "Sign In", onPress: () => navigation.navigate("Login") },
@@ -441,7 +443,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				}
 
 				logger.info("🔍 Analyzing file for Smart Defaults...");
-				await analyzeFile(file, auth.currentUser.uid); // No optional chaining needed now
+				await analyzeFile(file, currentUserId);
 				setShowQuickQuiz(true);
 			}
 		},
@@ -496,7 +498,8 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 
 		// Generate quiz using async mode
 		// ✅ FIX: Check authentication before generating quiz
-		if (!auth.currentUser?.uid) {
+		const currentUserId = auth.currentUser?.uid;
+		if (!currentUserId) {
 			Alert.alert("Authentication Required", "Please sign in to generate quizzes");
 			return;
 		}
@@ -518,8 +521,8 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 							}
 						: null,
 				},
-				auth.currentUser.uid
-			); // No fallback to anonymous
+				currentUserId
+			);
 		} catch (error) {
 			logger.error("❌ Quick Quiz generation failed:", error);
 			// Error already handled by the hook
@@ -614,10 +617,11 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			logger.info("🚀 Using ASYNC quiz generation mode");
 
 			// ✅ FIX: Check authentication before generating quiz
-			if (!auth.currentUser?.uid) {
+			const currentUserId = auth.currentUser?.uid;
+			if (!currentUserId) {
 				Alert.alert(
 					"Sign In Required",
-					"Sign in to generate personalized quizzes and track your progress"
+					"Please sign in to generate personalized quizzes and track your progress"
 				);
 				return;
 			}
@@ -639,8 +643,8 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 								}
 							: null,
 					},
-					auth.currentUser.uid
-				); // No fallback to anonymous
+					currentUserId
+				);
 			} catch (error) {
 				logger.error("❌ Async quiz generation failed:", error);
 				// Error already handled by the hook
@@ -722,12 +726,13 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
         onPurposeChange={async (purpose) => {
           setUploadPurpose(purpose);
           if (purpose === "quiz" && files.length > 0) {
-            if (!auth.currentUser?.uid) {
-              Alert.alert("Sign In Required", "Sign in to generate personalized quizzes");
+            const currentUserId = auth.currentUser?.uid;
+            if (!currentUserId) {
+              Alert.alert("Sign In Required", "Please sign in to generate personalized quizzes");
               return;
             }
             try {
-              await analyzeFile(files[0], auth.currentUser.uid);
+              await analyzeFile(files[0], currentUserId);
               setShowQuickQuiz(true);
             } catch (error) {
               logger.error("❌ Re-analysis failed:", error);
