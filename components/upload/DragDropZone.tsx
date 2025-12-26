@@ -439,6 +439,22 @@ const DragDropZone: React.FC<DragDropZoneProps> = ({
   // Accepted formats display
   const acceptedFormatsText = acceptedTypes.join(', ').toUpperCase();
 
+  // ✅ FIX Bug #7: Cleanup animations and timers on unmount
+  useEffect(() => {
+    return () => {
+      // Stop all running animations to prevent memory leaks
+      scaleAnim.stopAnimation();
+      borderPulseAnim.stopAnimation();
+      successFadeAnim.stopAnimation();
+      errorShakeAnim.stopAnimation();
+
+      // Reset drag counter
+      dragCounterRef.current = 0;
+
+      logger.debug('DragDropZone: Cleaned up animations on unmount');
+    };
+  }, [scaleAnim, borderPulseAnim, successFadeAnim, errorShakeAnim]);
+
   return (
     <View style={styles.container}>
       {/* Label */}

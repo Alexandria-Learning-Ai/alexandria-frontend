@@ -50,6 +50,17 @@ interface UseAsyncQuizGenerationResult {
     resetState: () => void;
 }
 
+interface UseAsyncQuizGenerationOptions {
+    onError?: (error: Error, context: ErrorContext) => void;
+}
+
+interface ErrorContext {
+    operation: string;
+    stage?: string;
+    jobId?: string;
+    userId?: string;
+}
+
 /**
  * Hook for async quiz generation with real-time progress tracking via SSE.
  *
@@ -59,6 +70,7 @@ interface UseAsyncQuizGenerationResult {
  * - Stage-specific messages
  * - Automatic reconnection on network issues
  * - Cleanup on unmount
+ * - Error propagation to parent components
  *
  * Usage:
  * ```typescript
@@ -71,7 +83,12 @@ interface UseAsyncQuizGenerationResult {
  *   error,
  *   generateQuizAsync,
  *   cancelGeneration
- * } = useAsyncQuizGeneration();
+ * } = useAsyncQuizGeneration({
+ *   onError: (error, context) => {
+ *     console.error('Quiz generation error:', error);
+ *     // Custom error handling
+ *   }
+ * });
  *
  * // Start generation
  * await generateQuizAsync(selectedFile, {
@@ -89,7 +106,8 @@ interface UseAsyncQuizGenerationResult {
  * }
  * ```
  */
-export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
+export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions): UseAsyncQuizGenerationResult => {
+    const { onError } = options || {};
     // State
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -112,6 +130,18 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
             closeEventSource();
         };
     }, []);
+
+    /**
+     * ✅ FIX Bug #8: Helper to set error and propagate to parent
+     */
+    const handleErrorAndPropagate = useCallback((errorMessage: string, context: ErrorContext) => {
+        setError(errorMessage);
+
+        // Propagate error to parent if callback provided
+        if (onError && isMountedRef.current) {
+            onError(new Error(errorMessage), context);
+        }
+    }, [onError]);
 
     /**
      * Close EventSource connection
@@ -160,7 +190,11 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
 
                 if (pollAttempts > maxPollAttempts) {
                     logger.error('Polling timeout: exceeded max attempts');
-                    setError('Quiz generation timed out. Please try again.');
+                    handleErrorAndPropagate('Quiz generation timed out. Please try again.', {
+                        operation: 'polling_timeout',
+                        stage: 'polling',
+                        jobId: job_id,
+                    });
                     setIsGenerating(false);
                     if (pollingIntervalRef.current) {
                         clearInterval(pollingIntervalRef.current);
@@ -194,7 +228,11 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                     }
                 } else if (data.status === 'failed' || data.is_failed) {
                     logger.error('Quiz generation failed:', data.error);
-                    setError(data.error || 'Quiz generation failed');
+                    handleErrorAndPropagate(data.error || 'Quiz generation failed', {
+                        operation: 'quiz_generation_failed',
+                        stage: data.stage || 'unknown',
+                        jobId: job_id,
+                    });
                     setIsGenerating(false);
 
                     // Stop polling
@@ -217,7 +255,11 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 // Or the job never existed
                 if (error.response?.status === 404) {
                     logger.warn('Job not found, stopping polling');
-                    setError('Quiz generation status not found');
+                    handleErrorAndPropagate('Quiz generation status not found', {
+                        operation: 'polling_job_not_found',
+                        stage: 'polling',
+                        jobId: job_id,
+                    });
                     setIsGenerating(false);
 
                     if (pollingIntervalRef.current) {
@@ -300,7 +342,11 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                     if (data.status === 'failed') {
                         const errorMsg = data.error || 'Quiz generation failed';
                         logger.error('❌ Quiz generation failed:', errorMsg);
-                        setError(errorMsg);
+                        handleErrorAndPropagate(errorMsg, {
+                            operation: 'sse_generation_failed',
+                            stage: data.stage || 'unknown',
+                            jobId: data.job_id,
+                        });
                         setIsGenerating(false);
                         closeEventSource();
                     }
@@ -331,12 +377,16 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 }
             });
 
-        } catch (error) {
+        } catch (error: any) {
             logger.error('Failed to create EventSource:', error);
-            setError('Failed to connect to progress stream');
+            handleErrorAndPropagate('Failed to connect to progress stream', {
+                operation: 'sse_connection_failed',
+                stage: 'connecting',
+                jobId: jobId || undefined,
+            });
             setIsGenerating(false);
         }
-    }, [closeEventSource, quizId, startFallbackPolling]);
+    }, [closeEventSource, quizId, startFallbackPolling, jobId, handleErrorAndPropagate]);
 
     /**
      * Generate quiz asynchronously
@@ -434,13 +484,17 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 errorMessage = error.message;
             }
 
-            setError(errorMessage);
+            handleErrorAndPropagate(errorMessage, {
+                operation: 'upload_failed',
+                stage: 'uploading',
+                userId,
+            });
             setIsGenerating(false);
             closeEventSource();
 
             throw error;
         }
-    }, [resetState, subscribeToProgress, closeEventSource]);
+    }, [resetState, subscribeToProgress, closeEventSource, handleErrorAndPropagate]);
 
     /**
      * Cancel ongoing generation

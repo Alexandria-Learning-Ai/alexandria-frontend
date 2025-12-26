@@ -97,8 +97,11 @@ export const useFileUpload = (t: (key: string) => string, onFilesAdded?: (files:
   const [files, setFiles] = useState<File[]>([]);
 
   const pickFromGallery = useCallback(async () => {
+    logger.info('📷 pickFromGallery started');
     try {
+      logger.info('🔐 Requesting media library permissions...');
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      logger.info('✅ Permission status:', status);
       if (status !== 'granted') {
         Alert.alert(
           t('upload.accessToArchives'),
@@ -153,21 +156,47 @@ export const useFileUpload = (t: (key: string) => string, onFilesAdded?: (files:
         logger.warn(`${rejectedCount} file(s) rejected due to size constraints`);
       }
 
-    } catch (err) {
+    } catch (err: any) {
+      // ✅ FIX Bug #6: Enhanced error handling with specific error types
       logger.error("Error accessing sacred archives: ", err);
-      Alert.alert(t('upload.archiveError'), t('upload.couldNotAccessArchives'));
+
+      // Handle specific error types
+      if (err.code === 'E_PERMISSION_MISSING' || err.code === 'E_NO_PERMISSIONS') {
+        Alert.alert(
+          'Permission Required',
+          'Alexandria needs permission to access your photos. Please grant access in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+      } else if (err.code === 'E_PICKER_CANCELLED') {
+        // User cancelled - no need to show error
+        logger.info('User cancelled image picker');
+      } else if (err.message?.includes('Network') || err.message?.includes('network')) {
+        Alert.alert('Network Error', 'Unable to access photos. Please check your connection and try again.');
+      } else {
+        // Generic error fallback
+        Alert.alert(t('upload.archiveError'), t('upload.couldNotAccessArchives'));
+      }
     }
   }, [files, t, onFilesAdded]);
 
   const pickDocument = useCallback(async () => {
+    logger.info('📄 pickDocument started');
     try {
+      logger.info('📂 Opening document picker...');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*', 'text/plain'],
         copyToCacheDirectory: true,
         multiple: true,
       });
 
-      if (result.canceled) return;
+      logger.info('📝 Document picker result:', { canceled: result.canceled, assetsCount: result.assets?.length });
+      if (result.canceled) {
+        logger.info('❌ User cancelled document picker');
+        return;
+      }
 
       // Filter out duplicates using improved detection
       const uniqueFiles = result.assets.filter(newFile => !isDuplicate(newFile, files));
@@ -195,31 +224,68 @@ export const useFileUpload = (t: (key: string) => string, onFilesAdded?: (files:
       if (rejectedCount > 0) {
         logger.warn(`${rejectedCount} file(s) rejected due to size constraints`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      // ✅ FIX Bug #6: Enhanced error handling with specific error types
       logger.error("Error accessing document archives: ", err);
-      Alert.alert(t('upload.documentError'), t('upload.couldNotAccessDocuments'));
+
+      // Handle specific DocumentPicker error types
+      if (err.code === 'DOCUMENT_PICKER_CANCELED' || err.code === 'E_DOCUMENT_PICKER_CANCELED') {
+        // User cancelled - no need to show error
+        logger.info('User cancelled document picker');
+      } else if (err.code === 'E_PERMISSION_MISSING' || err.code === 'E_NO_PERMISSIONS') {
+        Alert.alert(
+          'Permission Required',
+          'Alexandria needs permission to access your files. Please grant access in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+      } else if (err.message?.includes('not supported') || err.message?.includes('type')) {
+        Alert.alert(
+          'Unsupported File Type',
+          'This file type is not supported. Please select PDF, image, or text files.'
+        );
+      } else if (err.message?.includes('Network') || err.message?.includes('network')) {
+        Alert.alert('Network Error', 'Unable to access documents. Please check your connection and try again.');
+      } else {
+        // Generic error fallback
+        Alert.alert(t('upload.documentError'), t('upload.couldNotAccessDocuments'));
+      }
     }
   }, [files, t, onFilesAdded]);
 
   const handleSelectFiles = useCallback(() => {
-    Alert.alert(
-      "🏛️ Select Study Materials",
-      "From which archives would you like to gather wisdom?",
-      [
-        {
-          text: "Upload Image",
-          onPress: pickFromGallery,
-        },
-        {
-          text: "Upload Document",
-          onPress: pickDocument,
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
+    logger.info('📂 handleSelectFiles called - showing file picker dialog');
+    try {
+      Alert.alert(
+        "🏛️ Select Study Materials",
+        "From which archives would you like to gather wisdom?",
+        [
+          {
+            text: "Upload Image",
+            onPress: () => {
+              logger.info('📷 User selected: Upload Image');
+              pickFromGallery();
+            },
+          },
+          {
+            text: "Upload Document",
+            onPress: () => {
+              logger.info('📄 User selected: Upload Document');
+              pickDocument();
+            },
+          },
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => logger.info('❌ User cancelled file selection'),
+          },
+        ]
+      );
+    } catch (error) {
+      logger.error('❌ Error showing file picker alert:', error);
+    }
   }, [pickFromGallery, pickDocument]);
 
   const removeFile = useCallback((fileName: string) => {
