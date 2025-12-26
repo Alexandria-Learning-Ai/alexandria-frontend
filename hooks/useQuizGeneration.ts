@@ -7,7 +7,7 @@ import logger from '../utils/logger';
 import { getUserFriendlyError } from '../utils/errorMessages';
 import { calculateFileHash, generateCacheKey } from '../utils/fileHash';
 import { uploadCache } from '../utils/uploadCache';
-import { sanitizeQuizFormData, sanitizeStudyFormData, sanitizeUserId } from '../utils/inputSanitization';
+import { sanitizeQuizFormData, sanitizeStudyFormData, sanitizeUserId, sanitizeFilename, sanitizeString } from '../utils/inputSanitization';
 
 interface QuizGenerationParams {
     files: any[];
@@ -252,10 +252,15 @@ export const useQuizGeneration = () => {
             // ✅ Handle navigation based on upload purpose
             if (uploadPurpose === 'study') {
                 const extractedText = res.data?.extracted_text || '';
+
+                // ✅ FIX Bug #10: Sanitize file name for display
+                const sanitizedFileName = sanitizeFilename(firstFile.name || 'untitled');
+                const sanitizedTitle = sanitizeString(firstFile.name.replace(/\.[^/.]+$/, ""), 200);
+
                 const studyMaterial = {
                     id: storedMaterialId || `material_${Date.now()}`,
-                    title: firstFile.name.replace(/\.[^/.]+$/, ""),
-                    fileName: firstFile.name,
+                    title: sanitizedTitle || 'Untitled',
+                    fileName: sanitizedFileName,
                     extractedText: extractedText,
                     extractionQuality: res.data?.extraction_quality || 85,
                     characterCount: extractedText?.length || 0,
@@ -264,7 +269,7 @@ export const useQuizGeneration = () => {
                     uploadDate: new Date().toISOString(),
                     hasAudio: false,
                     hasSummary: false,
-                    type: getFileIcon(firstFile.name),
+                    type: getFileIcon(sanitizedFileName),
                 };
 
                 // Check if text extraction was successful
@@ -276,7 +281,7 @@ export const useQuizGeneration = () => {
                             {
                                 text: 'Continue Anyway',
                                 onPress: () => {
-                                    studyMaterial.extractedText = `Content from ${firstFile.name}\n\nText extraction was not successful for this file type. This could be due to:\n• Image-based PDF without OCR\n• Unsupported file format\n• File corruption\n\nYou can still use this material, but text-based features like summaries and audio may not work properly.`;
+                                    studyMaterial.extractedText = `Content from ${sanitizedFileName}\n\nText extraction was not successful for this file type. This could be due to:\n• Image-based PDF without OCR\n• Unsupported file format\n• File corruption\n\nYou can still use this material, but text-based features like summaries and audio may not work properly.`;
                                 }
                             },
                             {
@@ -351,7 +356,7 @@ export const useQuizGeneration = () => {
                                     subjectKey: selectedSubject?.key,
                                     subjectType: selectedSubject?.type,
                                     subjectValidation: subjectValidation,
-                                    fileName: firstFile.name,
+                                    fileName: sanitizeFilename(firstFile.name || 'untitled'),
                                     hierarchical: {
                                         enabled: courseSelectionMode === 'hierarchical',
                                         subject: selectedHierarchicalSubject,
@@ -408,11 +413,15 @@ export const useQuizGeneration = () => {
                         {
                             text: 'Add Anyway',
                             onPress: () => {
+                                // ✅ FIX Bug #10: Sanitize file name for error fallback
+                                const fallbackSanitizedFileName = sanitizeFilename(firstFile.name || 'untitled');
+                                const fallbackSanitizedTitle = sanitizeString(firstFile.name.replace(/\.[^/.]+$/, ""), 200);
+
                                 const basicStudyMaterial = {
                                     id: `material_${Date.now()}`,
-                                    title: firstFile.name.replace(/\.[^/.]+$/, ""),
-                                    fileName: firstFile.name,
-                                    extractedText: `Material: ${firstFile.name}\n\nThis document was added to your study library, but AI text extraction is temporarily unavailable. You can:\n\n• View the document title and details\n• Organize it by subject (${selectedSubject?.name || 'General'})\n• Try text extraction again later when the service is restored\n\nThe document is safely stored and ready for when full functionality returns.`,
+                                    title: fallbackSanitizedTitle || 'Untitled',
+                                    fileName: fallbackSanitizedFileName,
+                                    extractedText: `Material: ${fallbackSanitizedFileName}\n\nThis document was added to your study library, but AI text extraction is temporarily unavailable. You can:\n\n• View the document title and details\n• Organize it by subject (${selectedSubject?.name || 'General'})\n• Try text extraction again later when the service is restored\n\nThe document is safely stored and ready for when full functionality returns.`,
                                     extractionQuality: 0,
                                     characterCount: 0,
                                     subject: selectedSubject?.name || 'General',
@@ -420,7 +429,7 @@ export const useQuizGeneration = () => {
                                     uploadDate: new Date().toISOString(),
                                     hasAudio: false,
                                     hasSummary: false,
-                                    type: getFileIcon(firstFile.name),
+                                    type: getFileIcon(fallbackSanitizedFileName),
                                     isBasicMode: true,
                                 };
 

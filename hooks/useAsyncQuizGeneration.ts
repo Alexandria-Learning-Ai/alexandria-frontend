@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import logger from '../utils/logger';
-import { sanitizeQuizFormData, sanitizeUserId } from '../utils/inputSanitization';
+import { sanitizeQuizFormData, sanitizeUserId, sanitizeVisualEnhancement, sanitizeString } from '../utils/inputSanitization';
 
 // EventSource types for React Native
 // Note: Requires 'react-native-sse' or 'react-native-event-source' package
@@ -418,6 +418,10 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
 
             const sanitizedUserId = sanitizeUserId(userId);
 
+            // ✅ FIX Bug #10: Sanitize all user inputs
+            const sanitizedLanguage = sanitizeString(options.language, 10); // Language codes are short (e.g., 'en', 'es')
+            const sanitizedVisualPref = sanitizeVisualEnhancement(options.visualEnhancement);
+
             // Create FormData
             const formData = new FormData();
 
@@ -432,16 +436,22 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
             formData.append('difficulty', sanitizedQuiz.difficulty || 'medium');
             formData.append('user_id', sanitizedUserId || 'anonymous');
 
-            if (options.language) {
-                formData.append('language', options.language);
+            if (sanitizedLanguage) {
+                formData.append('language', sanitizedLanguage);
             }
 
-            if (options.visualEnhancement) {
-                formData.append('visual_preference', options.visualEnhancement);
+            if (sanitizedVisualPref) {
+                formData.append('visual_preference', sanitizedVisualPref);
             }
 
             if (options.subjectContext) {
-                formData.append('subject_context', JSON.stringify(options.subjectContext));
+                // ✅ FIX Bug #10: Sanitize subject context fields
+                const sanitizedSubjectContext = {
+                    manual_subject: sanitizeString(options.subjectContext.manual_subject, 200),
+                    subject_key: sanitizeString(options.subjectContext.subject_key, 100),
+                    subject_type: sanitizeString(options.subjectContext.subject_type, 50),
+                };
+                formData.append('subject_context', JSON.stringify(sanitizedSubjectContext));
             }
 
             // Upload file and get job_id
