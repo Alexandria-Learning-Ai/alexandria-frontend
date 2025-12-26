@@ -116,7 +116,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		if (uploadPurpose === "quiz" && newFiles.length > 0) {
 			const currentUserId = auth.currentUser?.uid;
 			if (!currentUserId) {
-				Alert.alert("Sign In Required", "Please sign in to generate personalized quizzes");
+				safeAlert("Sign In Required", "Please sign in to generate personalized quizzes");
 				return;
 			}
 			logger.info("🔍 Analyzing file for Smart Defaults (mobile)...");
@@ -244,8 +244,48 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// Smooth animation refs
 	const uploadProgress = useRef(new Animated.Value(0)).current;
 	const containerAnim = useRef(new Animated.Value(1)).current;
-
 	const slideAnim = useRef(new Animated.Value(0)).current;
+
+	// ✅ NEW: Track component mount state to prevent navigation race conditions
+	const isMountedRef = useRef<boolean>(true);
+
+	useEffect(() => {
+		return () => {
+			isMountedRef.current = false;
+		};
+	}, []);
+
+	// ✅ NEW: Safe navigation wrapper
+	const safeNavigate = useCallback(<RouteName extends keyof RootStackParamList>(
+		routeName: RouteName,
+		params?: RootStackParamList[RouteName]
+	): boolean => {
+		if (!isMountedRef.current) {
+			logger.debug(`Navigation cancelled - component unmounted: ${String(routeName)}`);
+			return false;
+		}
+
+		try {
+			navigation.navigate(routeName as any, params as any);
+			return true;
+		} catch (error) {
+			logger.error('Navigation failed:', error);
+			return false;
+		}
+	}, [navigation]);
+
+	// ✅ NEW: Safe alert wrapper
+	const safeAlert = useCallback((
+		title: string,
+		message: string,
+		buttons?: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }>
+	): void => {
+		if (!isMountedRef.current) {
+			logger.debug(`Alert cancelled - component unmounted: ${title}`);
+			return;
+		}
+		Alert.alert(title, message, buttons);
+	}, []);
 
 	// Memoized theme colors
 	const themeColors = useMemo<ThemeColors>(() => {
@@ -292,7 +332,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				duration: 300,
 				useNativeDriver: true,
 			}).start(({ finished }) => {
-				if (finished) {
+				if (finished && isMountedRef.current) {
 					try {
 						// Clean up files and subject
 						files.forEach(cleanupBlobUrl);
@@ -300,7 +340,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 						clearSelectedSubject();
 
 						// Navigate to QuizScreen with quiz ID
-						navigation.navigate("QuizScreen", {
+						const navigated = safeNavigate("QuizScreen", {
 							quizId: asyncQuizId,
 							source: "Upload",
 							metadata: {
@@ -324,12 +364,16 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 						});
 
 						// Show success message after navigation
-						setTimeout(() => {
-							Alert.alert(
-								"Your Quiz is Ready! 🎓",
-								"Your personalized quiz is ready. Ready to test your knowledge?"
-							);
-						}, 300);
+						if (navigated) {
+							setTimeout(() => {
+								safeAlert(
+									"Your Quiz is Ready!",
+									"Your personalized quiz is ready. Ready to test your knowledge?"
+								);
+							}, 300);
+						} else {
+							logger.warn('Failed to navigate to QuizScreen after animation');
+						}
 					} catch (navError) {
 						logger.error("❌ Navigation error:", navError);
 					}
@@ -341,7 +385,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ NEW: Handle async generation errors
 	useEffect(() => {
 		if (asyncError) {
-			Alert.alert("Quiz Generation Failed", asyncError, [
+			safeAlert("Quiz Generation Failed", asyncError, [
 				{
 					text: "Try Again",
 					onPress: () => {
@@ -432,12 +476,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				// ✅ FIX: Check authentication before analyzing file
 				const currentUserId = auth.currentUser?.uid;
 				if (!currentUserId) {
-					Alert.alert(
+					safeAlert(
 						"Sign In Required",
 						"Please sign in to generate personalized quizzes and track your progress",
 						[
 							{ text: "Not Now", style: "cancel" },
-							{ text: "Sign In", onPress: () => navigation.navigate("Login") },
+							{ text: "Sign In", onPress: () => safeNavigate("Login") },
 						]
 					);
 					return;
@@ -524,7 +568,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		// ✅ FIX: Check authentication before generating quiz
 		const currentUserId = auth.currentUser?.uid;
 		if (!currentUserId) {
-			Alert.alert("Authentication Required", "Please sign in to generate quizzes");
+			safeAlert("Authentication Required", "Please sign in to generate quizzes");
 			return;
 		}
 
@@ -646,7 +690,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			// ✅ FIX: Check authentication before generating quiz
 			const currentUserId = auth.currentUser?.uid;
 			if (!currentUserId) {
-				Alert.alert(
+				safeAlert(
 					"Sign In Required",
 					"Please sign in to generate personalized quizzes and track your progress"
 				);
