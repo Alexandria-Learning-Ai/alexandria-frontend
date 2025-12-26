@@ -79,11 +79,13 @@ export const useFileAnalysis = () => {
    *
    * @param file - File object to analyze (web File or React Native file object)
    * @param userId - User ID for caching and personalization (optional)
+   * @param signal - AbortSignal to cancel request (optional)
    * @returns Promise<void>
    */
   const analyzeFile = useCallback(async (
     file: any,
-    userId?: string
+    userId?: string,
+    signal?: AbortSignal
   ): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -136,6 +138,7 @@ export const useFileAnalysis = () => {
             'Authorization': `Bearer ${token}`,
           },
           timeout: 10000, // 10 second timeout
+          signal, // ✅ FIX Bug #9: Pass AbortSignal to cancel request
         }
       );
 
@@ -159,6 +162,14 @@ export const useFileAnalysis = () => {
 
     } catch (err: any) {
       const analysisTime = Date.now() - startTime;
+
+      // ✅ FIX Bug #9: Handle abort as a special case (not an error)
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+        logger.info('File analysis canceled by user');
+        setLoading(false);
+        return; // Don't set error or fallback defaults
+      }
+
       logger.error('File analysis failed:', err);
 
       // Get user-friendly error message

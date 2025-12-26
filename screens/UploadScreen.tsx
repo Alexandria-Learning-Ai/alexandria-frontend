@@ -210,8 +210,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			}
 			logger.info("🔍 Analyzing file for Smart Defaults (mobile)...");
 			try {
+				// ✅ FIX Bug #9: Create AbortController to cancel request on timeout
+				analysisAbortControllerRef.current = new AbortController();
+				const signal = analysisAbortControllerRef.current.signal;
+
 				// Add 30-second timeout to analysis
-				const analysisPromise = analyzeFile(newFiles[0], currentUserId);
+				const analysisPromise = analyzeFile(newFiles[0], currentUserId, signal);
 				const timeoutPromise = new Promise((_, reject) =>
 					setTimeout(() => reject(new Error('Analysis timeout')), 30000)
 				);
@@ -219,6 +223,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				await Promise.race([analysisPromise, timeoutPromise]);
 				dispatch({ type: 'SET_SHOW_QUICK_QUIZ', payload: true });
 			} catch (error) {
+				// ✅ FIX Bug #9: Abort the request if timeout occurred
+				if (analysisAbortControllerRef.current) {
+					analysisAbortControllerRef.current.abort();
+					analysisAbortControllerRef.current = null;
+				}
+
 				handleError(error, {
 					operation: 'file_analysis_mobile',
 					userId: currentUserId,
@@ -510,9 +520,17 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ FIX Bug #2: Ref to prevent infinite sync loop between hook and reducer files state
 	const isSyncingFilesRef = useRef<boolean>(false);
 
+	// ✅ FIX Bug #9: AbortController to cancel file analysis requests on timeout
+	const analysisAbortControllerRef = useRef<AbortController | null>(null);
+
 	useEffect(() => {
 		return () => {
 			isMountedRef.current = false;
+			// ✅ FIX Bug #9: Cancel ongoing file analysis on unmount
+			if (analysisAbortControllerRef.current) {
+				analysisAbortControllerRef.current.abort();
+				analysisAbortControllerRef.current = null;
+			}
 		};
 	}, []);
 
@@ -755,8 +773,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 
 				logger.info("🔍 Analyzing file for Smart Defaults...");
 				try {
+					// ✅ FIX Bug #9: Create AbortController to cancel request on timeout
+					analysisAbortControllerRef.current = new AbortController();
+					const signal = analysisAbortControllerRef.current.signal;
+
 					// Add 30-second timeout to analysis
-					const analysisPromise = analyzeFile(file, currentUserId);
+					const analysisPromise = analyzeFile(file, currentUserId, signal);
 					const timeoutPromise = new Promise((_, reject) =>
 						setTimeout(() => reject(new Error('Analysis timeout')), 30000)
 					);
@@ -764,6 +786,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 					await Promise.race([analysisPromise, timeoutPromise]);
 					setShowQuickQuiz(true);
 				} catch (error) {
+					// ✅ FIX Bug #9: Abort the request if timeout occurred
+					if (analysisAbortControllerRef.current) {
+						analysisAbortControllerRef.current.abort();
+						analysisAbortControllerRef.current = null;
+					}
+
 					// ✅ FIX Bug #3: Cleanup blob URL on analysis error
 					cleanupBlobUrl(fileObject);
 					setFiles([]);
@@ -1106,8 +1134,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
               return;
             }
             try {
+              // ✅ FIX Bug #9: Create AbortController to cancel request on timeout
+              analysisAbortControllerRef.current = new AbortController();
+              const signal = analysisAbortControllerRef.current.signal;
+
               // Add 30-second timeout to analysis
-              const analysisPromise = analyzeFile(files[0], currentUserId);
+              const analysisPromise = analyzeFile(files[0], currentUserId, signal);
               const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Analysis timeout')), 30000)
               );
@@ -1115,6 +1147,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
               await Promise.race([analysisPromise, timeoutPromise]);
               setShowQuickQuiz(true);
             } catch (error) {
+              // ✅ FIX Bug #9: Abort the request if timeout occurred
+              if (analysisAbortControllerRef.current) {
+                analysisAbortControllerRef.current.abort();
+                analysisAbortControllerRef.current = null;
+              }
+
               handleError(error, {
                 operation: 'file_reanalysis_purpose_change',
                 userId: currentUserId,
