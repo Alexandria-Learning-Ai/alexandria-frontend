@@ -109,7 +109,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		pickFromGallery,
 		pickDocument,
 		handleSelectFiles,
-		removeFile,
+		removeFile: removeFileOriginal,
 		getFileIcon,
 	} = useFileUpload(t, async (newFiles) => {
 		// Analyze files after mobile selection
@@ -295,6 +295,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				if (finished) {
 					try {
 						// Clean up files and subject
+						files.forEach(cleanupBlobUrl);
 						setFiles([]);
 						clearSelectedSubject();
 
@@ -463,6 +464,29 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		};
 	}, [files]);
 
+	// ✅ NEW: Helper function to cleanup blob URLs
+	const cleanupBlobUrl = useCallback((file: { uri?: string; name?: string }) => {
+		if (Platform.OS === 'web' && file.uri?.startsWith("blob:")) {
+			try {
+				URL.revokeObjectURL(file.uri);
+				logger.debug(`🧹 Cleaned up blob URL for: ${file.name}`);
+			} catch (error) {
+				logger.error('Failed to revoke blob URL:', error);
+			}
+		}
+	}, []);
+
+	// ✅ NEW: Wrapped removeFile function with blob URL cleanup
+	const removeFile = useCallback((fileName: string) => {
+		// Find the file before removing to cleanup its blob URL
+		const fileToRemove = files.find((file) => file.name === fileName);
+		if (fileToRemove) {
+			cleanupBlobUrl(fileToRemove);
+		}
+		// Call original remove function
+		removeFileOriginal(fileName);
+	}, [files, cleanupBlobUrl, removeFileOriginal]);
+
 	// ✅ REMOVED: No longer needed - backend /study/extract-text endpoint now handles both extraction AND storage
 
 	// ✅ NEW: Handle Quick Quiz generation (one-tap with smart defaults)
@@ -587,7 +611,10 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				getFileIcon,
 				navigation,
 				containerAnim,
-				onFilesCleared: () => setFiles([]),
+				onFilesCleared: () => {
+					files.forEach(cleanupBlobUrl);
+					setFiles([]);
+				},
 				onSubjectCleared: clearSelectedSubject,
 			});
 
@@ -671,7 +698,10 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				getFileIcon,
 				navigation,
 				containerAnim,
-				onFilesCleared: () => setFiles([]),
+				onFilesCleared: () => {
+					files.forEach(cleanupBlobUrl);
+					setFiles([]);
+				},
 				onSubjectCleared: clearSelectedSubject,
 			});
 
@@ -708,6 +738,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
         styles={styles}
         t={safeT}
         onClear={() => {
+          files.forEach(cleanupBlobUrl);
           setFiles([]);
           resetAnalysis();
           setShowQuickQuiz(false);
