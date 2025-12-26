@@ -14,6 +14,8 @@ import type {
   UploadFile,
   ModalState,
 } from '../types/upload.types';
+import { sanitizeNumber, sanitizeDifficulty, sanitizeQuizTypes } from '../utils/inputSanitization';
+import logger from '../utils/logger';
 
 /**
  * Initial modal state
@@ -272,13 +274,43 @@ export function uploadReducer(state: UploadState, action: UploadAction): UploadS
     // Smart Defaults Application
     // ============================================================
     case 'APPLY_SMART_DEFAULTS':
+      // ✅ FIX Bug #11: Validate incoming smart defaults data
+      const validatedNumQuestions = sanitizeNumber(
+        action.payload.numQuestions,
+        1,  // min
+        50, // max
+        10  // default
+      );
+      const validatedDifficulty = sanitizeDifficulty(action.payload.difficulty);
+      const validatedQuizTypes = sanitizeQuizTypes(action.payload.quizTypes);
+
+      // Log validation failures
+      if (validatedNumQuestions !== action.payload.numQuestions) {
+        logger.warn('APPLY_SMART_DEFAULTS: Invalid numQuestions, using sanitized value', {
+          original: action.payload.numQuestions,
+          sanitized: validatedNumQuestions,
+        });
+      }
+      if (validatedDifficulty !== action.payload.difficulty) {
+        logger.warn('APPLY_SMART_DEFAULTS: Invalid difficulty, using sanitized value', {
+          original: action.payload.difficulty,
+          sanitized: validatedDifficulty,
+        });
+      }
+      if (JSON.stringify(validatedQuizTypes) !== JSON.stringify(action.payload.quizTypes)) {
+        logger.warn('APPLY_SMART_DEFAULTS: Invalid quizTypes, using sanitized value', {
+          original: action.payload.quizTypes,
+          sanitized: validatedQuizTypes,
+        });
+      }
+
       return {
         ...state,
         quizConfig: {
           ...state.quizConfig,
-          difficulty: action.payload.difficulty,
-          numQuestions: action.payload.numQuestions,
-          types: action.payload.quizTypes,
+          difficulty: validatedDifficulty,
+          numQuestions: validatedNumQuestions,
+          types: validatedQuizTypes,
           selectedSubject: action.payload.subject || state.quizConfig.selectedSubject,
         },
       };
