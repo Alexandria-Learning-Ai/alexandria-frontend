@@ -13,6 +13,10 @@ import { StudentProfileService } from '../services/StudentProfileService';
 import { HybridDataService } from '../services/HybridDataService';
 import { FirebaseMigration } from '../utils/FirebaseMigration';
 
+// Error boundary
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { UploadErrorFallback } from '../components/upload/UploadErrorFallback';
+
 // Existing screens
 import HomeScreen from '../screens/HomeScreen';
 import HomeScreenV2 from '../screens-experimental/HomeScreenV2'; // ⭐ EXPERIMENTAL: New design system
@@ -495,7 +499,11 @@ const NavigationStackWrapper = ({ user, userState }) => {
                 ...getScreenOptions('Create Quiz', { gestureEnabled: true })
               }}
             >
-              {(props) => <UploadScreen {...props} user={user} subscription={subscription} />}
+              {(props) => (
+                <ErrorBoundary fallback={<UploadErrorFallback />}>
+                  <UploadScreen {...props} user={user} subscription={subscription} />
+                </ErrorBoundary>
+              )}
             </Stack.Screen>
 
             <Stack.Screen
@@ -954,7 +962,11 @@ const NavigationStackWrapper = ({ user, userState }) => {
                 ...getScreenOptions('Create Quiz', { gestureEnabled: true })
               }}
             >
-              {(props) => <UploadScreen {...props} user={user} subscription={subscription} />}
+              {(props) => (
+                <ErrorBoundary fallback={<UploadErrorFallback />}>
+                  <UploadScreen {...props} user={user} subscription={subscription} />
+                </ErrorBoundary>
+              )}
             </Stack.Screen>
 
             <Stack.Screen
