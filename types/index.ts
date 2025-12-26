@@ -535,9 +535,12 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   Quiz: { quizId?: string; questions?: Question[]; metadata?: QuizMetadata };
   QuizScreen: {
+    quizId?: string;
     remedialQuiz?: any;
     isRemedial?: boolean;
     targetTopic?: string;
+    source?: string;
+    metadata?: any;
   };
   Results: { quiz: Quiz; questions: Question[]; metadata: QuizMetadata };
   ExplanationScreen: {

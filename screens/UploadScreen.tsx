@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import * as Animatable from "react-native-animatable";
 import QuizLoadingScreen from "../components/QuizLoadingScreen";
 import {
 	View,
@@ -24,6 +25,7 @@ import HierarchicalSubjectService from "../services/HierarchicalSubjectService";
 import { useTranslation } from "react-i18next";
 import logger from "../utils/logger";
 import { styles } from "../styles/UploadScreenStyles";
+import QuizConfigModal from "@/components/upload/QuizConfigModal";
 import CustomDropdown from "../components/shared/CustomDropdown";
 import { predefinedSubjects, quizTypeOptions, difficultyOptions } from "../constants/uploadOptions";
 import UploadHeader from "../components/upload/UploadHeader";
@@ -44,6 +46,8 @@ import CourseSelectionToggle from "../components/ask-alexandria/CourseSelectionT
 import ProfileCourseSelector from "../components/ask-alexandria/ProfileCourseSelector";
 import HierarchicalCourseSelector from "../components/ask-alexandria/HierarchicalCourseSelector";
 import QuickQuizButton from "../components/upload/QuickQuizButton";
+import UploadConfigurationForm from "../components/upload/UploadConfigurationForm";
+import UploadProgressSection from "../components/upload/UploadProgressSection";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { useUploadHandler } from "../hooks/useUploadHandler";
 import { useQuizGeneration } from "../hooks/useQuizGeneration";
@@ -56,6 +60,31 @@ import OnboardingTooltip from "../components/onboarding/OnboardingTooltip";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { StudentProfileService } from "@/services/StudentProfileService";
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/index';
+import type {
+	UploadPurpose,
+	VisualEnhancement,
+	DifficultyLevel,
+	QuizType,
+	SelectedSubject,
+	SelectedCourse,
+	UIState,
+	ThemeColors,
+} from '../types/upload.types';
+
+// Type definitions for UploadScreen
+type UploadScreenProps = NativeStackScreenProps<RootStackParamList, 'Upload'>;
+
+interface UploadScreenComponentProps {
+	navigation: UploadScreenProps['navigation'];
+	route?: UploadScreenProps['route'];
+}
+
+// File with path interface for drag & drop
+interface FileWithPath extends File {
+	path?: string;
+}
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -63,13 +92,14 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 // ✅ REMOVED: predefinedSubjects moved to constants/uploadOptions.ts
 
-export default function UploadScreen({ navigation }) {
+export default function UploadScreen({ navigation, route }: UploadScreenComponentProps) {
 	const { t, i18n } = useTranslation();
+	const [configModalVisible, setConfigModalVisible] = useState<boolean>(false);
 
 	// Safety wrapper for translations to prevent undefined rendering
-	const safeT = (key, options) => {
+	const safeT = (key: string, options?: Record<string, any>): string => {
 		const translation = t(key, options);
-		return translation || key;
+		return (typeof translation === 'string' ? translation : key) || key;
 	};
 
 	// ✅ Custom Hooks
@@ -161,7 +191,7 @@ export default function UploadScreen({ navigation }) {
 	const { isFirstTime, markAsComplete } = useOnboarding();
 
 	// Consolidated state to prevent flashing
-	const [uiState, setUiState] = useState({
+	const [uiState, setUiState] = useState<UIState>({
 		uploading: false,
 		isDarkMode: false,
 		showFreshnessIndicator: false,
@@ -169,21 +199,21 @@ export default function UploadScreen({ navigation }) {
 	});
 
 	// ✅ NEW: Subject selector states
-	const [subjectSelectorVisible, setSubjectSelectorVisible] = useState(false);
+	const [subjectSelectorVisible, setSubjectSelectorVisible] = useState<boolean>(false);
 
 	// ✅ NEW: Ask Alexandria state variables
-	const [topic, setTopic] = useState("");
-	const [subject, setSubject] = useState("");
-	const [quizTypes, setQuizTypes] = useState(["all"]); // Array for multi-select
-	const [difficulty, setDifficulty] = useState("medium");
-	const [numQuestions, setNumQuestions] = useState(10);
-	const [details, setDetails] = useState(""); // Exam details for context
+	const [topic, setTopic] = useState<string>("");
+	const [subject, setSubject] = useState<string>("");
+	const [quizTypes, setQuizTypes] = useState<QuizType[]>(["all"]);
+	const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium");
+	const [numQuestions, setNumQuestions] = useState<number>(10);
+	const [details, setDetails] = useState<string>("");
 
 	// Modal states - simplified
-	const [courseModalVisible, setCourseModalVisible] = useState(false);
-	const [quizTypeModalVisible, setQuizTypeModalVisible] = useState(false);
-	const [difficultyModalVisible, setDifficultyModalVisible] = useState(false);
-	const [hierarchicalCourseModalVisible, setHierarchicalCourseModalVisible] = useState(false);
+	const [courseModalVisible, setCourseModalVisible] = useState<boolean>(false);
+	const [quizTypeModalVisible, setQuizTypeModalVisible] = useState<boolean>(false);
+	const [difficultyModalVisible, setDifficultyModalVisible] = useState<boolean>(false);
+	const [hierarchicalCourseModalVisible, setHierarchicalCourseModalVisible] = useState<boolean>(false);
 
 	// ✅ REMOVED: quizTypeOptions and difficultyOptions moved to constants/uploadOptions.ts
 
@@ -192,23 +222,23 @@ export default function UploadScreen({ navigation }) {
 	logger.info("🔧 Direct config check - API_BASE_URL:", API_BASE_URL);
 
 	// ✅ NEW: Visual enhancement preference
-	const [visualEnhancement, setVisualEnhancement] = useState("auto"); // 'auto', 'enabled', 'disabled'
+	const [visualEnhancement, setVisualEnhancement] = useState<VisualEnhancement>("auto");
 
 	// ✅ NEW: Text extraction states for Study Reformatter + Reader foundation
-	const [extractedText, setExtractedText] = useState("");
-	const [textExtractionProgress, setTextExtractionProgress] = useState(0);
-	const [extractionQuality, setExtractionQuality] = useState(null);
-	const [showTextPreview, setShowTextPreview] = useState(false);
-	const [enableStudyMode, setEnableStudyMode] = useState(true); // Enable reformatting/audio
+	const [extractedText, setExtractedText] = useState<string>("");
+	const [textExtractionProgress, setTextExtractionProgress] = useState<number>(0);
+	const [extractionQuality, setExtractionQuality] = useState<number | null>(null);
+	const [showTextPreview, setShowTextPreview] = useState<boolean>(false);
+	const [enableStudyMode, setEnableStudyMode] = useState<boolean>(true);
 
 	// ✅ NEW: Upload purpose selection - Study vs Quiz
-	const [uploadPurpose, setUploadPurpose] = useState("study"); // 'study' or 'quiz'
+	const [uploadPurpose, setUploadPurpose] = useState<UploadPurpose>("study");
 
 	// ✅ NEW: Async mode toggle (default to async for better UX)
-	const [useAsyncMode, setUseAsyncMode] = useState(true);
+	const [useAsyncMode, setUseAsyncMode] = useState<boolean>(true);
 
 	// ✅ NEW: Quick Quiz flow state
-	const [showQuickQuiz, setShowQuickQuiz] = useState(false);
+	const [showQuickQuiz, setShowQuickQuiz] = useState<boolean>(false);
 
 	// Smooth animation refs
 	const uploadProgress = useRef(new Animated.Value(0)).current;
@@ -217,7 +247,7 @@ export default function UploadScreen({ navigation }) {
 	const slideAnim = useRef(new Animated.Value(0)).current;
 
 	// Memoized theme colors
-	const themeColors = useMemo(() => {
+	const themeColors = useMemo<ThemeColors>(() => {
 		// ✅ Updated to match AskAlexandriaScreen theme
 		return {
 			background: "#1A2C5B",
@@ -343,7 +373,7 @@ export default function UploadScreen({ navigation }) {
 
 	// ✅ NEW: Get smart description for visual enhancement
 	const getVisualEnhancementDescription = useCallback(
-		(mode) => {
+		(mode: VisualEnhancement): string => {
 			if (!selectedSubject) {
 				return "Automatically adds visual elements based on subject and content";
 			}
@@ -372,7 +402,7 @@ export default function UploadScreen({ navigation }) {
 
 	// ✅ NEW: Handle file dropped from DragDropZone for when I make website for Tee (web only)
 	const handleFileDropped = useCallback(
-		async (file) => {
+		async (file: FileWithPath): Promise<void> => {
 			logger.info("File dropped via drag & drop:", {
 				name: file.name,
 				size: file.size,
@@ -664,255 +694,137 @@ export default function UploadScreen({ navigation }) {
 	}, [uploadProgress]);
 
 	// Enhanced header component matching AskAlexandria design
-	const ListHeader = () => (
-		<View>
-			<UploadHeader
-				navigation={navigation}
-				containerAnim={containerAnim}
-				themeColors={themeColors}
-				styles={styles}
-				t={safeT}
-			/>
+// --- Enhanced header section ---
+  const ListHeader = () => (
+    <View>
+      <UploadHeader
+        navigation={navigation}
+        containerAnim={containerAnim}
+        themeColors={themeColors}
+        styles={styles}
+        t={safeT}
+        onClear={() => {
+          setFiles([]);
+          resetAnalysis();
+          setShowQuickQuiz(false);
+          clearSelectedSubject();
+        }}
+      />
 
-			{/* Form Container */}
-			<View style={styles.formContainer}>
-				{/* ✅ Drag & Drop Zone for Web, FileUploadButton for Mobile */}
-				{Platform.OS === "web" ? (
-					<DragDropZone
-						onFileSelected={handleFileDropped}
-						acceptedTypes={[".pdf", ".txt", ".png", ".jpg", ".jpeg"]}
-						maxSizeMB={50}
-						disabled={uiState.isTransitioning}
-						onError={(error) => {
-							Alert.alert("Upload Error", error);
-						}}
-					/>
-				) : (
-					<FileUploadButton
-						files={files}
-						onPress={handleSelectFiles}
-						isDisabled={uiState.isTransitioning}
-						styles={styles}
-						t={safeT}
-					/>
-				)}
+      <UploadConfigurationForm
+        // File state
+        files={files}
+        onFileSelected={handleFileDropped}
+        onSelectFiles={handleSelectFiles}
 
-				{/* ✅ Progressive Disclosure: Only show configuration after files are uploaded */}
-				{files.length > 0 && (
-					<>
-						<UploadPurposeToggle
-							uploadPurpose={uploadPurpose}
-							setUploadPurpose={async (purpose) => {
-								setUploadPurpose(purpose);
+        // Purpose state
+        uploadPurpose={uploadPurpose}
+        onPurposeChange={async (purpose) => {
+          setUploadPurpose(purpose);
+          if (purpose === "quiz" && files.length > 0) {
+            if (!auth.currentUser?.uid) {
+              Alert.alert("Sign In Required", "Sign in to generate personalized quizzes");
+              return;
+            }
+            try {
+              await analyzeFile(files[0], auth.currentUser.uid);
+              setShowQuickQuiz(true);
+            } catch (error) {
+              logger.error("❌ Re-analysis failed:", error);
+            }
+          } else {
+            setShowQuickQuiz(false);
+            resetAnalysis();
+          }
+        }}
+        showQuickQuiz={showQuickQuiz}
+        smartDefaults={smartDefaults}
+        analyzingFile={analyzingFile}
+        onQuickQuiz={handleQuickQuiz}
+        onCustomize={handleCustomize}
 
-								// If switching TO quiz mode and files exist, analyze them
-								if (purpose === "quiz" && files.length > 0) {
-									if (!auth.currentUser?.uid) {
-										Alert.alert(
-											"Sign In Required",
-											"Sign in to generate personalized quizzes and track your progress",
-											[
-												{ text: "Not Now", style: "cancel" },
-												{ text: "Sign In", onPress: () => navigation.navigate("Login") },
-											]
-										);
-										return;
-									}
+        // Course selection
+        courseSelectionMode={courseSelectionMode}
+        setCourseSelectionMode={setCourseSelectionMode}
+        userCourses={userCourses}
+        hasProfileCourses={hasProfileCourses}
 
-									logger.info("🔄 Re-analyzing file after switching to quiz mode...", {
-										filename: files[0].name,
-									});
-									try {
-										await analyzeFile(files[0], auth.currentUser.uid);
-										setShowQuickQuiz(true);
-										logger.info("✅ Smart Defaults analysis complete");
-									} catch (error) {
-										logger.error("❌ Re-analysis failed:", error);
-									}
-								} else {
-									// Reset Quick Quiz when switching to study mode
-									setShowQuickQuiz(false);
-									resetAnalysis();
-								}
-							}}
-							styles={styles}
-						/>
+        // Profile course
+        selectedSubject={selectedSubject}
+        setSelectedSubject={setSelectedSubject}
+        selectedCourse={selectedCourse}
+        setSelectedCourse={setSelectedCourse}
+        courseModalVisible={courseModalVisible}
+        setCourseModalVisible={setCourseModalVisible}
 
-						{/* ✅ NEW: Quick Quiz Button - Show after file upload for quiz mode */}
-						{uploadPurpose === "quiz" && showQuickQuiz && smartDefaults && !isAsyncGenerating && (
-							<QuickQuizButton
-								defaults={smartDefaults}
-								onQuickQuiz={handleQuickQuiz}
-								onCustomize={handleCustomize}
-								disabled={uiState.isTransitioning}
-								analyzing={analyzingFile}
-							/>
-						)}
+        // Hierarchical
+        availableSubjects={availableSubjects}
+        availableCourses={availableCourses}
+        selectedHierarchicalSubject={selectedHierarchicalSubject}
+        selectedHierarchicalCourse={selectedHierarchicalCourse}
+        handleHierarchicalSubjectSelect={handleHierarchicalSubjectSelect}
+        handleHierarchicalCourseSelect={handleHierarchicalCourseSelect}
+        hierarchicalCourseModalVisible={hierarchicalCourseModalVisible}
+        setHierarchicalCourseModalVisible={setHierarchicalCourseModalVisible}
 
-						{/* Course Selection Section - Same as Ask Alexandria (hide when Quick Quiz active) */}
-						{!showQuickQuiz && (
-							<CourseSelectionToggle
-								mode={courseSelectionMode}
-								onModeChange={(mode) => {
-									setCourseSelectionMode(mode);
-									if (mode === "profile") {
-										setSelectedHierarchicalSubject(null);
-										setSelectedHierarchicalCourse(null);
-									} else {
-										setSelectedSubject(null);
-									}
-								}}
-								userCoursesCount={userCourses.length}
-								availableSubjectsCount={availableSubjects.length}
-								hasProfileCourses={hasProfileCourses}
-								styles={styles}
-							/>
-						)}
+        // Subject selector
+        predefinedSubjects={predefinedSubjects}
+        subjectSelectorVisible={subjectSelectorVisible}
+        setSubjectSelectorVisible={setSubjectSelectorVisible}
 
-						{/* Profile Course Selector (hide when Quick Quiz active) */}
-						{!showQuickQuiz && courseSelectionMode === "profile" && hasProfileCourses && (
-							<ProfileCourseSelector
-								userCourses={userCourses}
-								selectedValue={selectedSubject?.name || ""}
-								onSelect={(course) => {
-									setSelectedSubject({
-										key: course.key,
-										name: course.name,
-										type: "profile_course",
-										icon: course.icon,
-										color: course.color,
-										source: "user_profile",
-									});
-									setSelectedCourse({
-										name: course.name,
-										code: course.code || course.key,
-										icon: course.icon,
-										color: course.color,
-										source: "profile",
-									});
-								}}
-								modalVisible={courseModalVisible}
-								setModalVisible={setCourseModalVisible}
-								styles={styles}
-							/>
-						)}
+        // Quiz/Study config
+        quizTypes={quizTypes}
+        setQuizTypes={setQuizTypes}
+        difficulty={difficulty}
+        setDifficulty={setDifficulty}
+        numQuestions={numQuestions}
+        setNumQuestions={setNumQuestions}
+        quizTypeModalVisible={quizTypeModalVisible}
+        setQuizTypeModalVisible={setQuizTypeModalVisible}
+        difficultyModalVisible={difficultyModalVisible}
+        setDifficultyModalVisible={setDifficultyModalVisible}
+        enableStudyMode={enableStudyMode}
+        setEnableStudyMode={setEnableStudyMode}
 
-						{/* Hierarchical Course Selector (hide when Quick Quiz active) */}
-						{!showQuickQuiz && courseSelectionMode === "hierarchical" && (
-							<HierarchicalCourseSelector
-								availableSubjects={availableSubjects}
-								selectedSubject={selectedHierarchicalSubject}
-								availableCourses={availableCourses}
-								selectedCourse={selectedHierarchicalCourse}
-								onSubjectSelect={handleHierarchicalSubjectSelect}
-								onCourseSelect={handleHierarchicalCourseSelect}
-								subjectModalVisible={courseModalVisible}
-								setSubjectModalVisible={setCourseModalVisible}
-								courseModalVisible={hierarchicalCourseModalVisible}
-								setCourseModalVisible={setHierarchicalCourseModalVisible}
-								HierarchicalSubjectService={HierarchicalSubjectService}
-								styles={styles}
-							/>
-						)}
+        // Modal control
+        onOpenConfigModal={() => setConfigModalVisible(true)}
 
-						{/* No Profile Courses Message (hide when Quick Quiz active) */}
-						{!showQuickQuiz && courseSelectionMode === "profile" && !hasProfileCourses && (
-							<View style={styles.noCoursesMessage}>
-								<FontAwesome5
-									name="info-circle"
-									size={16}
-									color="#F39C12"
-								/>
-								<Text style={styles.noCoursesText}>
-									No courses from your profile. Switch to "All Subjects" to explore courses.
-								</Text>
-							</View>
-						)}
-
-						{/* ✅ Subject Selector Section - Only show when files are selected AND Quick Quiz not active */}
-						{!showQuickQuiz && (
-							<SubjectSelectorSection
-								isVisible={files.length > 0}
-								selectedSubject={selectedSubject}
-								userCourses={userCourses}
-								hasProfileCourses={hasProfileCourses}
-								predefinedSubjects={predefinedSubjects}
-								onSubjectSelect={setSelectedSubject}
-								onOpenFullSelector={() => setSubjectSelectorVisible(true)}
-								isDisabled={uiState.isTransitioning}
-								themeColors={themeColors}
-								styles={styles}
-								t={t}
-							/>
-						)}
-
-						{/* ✅ Quiz Configuration - Only show when purpose is 'quiz' AND Quick Quiz not active */}
-						{uploadPurpose === "quiz" && !showQuickQuiz && (
-							<QuizConfiguration
-								quizTypes={quizTypes}
-								setQuizTypes={setQuizTypes}
-								difficulty={difficulty}
-								setDifficulty={setDifficulty}
-								numQuestions={numQuestions}
-								setNumQuestions={setNumQuestions}
-								quizTypeModalVisible={quizTypeModalVisible}
-								setQuizTypeModalVisible={setQuizTypeModalVisible}
-								difficultyModalVisible={difficultyModalVisible}
-								setDifficultyModalVisible={setDifficultyModalVisible}
-								styles={styles}
-							/>
-						)}
-
-						{/* ✅ Study Mode Toggle - Only show when purpose is 'study' */}
-						{uploadPurpose === "study" && (
-							<StudyModeToggle
-								enableStudyMode={enableStudyMode}
-								setEnableStudyMode={setEnableStudyMode}
-								styles={styles}
-							/>
-						)}
-					</>
-				)}
-			</View>
-		</View>
-	);
+        HierarchicalSubjectService={HierarchicalSubjectService}
+        isDisabled={uiState.isTransitioning}
+        isAsyncGenerating={isAsyncGenerating}
+        themeColors={themeColors}
+        styles={styles}
+        t={safeT}
+      />
+    </View>
+  );
 
 	// Enhanced footer with progress indicators only
-	const ListFooter = () => (
-		<Animated.View style={[styles.footerContainer, { opacity: containerAnim }]}>
-			{/* ✅ Show async progress for quiz generation in async mode */}
-			{isAsyncGenerating && uploadPurpose === "quiz" && useAsyncMode && (
-				<AsyncQuizProgress
-					isVisible={isAsyncGenerating}
-					progress={asyncProgress}
-					stage={asyncStage}
-					message={asyncMessage}
-					onCancel={cancelGeneration}
-					themeColors={themeColors}
-					styles={styles}
-				/>
-			)}
+  const ListFooter = () => (
+    <UploadProgressSection
+      // Async progress
+      isAsyncGenerating={isAsyncGenerating}
+      asyncProgress={asyncProgress}
+      asyncStage={asyncStage}
+      asyncMessage={asyncMessage}
+      onCancelAsync={cancelGeneration}
 
-			{/* ✅ Show legacy progress bar for sync mode or study uploads */}
-			{!isAsyncGenerating && (
-				<UploadProgressBar
-					isVisible={uiState.uploading}
-					progressWidth={progressWidth}
-					themeColors={themeColors}
-					styles={styles}
-				/>
-			)}
+      // Sync progress
+      isUploading={uiState.uploading}
+      progressWidth={progressWidth}
 
-			<ResponseMessage
-				message={responseText}
-				themeColors={themeColors}
-				styles={styles}
-			/>
+      // Mode
+      uploadPurpose={uploadPurpose}
+      useAsyncMode={useAsyncMode}
 
-			{/* Extra padding at bottom to account for sticky button */}
-			<View style={{ height: 120 }} />
-		</Animated.View>
-	);
+      // Message
+      responseText={responseText}
+
+      containerAnim={containerAnim}
+      themeColors={themeColors}
+      styles={styles}
+    />
+  );
 	const insets = useSafeAreaInsets();
 	return (
 		<View style={[styles.container, { paddingBlockStart: insets.top }]}>
@@ -967,19 +879,21 @@ export default function UploadScreen({ navigation }) {
 					})}
 				/>
 
-				{/* ✅ Sticky Generate Button at bottom */}
-				<View style={styles.stickyFooter}>
-					<GenerateButton
-						uploadPurpose={uploadPurpose}
-						isUploading={uiState.uploading}
-						isDisabled={uiState.isTransitioning}
-						filesCount={files.length}
-						onPress={handleUploadAndGenerateQuiz}
-						themeColors={themeColors}
-						styles={styles}
-						t={safeT}
-					/>
-				</View>
+				{/* ✅ Sticky Generate Button at bottom (Study mode only) */}
+				{uploadPurpose === 'study' && (
+					<View style={styles.stickyFooter}>
+						<GenerateButton
+							uploadPurpose={uploadPurpose}
+							isUploading={uiState.uploading}
+							isDisabled={uiState.isTransitioning}
+							filesCount={files.length}
+							onPress={handleUploadAndGenerateQuiz}
+							themeColors={themeColors}
+							styles={styles}
+							t={safeT}
+						/>
+					</View>
+				)}
 			</LinearGradient>
 
 			{/* ✅ NEW: Subject Selector Modal */}
@@ -1006,6 +920,28 @@ export default function UploadScreen({ navigation }) {
 						};
 					}
 				}}
+			/>
+
+			{/* ✅ Quiz Configuration Bottom Sheet Modal */}
+			<QuizConfigModal
+				visible={configModalVisible}
+				onClose={() => setConfigModalVisible(false)}
+				onGenerate={async () => {
+					setConfigModalVisible(false);
+					await handleUploadAndGenerateQuiz();
+				}}
+				quizTypes={quizTypes}
+				setQuizTypes={setQuizTypes}
+				difficulty={difficulty}
+				setDifficulty={setDifficulty}
+				numQuestions={numQuestions}
+				setNumQuestions={setNumQuestions}
+				quizTypeModalVisible={quizTypeModalVisible}
+				setQuizTypeModalVisible={setQuizTypeModalVisible}
+				difficultyModalVisible={difficultyModalVisible}
+				setDifficultyModalVisible={setDifficultyModalVisible}
+				styles={styles}
+				themeColors={themeColors}
 			/>
 
 			{/* ✅ NEW: Text Extraction Preview Modal - Foundation for Study Reformatter */}

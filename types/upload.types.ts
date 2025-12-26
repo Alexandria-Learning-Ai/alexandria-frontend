@@ -170,6 +170,7 @@ export interface ThemeColors {
   error: string;
   warning: string;
   shadow: string;
+  [key: string]: string;
 }
 
 /**
