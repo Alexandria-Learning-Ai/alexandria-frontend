@@ -214,15 +214,28 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				analysisAbortControllerRef.current = new AbortController();
 				const signal = analysisAbortControllerRef.current.signal;
 
-				// Add 30-second timeout to analysis
+				// ✅ FIX Bug #13: Store timeout ID for cleanup
 				const analysisPromise = analyzeFile(newFiles[0], currentUserId, signal);
-				const timeoutPromise = new Promise((_, reject) =>
-					setTimeout(() => reject(new Error('Analysis timeout')), 30000)
-				);
+				const timeoutPromise = new Promise((_, reject) => {
+					analysisTimeoutRef.current = setTimeout(() => reject(new Error('Analysis timeout')), 30000);
+				});
 
 				await Promise.race([analysisPromise, timeoutPromise]);
+
+				// ✅ FIX Bug #13: Clear timeout on success
+				if (analysisTimeoutRef.current) {
+					clearTimeout(analysisTimeoutRef.current);
+					analysisTimeoutRef.current = null;
+				}
+
 				dispatch({ type: 'SET_SHOW_QUICK_QUIZ', payload: true });
 			} catch (error) {
+				// ✅ FIX Bug #13: Clear timeout on error
+				if (analysisTimeoutRef.current) {
+					clearTimeout(analysisTimeoutRef.current);
+					analysisTimeoutRef.current = null;
+				}
+
 				// ✅ FIX Bug #9: Abort the request if timeout occurred
 				if (analysisAbortControllerRef.current) {
 					analysisAbortControllerRef.current.abort();
@@ -523,6 +536,9 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ FIX Bug #9: AbortController to cancel file analysis requests on timeout
 	const analysisAbortControllerRef = useRef<AbortController | null>(null);
 
+	// ✅ FIX Bug #13: Track timeout IDs to clean them up properly
+	const analysisTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
 	useEffect(() => {
 		return () => {
 			isMountedRef.current = false;
@@ -530,6 +546,11 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			if (analysisAbortControllerRef.current) {
 				analysisAbortControllerRef.current.abort();
 				analysisAbortControllerRef.current = null;
+			}
+			// ✅ FIX Bug #13: Clear timeout on unmount
+			if (analysisTimeoutRef.current) {
+				clearTimeout(analysisTimeoutRef.current);
+				analysisTimeoutRef.current = null;
 			}
 		};
 	}, []);
@@ -777,15 +798,28 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 					analysisAbortControllerRef.current = new AbortController();
 					const signal = analysisAbortControllerRef.current.signal;
 
-					// Add 30-second timeout to analysis
+					// ✅ FIX Bug #13: Store timeout ID for cleanup
 					const analysisPromise = analyzeFile(file, currentUserId, signal);
-					const timeoutPromise = new Promise((_, reject) =>
-						setTimeout(() => reject(new Error('Analysis timeout')), 30000)
-					);
+					const timeoutPromise = new Promise((_, reject) => {
+						analysisTimeoutRef.current = setTimeout(() => reject(new Error('Analysis timeout')), 30000);
+					});
 
 					await Promise.race([analysisPromise, timeoutPromise]);
+
+					// ✅ FIX Bug #13: Clear timeout on success
+					if (analysisTimeoutRef.current) {
+						clearTimeout(analysisTimeoutRef.current);
+						analysisTimeoutRef.current = null;
+					}
+
 					setShowQuickQuiz(true);
 				} catch (error) {
+					// ✅ FIX Bug #13: Clear timeout on error
+					if (analysisTimeoutRef.current) {
+						clearTimeout(analysisTimeoutRef.current);
+						analysisTimeoutRef.current = null;
+					}
+
 					// ✅ FIX Bug #9: Abort the request if timeout occurred
 					if (analysisAbortControllerRef.current) {
 						analysisAbortControllerRef.current.abort();
@@ -1138,15 +1172,28 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
               analysisAbortControllerRef.current = new AbortController();
               const signal = analysisAbortControllerRef.current.signal;
 
-              // Add 30-second timeout to analysis
+              // ✅ FIX Bug #13: Store timeout ID for cleanup
               const analysisPromise = analyzeFile(files[0], currentUserId, signal);
-              const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Analysis timeout')), 30000)
-              );
+              const timeoutPromise = new Promise((_, reject) => {
+                analysisTimeoutRef.current = setTimeout(() => reject(new Error('Analysis timeout')), 30000);
+              });
 
               await Promise.race([analysisPromise, timeoutPromise]);
+
+              // ✅ FIX Bug #13: Clear timeout on success
+              if (analysisTimeoutRef.current) {
+                clearTimeout(analysisTimeoutRef.current);
+                analysisTimeoutRef.current = null;
+              }
+
               setShowQuickQuiz(true);
             } catch (error) {
+              // ✅ FIX Bug #13: Clear timeout on error
+              if (analysisTimeoutRef.current) {
+                clearTimeout(analysisTimeoutRef.current);
+                analysisTimeoutRef.current = null;
+              }
+
               // ✅ FIX Bug #9: Abort the request if timeout occurred
               if (analysisAbortControllerRef.current) {
                 analysisAbortControllerRef.current.abort();
