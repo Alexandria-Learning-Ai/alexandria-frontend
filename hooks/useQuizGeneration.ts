@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Alert, Vibration, Animated } from 'react-native';
 import axios from 'axios';
 import { auth } from '../firebaseConfig';
@@ -44,6 +44,22 @@ interface QuizGenerationResult {
 export const useQuizGeneration = () => {
     const [responseText, setResponseText] = useState<string | null>(null);
 
+    // ✅ FIX Bug #12: Track component mount state and ongoing requests
+    const isMountedRef = useRef<boolean>(true);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    // ✅ FIX Bug #12: Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+            // Abort ongoing request on unmount
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+                abortControllerRef.current = null;
+            }
+        };
+    }, []);
+
     /**
      * Handles quiz generation from uploaded files
      */
@@ -84,6 +100,10 @@ export const useQuizGeneration = () => {
         }
 
         try {
+            // ✅ FIX Bug #12: Create AbortController for this request
+            abortControllerRef.current = new AbortController();
+            const signal = abortControllerRef.current.signal;
+
             const user = auth.currentUser;
             const firstFile = files[0];
 
@@ -164,6 +184,7 @@ export const useQuizGeneration = () => {
                         'X-User-ID': user?.uid || 'anonymous',
                     },
                     timeout: 600000,
+                    signal, // ✅ FIX Bug #12: Pass abort signal to cancel request
                 });
 
                 logger.info('✅ Study material upload successful:', res.status);
@@ -219,6 +240,7 @@ export const useQuizGeneration = () => {
                         'X-User-ID': user?.uid || 'anonymous',
                     },
                     timeout: 600000,
+                    signal, // ✅ FIX Bug #12: Pass abort signal to cancel request
                 });
 
                 logger.info('✅ Quiz upload successful:', res.status);
@@ -393,7 +415,19 @@ export const useQuizGeneration = () => {
             return result;
 
         } catch (error: any) {
+            // ✅ FIX Bug #12: Handle abort gracefully (don't show error, component unmounted)
+            if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+                logger.info('Quiz generation request canceled');
+                return { success: false };
+            }
+
             logger.error("Upload error: ", error.response ? error.response.data : error.message);
+
+            // ✅ FIX Bug #12: Don't update state if component is unmounted
+            if (!isMountedRef.current) {
+                logger.warn('Component unmounted, skipping error handling');
+                return { success: false, error: 'Component unmounted' };
+            }
 
             // Get user-friendly error message
             const friendlyError = getUserFriendlyError(error, {
