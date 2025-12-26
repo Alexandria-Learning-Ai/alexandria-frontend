@@ -229,11 +229,23 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	});
 
 	// Sync reducer files state with hook whenever it changes
+	// ✅ FIX Bug #2: Prevent infinite sync loop with guard ref
 	useEffect(() => {
-		if (filesFromHook !== state.files) {
-			setFilesHook(state.files);
+		// Prevent sync loop
+		if (isSyncingFilesRef.current) {
+			return;
 		}
-	}, [state.files]);
+
+		if (filesFromHook !== state.files) {
+			isSyncingFilesRef.current = true;
+			setFilesHook(state.files);
+
+			// Reset sync flag after update completes
+			setTimeout(() => {
+				isSyncingFilesRef.current = false;
+			}, 0);
+		}
+	}, [state.files, filesFromHook, setFilesHook]);
 
 	// ============================================================
 	// Task 2.1: Wrapper functions for state updates via dispatch
@@ -410,43 +422,6 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		handleHierarchicalCourseSelect: handleHierarchicalCourseSelectHook,
 	} = useHierarchicalCourses();
 
-	// Wrapper functions to sync hook values with reducer
-	const handleSubjectSelect = useCallback((subjectData: SelectedSubject) => {
-		handleSubjectSelectHook(subjectData);
-		setSelectedSubject(subjectData);
-	}, [handleSubjectSelectHook]);
-
-	const clearSelectedSubject = useCallback(() => {
-		clearSelectedSubjectHook();
-		setSelectedSubject(null);
-	}, [clearSelectedSubjectHook]);
-
-	const handleHierarchicalSubjectSelect = useCallback((subjectName: string) => {
-		handleHierarchicalSubjectSelectHook(subjectName);
-		dispatch({ type: 'SET_HIERARCHICAL_SUBJECT', payload: subjectName });
-	}, [handleHierarchicalSubjectSelectHook]);
-
-	const handleHierarchicalCourseSelect = useCallback((courseName: string) => {
-		handleHierarchicalCourseSelectHook(courseName);
-		dispatch({ type: 'SET_HIERARCHICAL_COURSE', payload: courseName });
-	}, [handleHierarchicalCourseSelectHook]);
-
-	const setCourseSelectionMode = useCallback((mode: typeof courseSelectionMode) => {
-		setCourseSelectionModeHook(mode);
-		dispatch({ type: 'SET_COURSE_SELECTION_MODE', payload: mode });
-	}, [setCourseSelectionModeHook]);
-
-	// Wrapper functions for subject/course selection (defined here to avoid redeclaration)
-	const setSelectedSubject = useCallback((subject: SelectedSubject | null) => {
-		setSelectedSubjectHook(subject);
-		dispatch({ type: 'SET_SELECTED_SUBJECT', payload: subject });
-	}, [setSelectedSubjectHook]);
-
-	const setSelectedCourse = useCallback((course: SelectedCourse | null) => {
-		setSelectedCourseHook(course);
-		dispatch({ type: 'SET_SELECTED_COURSE', payload: course });
-	}, [setSelectedCourseHook]);
-
 	// ✅ NEW: Smart Defaults / Quick Quiz hook
 	const {
 		defaults: smartDefaults,
@@ -462,6 +437,47 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 
 	// ✅ NEW: Error handler hook
 	const { handleError } = useUploadErrorHandler();
+
+	// ============================================================
+	// Wrapper functions to sync hook values with reducer
+	// ============================================================
+	// These must be defined AFTER all hooks are destructured
+
+	// Wrapper functions for subject/course selection
+	const setSelectedSubject = useCallback((subject: SelectedSubject | null) => {
+		setSelectedSubjectHook(subject);
+		dispatch({ type: 'SET_SELECTED_SUBJECT', payload: subject });
+	}, [setSelectedSubjectHook]);
+
+	const setSelectedCourse = useCallback((course: SelectedCourse | null) => {
+		setSelectedCourseHook(course);
+		dispatch({ type: 'SET_SELECTED_COURSE', payload: course });
+	}, [setSelectedCourseHook]);
+
+	const handleSubjectSelect = useCallback((subjectData: SelectedSubject) => {
+		handleSubjectSelectHook(subjectData);
+		setSelectedSubject(subjectData);
+	}, [handleSubjectSelectHook, setSelectedSubject]);
+
+	const clearSelectedSubject = useCallback(() => {
+		clearSelectedSubjectHook();
+		setSelectedSubject(null);
+	}, [clearSelectedSubjectHook, setSelectedSubject]);
+
+	const handleHierarchicalSubjectSelect = useCallback((subjectName: string) => {
+		handleHierarchicalSubjectSelectHook(subjectName);
+		dispatch({ type: 'SET_HIERARCHICAL_SUBJECT', payload: subjectName });
+	}, [handleHierarchicalSubjectSelectHook]);
+
+	const handleHierarchicalCourseSelect = useCallback((courseName: string) => {
+		handleHierarchicalCourseSelectHook(courseName);
+		dispatch({ type: 'SET_HIERARCHICAL_COURSE', payload: courseName });
+	}, [handleHierarchicalCourseSelectHook]);
+
+	const setCourseSelectionMode = useCallback((mode: typeof courseSelectionMode) => {
+		setCourseSelectionModeHook(mode);
+		dispatch({ type: 'SET_COURSE_SELECTION_MODE', payload: mode });
+	}, [setCourseSelectionModeHook]);
 
 	// ============================================================
 	// Task 2.1: REMOVED - All state now managed by useReducer
@@ -487,6 +503,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 
 	// ✅ NEW: Track component mount state to prevent navigation race conditions
 	const isMountedRef = useRef<boolean>(true);
+
+	// ✅ FIX Bug #1: Ref to break circular dependency with handleQuickQuiz in useEffect
+	const handleQuickQuizRef = useRef<(() => void) | null>(null);
+
+	// ✅ FIX Bug #2: Ref to prevent infinite sync loop between hook and reducer files state
+	const isSyncingFilesRef = useRef<boolean>(false);
 
 	useEffect(() => {
 		return () => {
@@ -631,13 +653,13 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			}, {
 				retryAction: () => {
 					// User can retry the async generation
-					if (files.length > 0) {
-						handleQuickQuiz();
+					if (files.length > 0 && handleQuickQuizRef.current) {
+						handleQuickQuizRef.current();
 					}
 				},
 			});
 		}
-	}, [asyncError, files, handleQuickQuiz, handleError]);
+	}, [asyncError, files, handleError]);
 
 	// Smooth upload progress animation
 	useEffect(() => {
@@ -715,6 +737,11 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				// ✅ FIX: Check authentication before analyzing file
 				const currentUserId = auth.currentUser?.uid;
 				if (!currentUserId) {
+					// ✅ FIX Bug #3: Cleanup blob URL before returning on auth error
+					cleanupBlobUrl(fileObject);
+					setFiles([]);
+
+
 					safeAlert(
 						"Sign In Required",
 						"Please sign in to generate personalized quizzes and track your progress",
@@ -737,6 +764,10 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 					await Promise.race([analysisPromise, timeoutPromise]);
 					setShowQuickQuiz(true);
 				} catch (error) {
+					// ✅ FIX Bug #3: Cleanup blob URL on analysis error
+					cleanupBlobUrl(fileObject);
+					setFiles([]);
+
 					handleError(error, {
 						operation: 'file_analysis_dragdrop',
 						userId: currentUserId,
@@ -745,7 +776,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				}
 			}
 		},
-		[setFiles, uploadPurpose, analyzeFile, handleError]
+		[setFiles, uploadPurpose, analyzeFile, handleError, cleanupBlobUrl, safeAlert, safeNavigate]
 	);
 
 	// ✅ FIX: Cleanup blob URLs to prevent memory leaks
@@ -861,6 +892,11 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		i18n.language,
 		visualEnhancement,
 	]);
+
+	// ✅ FIX Bug #1: Sync handleQuickQuiz with ref to prevent circular dependency
+	useEffect(() => {
+		handleQuickQuizRef.current = handleQuickQuiz;
+	}, [handleQuickQuiz]);
 
 	// ✅ NEW: Handle Customize action (show full configuration)
 	const handleCustomize = useCallback(() => {

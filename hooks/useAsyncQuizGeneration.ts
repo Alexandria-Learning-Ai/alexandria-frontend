@@ -21,7 +21,7 @@ interface AsyncQuizOptions {
 
 interface ProgressUpdate {
     job_id: string;
-    status: 'connected' | 'processing' | 'completed' | 'failed';
+    status: 'connected' | 'processing' | 'completed' | 'failed' | 'finished';
     progress: number; // 0.0 to 1.0
     stage: 'hashing' | 'extraction' | 'generation' | 'storing' | 'caching' | 'complete';
     message: string;
@@ -31,6 +31,7 @@ interface ProgressUpdate {
     processing_time?: number;
     error?: string;
     updated_at?: string;
+    is_finished?: boolean;
 }
 
 interface UseAsyncQuizGenerationResult {
@@ -287,7 +288,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                     }
 
                     // Handle completion
-                    if ((data.status === 'completed' || data.status === 'finished' || data.is_finished) && data.quiz_id) {
+                    if ((data.status === 'completed' || data.status === 'finished' || data.is_finished === true) && data.quiz_id) {
                         logger.info('✅ Quiz generation complete! Quiz ID:', data.quiz_id);
                         setQuizId(data.quiz_id);
                         setIsGenerating(false);
@@ -326,7 +327,7 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 if (!quizId) {
                     logger.warn('📡 SSE connection lost, starting fallback polling...');
                     setMessage('Connection interrupted, checking status...');
-                    startFallbackPolling(job_id);
+                    startFallbackPolling(jobId);
                 }
             });
 
