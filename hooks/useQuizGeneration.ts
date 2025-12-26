@@ -7,6 +7,7 @@ import logger from '../utils/logger';
 import { getUserFriendlyError } from '../utils/errorMessages';
 import { calculateFileHash, generateCacheKey } from '../utils/fileHash';
 import { uploadCache } from '../utils/uploadCache';
+import { sanitizeQuizFormData, sanitizeStudyFormData, sanitizeUserId } from '../utils/inputSanitization';
 
 interface QuizGenerationParams {
     files: any[];
@@ -136,15 +137,24 @@ export const useQuizGeneration = () => {
             // ✅ Use different endpoints based on upload purpose
             if (uploadPurpose === 'study') {
                 // ✅ Study Mode: Use dedicated study materials endpoint
+
+                // Sanitize study form data
+                const sanitizedStudy = sanitizeStudyFormData({
+                    title: selectedSubject?.name,
+                    description: selectedCourse?.name,
+                });
+
+                const sanitizedUserId = sanitizeUserId(user?.uid);
+
                 const formData = new FormData();
                 formData.append('file', {
                     uri: firstFile.uri,
                     name: firstFile.name,
                     type: firstFile.mimeType || 'application/octet-stream',
                 } as any);
-                formData.append('user_id', user?.uid || 'anonymous');
-                formData.append('subject', selectedSubject?.name || '');
-                formData.append('course', selectedCourse?.name || '');
+                formData.append('user_id', sanitizedUserId || 'anonymous');
+                formData.append('subject', sanitizedStudy.title || '');
+                formData.append('course', sanitizedStudy.description || '');
 
                 logger.info('🔗 Study Mode - Uploading to:', `${API_BASE_URL}/api/study/extract-text`);
 
@@ -163,6 +173,18 @@ export const useQuizGeneration = () => {
 
             } else {
                 // ✅ Quiz Mode: Use quiz generation endpoint
+
+                // Sanitize quiz form data
+                const sanitizedQuiz = sanitizeQuizFormData({
+                    subject: selectedSubject?.name,
+                    course: selectedCourse?.name,
+                    numQuestions,
+                    difficulty,
+                    quizTypes,
+                });
+
+                const sanitizedUserId = sanitizeUserId(user?.uid);
+
                 const formData = new FormData();
                 formData.append('file', {
                     uri: firstFile.uri,
@@ -170,20 +192,20 @@ export const useQuizGeneration = () => {
                     type: firstFile.mimeType || 'application/octet-stream',
                 } as any);
 
-                formData.append('quiz_types', JSON.stringify(quizTypes));
-                formData.append('num_questions', numQuestions.toString());
-                formData.append('difficulty', difficulty);
+                formData.append('quiz_types', JSON.stringify(sanitizedQuiz.quizTypes));
+                formData.append('num_questions', (sanitizedQuiz.numQuestions || 10).toString());
+                formData.append('difficulty', sanitizedQuiz.difficulty || 'medium');
                 formData.append('language', language || 'en');
                 formData.append('upload_purpose', 'quiz');
                 formData.append('visual_preference', visualEnhancement);
 
-                if (user) {
-                    formData.append('user_id', user.uid);
+                if (sanitizedUserId) {
+                    formData.append('user_id', sanitizedUserId);
                 }
 
-                if (selectedSubject) {
+                if (selectedSubject && sanitizedQuiz.subject) {
                     formData.append('subject_context', JSON.stringify({
-                        manual_subject: selectedSubject.name,
+                        manual_subject: sanitizedQuiz.subject,
                         subject_key: selectedSubject.key,
                         subject_type: selectedSubject.type
                     }));

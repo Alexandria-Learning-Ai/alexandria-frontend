@@ -11,6 +11,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import logger from '../../utils/logger';
 import { colors, gradients, radius, spacing, shadow } from '../../theme/tokens';
+import { validateFile as validateFileUtil } from '../../utils/fileValidation';
 
 interface DragDropZoneProps {
   onFileSelected: (file: File) => void;
@@ -83,35 +84,22 @@ const DragDropZone: React.FC<DragDropZoneProps> = ({
   const dragCounterRef = useRef(0);
 
   /**
-   * Validates file against type and size constraints
+   * Validates file against type and size constraints using centralized validation
    */
   const validateFile = useCallback(
     (file: File): ValidationResult => {
       logger.info('Validating file:', { name: file.name, size: file.size, type: file.type });
 
-      // Check file type
-      const isValidType = acceptedTypes.some((type) =>
-        file.name.toLowerCase().endsWith(type.toLowerCase())
-      );
+      // Use centralized validation utility
+      const result = validateFileUtil(file, {
+        maxSizeMB,
+        allowedExtensions: acceptedTypes,
+      });
 
-      if (!isValidType) {
-        const acceptedFormats = acceptedTypes.join(', ');
-        return {
-          valid: false,
-          error: `Invalid file type. Please select a file with one of these formats: ${acceptedFormats}`,
-        };
-      }
-
-      // Check file size
-      const maxSizeBytes = maxSizeMB * 1024 * 1024;
-      if (file.size > maxSizeBytes) {
-        return {
-          valid: false,
-          error: `File is too large (${(file.size / (1024 * 1024)).toFixed(2)} MB). Maximum size is ${maxSizeMB} MB.`,
-        };
-      }
-
-      return { valid: true, error: null };
+      return {
+        valid: result.valid,
+        error: result.error || null,
+      };
     },
     [acceptedTypes, maxSizeMB]
   );

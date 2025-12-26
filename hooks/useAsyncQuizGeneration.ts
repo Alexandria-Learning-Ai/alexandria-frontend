@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import logger from '../utils/logger';
+import { sanitizeQuizFormData, sanitizeUserId } from '../utils/inputSanitization';
 
 // EventSource types for React Native
 // Note: Requires 'react-native-sse' or 'react-native-event-source' package
@@ -357,6 +358,15 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
             logger.info('File:', file.name || file.fileName);
             logger.info('Options:', options);
 
+            // Sanitize quiz data before sending
+            const sanitizedQuiz = sanitizeQuizFormData({
+                numQuestions: options.numQuestions,
+                difficulty: options.difficulty,
+                quizTypes: options.quizTypes,
+            });
+
+            const sanitizedUserId = sanitizeUserId(userId);
+
             // Create FormData
             const formData = new FormData();
 
@@ -366,10 +376,10 @@ export const useAsyncQuizGeneration = (): UseAsyncQuizGenerationResult => {
                 type: file.mimeType || file.type || 'application/octet-stream',
             } as any);
 
-            formData.append('quiz_types', options.quizTypes.join(','));
-            formData.append('num_questions', options.numQuestions.toString());
-            formData.append('difficulty', options.difficulty);
-            formData.append('user_id', userId);
+            formData.append('quiz_types', (sanitizedQuiz.quizTypes || ['all']).join(','));
+            formData.append('num_questions', (sanitizedQuiz.numQuestions || 10).toString());
+            formData.append('difficulty', sanitizedQuiz.difficulty || 'medium');
+            formData.append('user_id', sanitizedUserId || 'anonymous');
 
             if (options.language) {
                 formData.append('language', options.language);

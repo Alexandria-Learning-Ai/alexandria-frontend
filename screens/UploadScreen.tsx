@@ -14,6 +14,7 @@ import {
 	ScrollView,
 	Platform,
 	Vibration,
+	ActivityIndicator,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -57,6 +58,7 @@ import { useHierarchicalCourses } from "../hooks/useHierarchicalCourses";
 import { useFileAnalysis } from "../hooks/useFileAnalysis";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import OnboardingTooltip from "../components/onboarding/OnboardingTooltip";
+import { useUploadErrorHandler } from "../hooks/useUploadErrorHandler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { StudentProfileService } from "@/services/StudentProfileService";
@@ -90,6 +92,81 @@ interface FileWithPath extends File {
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+/**
+ * AnalysisLoadingOverlay - Loading overlay shown during file analysis
+ *
+ * Features:
+ * - Blocks UI interactions with overlay
+ * - Shows animated spinner
+ * - Displays user-friendly message
+ * - Matches Alexandria theme (gold spinner, navy background)
+ *
+ * @param visible - Whether overlay is shown
+ */
+interface AnalysisLoadingOverlayProps {
+	visible: boolean;
+	themeColors: ThemeColors;
+}
+
+const AnalysisLoadingOverlay: React.FC<AnalysisLoadingOverlayProps> = ({ visible, themeColors }) => {
+	if (!visible) return null;
+
+	return (
+		<View
+			style={{
+				...require('react-native').StyleSheet.absoluteFillObject,
+				backgroundColor: 'rgba(0, 0, 0, 0.7)',
+				justifyContent: 'center',
+				alignItems: 'center',
+				zIndex: 9999,
+			}}
+			pointerEvents="auto"
+		>
+			<View
+				style={{
+					backgroundColor: themeColors.background,
+					borderRadius: 20,
+					padding: 32,
+					alignItems: 'center',
+					maxWidth: 320,
+					width: '80%',
+					shadowColor: themeColors.alexandriaGold,
+					shadowOffset: { width: 0, height: 4 },
+					shadowOpacity: 0.3,
+					shadowRadius: 8,
+					elevation: 8,
+					borderWidth: 1,
+					borderColor: themeColors.border,
+				}}
+			>
+				<ActivityIndicator size="large" color={themeColors.alexandriaGold} />
+				<Text
+					style={{
+						fontSize: 20,
+						fontWeight: '600',
+						color: themeColors.text,
+						marginTop: 20,
+						marginBottom: 12,
+						textAlign: 'center',
+					}}
+				>
+					Analyzing Document
+				</Text>
+				<Text
+					style={{
+						fontSize: 15,
+						color: themeColors.textSecondary,
+						textAlign: 'center',
+						lineHeight: 22,
+					}}
+				>
+					Reading your document to suggest optimal quiz settings...
+				</Text>
+			</View>
+		</View>
+	);
+};
 
 // ✅ REMOVED: CustomDropdown component moved to components/upload/CustomDropdown.tsx
 
@@ -133,10 +210,20 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 			}
 			logger.info("🔍 Analyzing file for Smart Defaults (mobile)...");
 			try {
-				await analyzeFile(newFiles[0], currentUserId);
+				// Add 30-second timeout to analysis
+				const analysisPromise = analyzeFile(newFiles[0], currentUserId);
+				const timeoutPromise = new Promise((_, reject) =>
+					setTimeout(() => reject(new Error('Analysis timeout')), 30000)
+				);
+
+				await Promise.race([analysisPromise, timeoutPromise]);
 				dispatch({ type: 'SET_SHOW_QUICK_QUIZ', payload: true });
 			} catch (error) {
-				logger.error("❌ Analysis failed:", error);
+				handleError(error, {
+					operation: 'file_analysis_mobile',
+					userId: currentUserId,
+					fileName: newFiles[0]?.name,
+				});
 			}
 		}
 	});
@@ -373,6 +460,9 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ NEW: Onboarding hook
 	const { isFirstTime, markAsComplete } = useOnboarding();
 
+	// ✅ NEW: Error handler hook
+	const { handleError } = useUploadErrorHandler();
+
 	// ============================================================
 	// Task 2.1: REMOVED - All state now managed by useReducer
 	// ============================================================
@@ -534,20 +624,20 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ NEW: Handle async generation errors
 	useEffect(() => {
 		if (asyncError) {
-			safeAlert("Quiz Generation Failed", asyncError, [
-				{
-					text: "Try Again",
-					onPress: () => {
-						// User can try again
-					},
+			handleError(new Error(asyncError), {
+				operation: 'async_quiz_generation',
+				userId: auth.currentUser?.uid,
+				fileName: files[0]?.name,
+			}, {
+				retryAction: () => {
+					// User can retry the async generation
+					if (files.length > 0) {
+						handleQuickQuiz();
+					}
 				},
-				{
-					text: "Got It",
-					style: "cancel",
-				},
-			]);
+			});
 		}
-	}, [asyncError]);
+	}, [asyncError, files, handleQuickQuiz, handleError]);
 
 	// Smooth upload progress animation
 	useEffect(() => {
@@ -637,11 +727,25 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				}
 
 				logger.info("🔍 Analyzing file for Smart Defaults...");
-				await analyzeFile(file, currentUserId);
-				setShowQuickQuiz(true);
+				try {
+					// Add 30-second timeout to analysis
+					const analysisPromise = analyzeFile(file, currentUserId);
+					const timeoutPromise = new Promise((_, reject) =>
+						setTimeout(() => reject(new Error('Analysis timeout')), 30000)
+					);
+
+					await Promise.race([analysisPromise, timeoutPromise]);
+					setShowQuickQuiz(true);
+				} catch (error) {
+					handleError(error, {
+						operation: 'file_analysis_dragdrop',
+						userId: currentUserId,
+						fileName: file.name,
+					});
+				}
 			}
 		},
-		[setFiles, uploadPurpose, analyzeFile]
+		[setFiles, uploadPurpose, analyzeFile, handleError]
 	);
 
 	// ✅ FIX: Cleanup blob URLs to prevent memory leaks
@@ -741,8 +845,13 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				currentUserId
 			);
 		} catch (error) {
-			logger.error("❌ Quick Quiz generation failed:", error);
-			// Error already handled by the hook
+			handleError(error, {
+				operation: 'quick_quiz_generation',
+				userId: currentUserId,
+				fileName: files[0]?.name,
+			}, {
+				retryAction: handleQuickQuiz,
+			});
 		}
 	}, [
 		smartDefaults,
@@ -866,8 +975,13 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 					currentUserId
 				);
 			} catch (error) {
-				logger.error("❌ Async quiz generation failed:", error);
-				// Error already handled by the hook
+				handleError(error, {
+					operation: 'async_quiz_generation_manual',
+					userId: currentUserId,
+					fileName: files[0]?.name,
+				}, {
+					retryAction: handleUploadAndGenerateQuiz,
+				});
 			}
 		} else {
 			// Use legacy sync mode
@@ -956,10 +1070,20 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
               return;
             }
             try {
-              await analyzeFile(files[0], currentUserId);
+              // Add 30-second timeout to analysis
+              const analysisPromise = analyzeFile(files[0], currentUserId);
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Analysis timeout')), 30000)
+              );
+
+              await Promise.race([analysisPromise, timeoutPromise]);
               setShowQuickQuiz(true);
             } catch (error) {
-              logger.error("❌ Re-analysis failed:", error);
+              handleError(error, {
+                operation: 'file_reanalysis_purpose_change',
+                userId: currentUserId,
+                fileName: files[0]?.name,
+              });
             }
           } else {
             setShowQuickQuiz(false);
@@ -1056,7 +1180,10 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
   );
 	const insets = useSafeAreaInsets();
 	return (
-		<View style={[styles.container, { paddingBlockStart: insets.top }]}>
+		<View
+			style={[styles.container, { paddingBlockStart: insets.top }]}
+			pointerEvents={analyzingFile ? 'none' : 'auto'}
+		>
 			<StatusBar style="auto" />
 
 			{/* Freshness Indicator */}
@@ -1141,7 +1268,13 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 						const validation = await StudentProfileService.validateCourse(subjectName.trim());
 						return validation;
 					} catch (error) {
-						logger.error("❌ Error validating subject in SubjectSelector:", error);
+						handleError(error, {
+							operation: 'subject_validation',
+							userId: auth.currentUser?.uid,
+							subjectName,
+						}, {
+							showAlert: false, // Don't show alert, return validation error instead
+						});
 						return {
 							valid: false,
 							message: "Unable to validate subject. Please try again.",
@@ -1258,6 +1391,9 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				icon="upload"
 				onDismiss={() => markAsComplete("firstUpload")}
 			/>
+
+			{/* ✅ NEW: Analysis loading overlay */}
+			<AnalysisLoadingOverlay visible={analyzingFile} themeColors={themeColors} />
 		</View>
 	);
 }
