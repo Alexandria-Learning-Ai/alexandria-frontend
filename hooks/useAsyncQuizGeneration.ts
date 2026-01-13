@@ -455,7 +455,7 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
             }
 
             // Upload file and get job_id
-            const uploadUrl = `${API_BASE_URL}/async/quiz/generate`;
+            const uploadUrl = `${API_BASE_URL}/api/v1/async/quiz/quiz/generate`;
             logger.info('📤 Uploading to:', uploadUrl);
 
             const response = await axios.post(uploadUrl, formData, {

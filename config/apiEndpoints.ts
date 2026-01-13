@@ -72,7 +72,7 @@ export const API_ENDPOINTS = {
    */
   quiz: {
     /** POST - Generate quiz from uploaded file */
-    generate: `${API_BASE_URL}/upload`,
+    generate: `${API_BASE_URL}/api/v1/upload/upload`,
 
     /** POST - Submit quiz answers and get results */
     submit: `${API_BASE_URL}/api/quiz/submit`,

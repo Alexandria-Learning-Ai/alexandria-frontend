@@ -38,6 +38,7 @@ export interface SmartDefaults {
   content_preview: string;
   complexity_indicators: ComplexityIndicators;
   metadata: SmartDefaultsMetadata;
+  reasoning?: string; // Optional AI-generated reasoning for recommendations
 }
 
 export interface AnalysisResponse {

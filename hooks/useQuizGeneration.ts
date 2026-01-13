@@ -3,6 +3,7 @@ import { Alert, Vibration, Animated } from 'react-native';
 import axios from 'axios';
 import { auth } from '../firebaseConfig';
 import { API_BASE_URL } from '../config/api';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 import logger from '../utils/logger';
 import { getUserFriendlyError } from '../utils/errorMessages';
 import { calculateFileHash, generateCacheKey } from '../utils/fileHash';
@@ -176,9 +177,9 @@ export const useQuizGeneration = () => {
                 formData.append('subject', sanitizedStudy.title || '');
                 formData.append('course', sanitizedStudy.description || '');
 
-                logger.info('🔗 Study Mode - Uploading to:', `${API_BASE_URL}/api/study/extract-text`);
+                logger.info('🔗 Study Mode - Uploading to:', API_ENDPOINTS.study.extractText);
 
-                res = await axios.post(`${API_BASE_URL}/api/study/extract-text`, formData, {
+                res = await axios.post(API_ENDPOINTS.study.extractText, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         'X-User-ID': user?.uid || 'anonymous',
@@ -232,9 +233,9 @@ export const useQuizGeneration = () => {
                     }));
                 }
 
-                logger.info('🔗 Quiz Mode - Uploading to:', `${API_BASE_URL}/upload`);
+                logger.info('🔗 Quiz Mode - Uploading to:', API_ENDPOINTS.quiz.generate);
 
-                res = await axios.post(`${API_BASE_URL}/upload`, formData, {
+                res = await axios.post(API_ENDPOINTS.quiz.generate, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         'X-User-ID': user?.uid || 'anonymous',
@@ -419,6 +420,21 @@ export const useQuizGeneration = () => {
             if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
                 logger.info('Quiz generation request canceled');
                 return { success: false };
+            }
+
+            // ✅ FIX: Handle 404 errors (API endpoint mismatch)
+            if (error.response?.status === 404) {
+                logger.error('❌ 404 Error - Quiz endpoint not found:', {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    expectedPath: `${API_BASE_URL}/api/v1/upload/upload`,
+                });
+                Alert.alert(
+                    "API Configuration Error",
+                    "The quiz generation endpoint could not be found. This may be a configuration issue. Please contact support.",
+                    [{ text: "OK" }]
+                );
+                return { success: false, error: 'endpoint_not_found_404' };
             }
 
             logger.error("Upload error: ", error.response ? error.response.data : error.message);

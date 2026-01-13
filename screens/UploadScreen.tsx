@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from "react";
 import * as Animatable from "react-native-animatable";
+
 import QuizLoadingScreen from "../components/QuizLoadingScreen";
 import {
 	View,
@@ -18,7 +19,6 @@ import {
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Slider from "@react-native-community/slider";
 import { auth } from "../firebaseConfig";
 import { API_BASE_URL } from "../config/api";
 import SubjectSelector from "../components/SubjectSelector";
@@ -26,29 +26,21 @@ import HierarchicalSubjectService from "../services/HierarchicalSubjectService";
 import { useTranslation } from "react-i18next";
 import logger from "../utils/logger";
 import { styles } from "../styles/UploadScreenStyles";
-import QuizConfigModal from "@/components/upload/QuizConfigModal";
-import CustomDropdown from "../components/shared/CustomDropdown";
-import { predefinedSubjects, quizTypeOptions, difficultyOptions } from "../constants/uploadOptions";
+import { predefinedSubjects } from "../constants/uploadOptions";
 import UploadHeader from "../components/upload/UploadHeader";
 import FileUploadButton from "../components/upload/FileUploadButton";
 import DragDropZone from "../components/upload/DragDropZone";
 import UploadPurposeToggle from "../components/upload/UploadPurposeToggle";
-import QuizConfiguration from "../components/upload/QuizConfiguration";
 import StudyModeToggle from "../components/upload/StudyModeToggle";
 import GenerateButton from "../components/upload/GenerateButton";
 import UploadProgressBar from "../components/upload/UploadProgressBar";
-import AsyncQuizProgress from "../components/upload/AsyncQuizProgress";
 import ResponseMessage from "../components/upload/ResponseMessage";
 import FileListItem from "../components/upload/FileListItem";
 import EmptyFilesList from "../components/upload/EmptyFilesList";
 import FreshnessIndicator from "../components/upload/FreshnessIndicator";
-import SubjectSelectorSection from "../components/upload/SubjectSelectorSection";
-import CourseSelectionToggle from "../components/ask-alexandria/CourseSelectionToggle";
-import ProfileCourseSelector from "../components/ask-alexandria/ProfileCourseSelector";
-import HierarchicalCourseSelector from "../components/ask-alexandria/HierarchicalCourseSelector";
-import QuickQuizButton from "../components/upload/QuickQuizButton";
 import UploadConfigurationForm from "../components/upload/UploadConfigurationForm";
 import UploadProgressSection from "../components/upload/UploadProgressSection";
+import CourseSubjectSelectorModal from "../components/upload/CourseSubjectSelectorModal";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { useUploadHandler } from "../hooks/useUploadHandler";
 import { useQuizGeneration } from "../hooks/useQuizGeneration";
@@ -372,6 +364,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	const difficulty = state.quizConfig.difficulty;
 	const numQuestions = state.quizConfig.numQuestions;
 	const visualEnhancement = state.quizConfig.visualEnhancement;
+	const customizationExpanded = state.quizConfig.customizationExpanded;
 	const selectedSubject = state.quizConfig.selectedSubject;
 	const selectedCourse = state.quizConfig.selectedCourse;
 	const selectedHierarchicalSubject = state.quizConfig.selectedHierarchicalSubject;
@@ -539,6 +532,9 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	// ✅ FIX Bug #13: Track timeout IDs to clean them up properly
 	const analysisTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+	// ✅ NEW: FlatList ref for scrolling to progress section
+	const flatListRef = useRef<any>(null);
+
 	useEffect(() => {
 		return () => {
 			isMountedRef.current = false;
@@ -700,6 +696,32 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		}
 	}, [asyncError, files, handleError]);
 
+	// ✅ NEW: Auto-apply smart defaults to visible form when available
+	useEffect(() => {
+		if (smartDefaults && showQuickQuiz && uploadPurpose === 'quiz') {
+			logger.info("🎯 Auto-applying smart defaults to configuration form", {
+				subject: smartDefaults.subject.name,
+				difficulty: smartDefaults.difficulty,
+				numQuestions: smartDefaults.num_questions,
+			});
+
+			// Apply quiz configuration defaults
+			setQuizTypes(smartDefaults.question_types);
+			setDifficulty(smartDefaults.difficulty);
+			setNumQuestions(smartDefaults.num_questions);
+
+			// Only auto-select subject if high confidence
+			if (hasHighConfidence()) {
+				setSelectedSubject({
+					key: smartDefaults.subject.value,
+					name: smartDefaults.subject.name,
+					type: "smart_default",
+					confidence: smartDefaults.subject.confidence,
+				});
+			}
+		}
+	}, [smartDefaults, showQuickQuiz, uploadPurpose, hasHighConfidence, setQuizTypes, setDifficulty, setNumQuestions, setSelectedSubject]);
+
 	// Smooth upload progress animation
 	useEffect(() => {
 		if (uiState.uploading) {
@@ -745,6 +767,18 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 	);
 
 	// ✅ REMOVED: File picker functions moved to useFileUpload hook
+
+	// ✅ NEW: Helper function to cleanup blob URLs
+	const cleanupBlobUrl = useCallback((file: { uri?: string; name?: string }) => {
+		if (Platform.OS === 'web' && file.uri?.startsWith("blob:")) {
+			try {
+				URL.revokeObjectURL(file.uri);
+				logger.debug(`🧹 Cleaned up blob URL for: ${file.name}`);
+			} catch (error) {
+				logger.error('Failed to revoke blob URL:', error);
+			}
+		}
+	}, []);
 
 	// ✅ NEW: Handle file dropped from DragDropZone for when I make website for Tee (web only)
 	const handleFileDropped = useCallback(
@@ -854,18 +888,6 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		};
 	}, [files]);
 
-	// ✅ NEW: Helper function to cleanup blob URLs
-	const cleanupBlobUrl = useCallback((file: { uri?: string; name?: string }) => {
-		if (Platform.OS === 'web' && file.uri?.startsWith("blob:")) {
-			try {
-				URL.revokeObjectURL(file.uri);
-				logger.debug(`🧹 Cleaned up blob URL for: ${file.name}`);
-			} catch (error) {
-				logger.error('Failed to revoke blob URL:', error);
-			}
-		}
-	}, []);
-
 	// ✅ NEW: Wrapped removeFile function with blob URL cleanup
 	const removeFile = useCallback((fileName: string) => {
 		// Find the file before removing to cleanup its blob URL
@@ -877,119 +899,98 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 		removeFileOriginal(fileName);
 	}, [files, cleanupBlobUrl, removeFileOriginal]);
 
+	// ✅ NEW: File rename modal state
+	const [renameModalVisible, setRenameModalVisible] = useState(false);
+	const [newFileName, setNewFileName] = useState('');
+
+	// ✅ NEW: Handle file name editing
+	const handleEditFileName = useCallback(() => {
+		if (files.length === 0) return;
+
+		const currentFile = files[0];
+		const currentName = currentFile.name;
+		const fileExtension = currentName.substring(currentName.lastIndexOf('.'));
+		const nameWithoutExtension = currentName.substring(0, currentName.lastIndexOf('.'));
+
+		// iOS-only Alert.prompt for native feel
+		if (Platform.OS === 'ios') {
+			Alert.prompt(
+				'Rename File',
+				'Enter a new name for the file',
+				[
+					{
+						text: 'Cancel',
+						style: 'cancel',
+					},
+					{
+						text: 'Save',
+						onPress: (newName) => {
+							if (newName && newName.trim()) {
+								const trimmedName = newName.trim();
+								const updatedFileName = trimmedName + fileExtension;
+
+								// Update the file object with new name
+								const updatedFile = {
+									...currentFile,
+									name: updatedFileName,
+								};
+
+								setFiles([updatedFile]);
+								Vibration.vibrate(50);
+							}
+						},
+					},
+				],
+				'plain-text',
+				nameWithoutExtension
+			);
+		} else {
+			// Android/Web: Use custom modal
+			setNewFileName(nameWithoutExtension);
+			setRenameModalVisible(true);
+		}
+	}, [files, setFiles]);
+
+	// ✅ NEW: Save renamed file (for Android/Web modal)
+	const handleSaveRenamedFile = useCallback(() => {
+		if (files.length === 0 || !newFileName.trim()) {
+			setRenameModalVisible(false);
+			return;
+		}
+
+		const currentFile = files[0];
+		const currentName = currentFile.name;
+		const fileExtension = currentName.substring(currentName.lastIndexOf('.'));
+		const updatedFileName = newFileName.trim() + fileExtension;
+
+		// Update the file object with new name
+		const updatedFile = {
+			...currentFile,
+			name: updatedFileName,
+		};
+
+		setFiles([updatedFile]);
+		setRenameModalVisible(false);
+		Vibration.vibrate(50);
+	}, [files, newFileName, setFiles]);
+
 	// ✅ REMOVED: No longer needed - backend /study/extract-text endpoint now handles both extraction AND storage
 
-	// ✅ NEW: Handle Quick Quiz generation (one-tap with smart defaults)
-	const handleQuickQuiz = useCallback(async () => {
-		if (!smartDefaults || !files.length) {
-			logger.warn("Quick Quiz attempted without smart defaults or files");
-			return;
+	// ✅ NEW: Scroll to progress section smoothly
+	const scrollToProgress = useCallback(() => {
+		if (flatListRef.current && files.length > 0) {
+			// Delay slightly to ensure FlatList has rendered footer
+			setTimeout(() => {
+				flatListRef.current?.scrollToEnd({ animated: true });
+			}, 300);
 		}
-
-		logger.info("🚀 Quick Quiz: Generating with smart defaults", {
-			subject: smartDefaults.subject.name,
-			difficulty: smartDefaults.difficulty,
-			numQuestions: smartDefaults.num_questions,
-		});
-
-		// Hide Quick Quiz button
-		setShowQuickQuiz(false);
-
-		// Apply smart defaults to form
-		setQuizTypes(smartDefaults.question_types);
-		setDifficulty(smartDefaults.difficulty);
-		setNumQuestions(smartDefaults.num_questions);
-
-		// Set subject if high confidence
-		if (hasHighConfidence()) {
-			setSelectedSubject({
-				key: smartDefaults.subject.value,
-				name: smartDefaults.subject.name,
-				type: "smart_default",
-				confidence: smartDefaults.subject.confidence,
-			});
-		}
-
-		// Generate quiz using async mode
-		// ✅ FIX: Check authentication before generating quiz
-		const currentUserId = auth.currentUser?.uid;
-		if (!currentUserId) {
-			safeAlert("Authentication Required", "Please sign in to generate quizzes");
-			return;
-		}
-
-		try {
-			await generateQuizAsync(
-				files[0],
-				{
-					quizTypes: smartDefaults.question_types,
-					numQuestions: smartDefaults.num_questions,
-					difficulty: smartDefaults.difficulty,
-					language: i18n.language,
-					visualEnhancement,
-					subjectContext: hasHighConfidence()
-						? {
-								manual_subject: smartDefaults.subject.name,
-								subject_key: smartDefaults.subject.value,
-								subject_type: "smart_default",
-							}
-						: null,
-				},
-				currentUserId
-			);
-		} catch (error) {
-			handleError(error, {
-				operation: 'quick_quiz_generation',
-				userId: currentUserId,
-				fileName: files[0]?.name,
-			}, {
-				retryAction: handleQuickQuiz,
-			});
-		}
-	}, [
-		smartDefaults,
-		files,
-		hasHighConfidence,
-		generateQuizAsync,
-		i18n.language,
-		visualEnhancement,
-	]);
-
-	// ✅ FIX Bug #1: Sync handleQuickQuiz with ref to prevent circular dependency
-	useEffect(() => {
-		handleQuickQuizRef.current = handleQuickQuiz;
-	}, [handleQuickQuiz]);
-
-	// ✅ NEW: Handle Customize action (show full configuration)
-	const handleCustomize = useCallback(() => {
-		logger.info("📝 User chose to customize quiz settings");
-
-		// Hide Quick Quiz button
-		setShowQuickQuiz(false);
-
-		// Pre-fill form with smart defaults (if available)
-		if (smartDefaults) {
-			setQuizTypes(smartDefaults.question_types);
-			setDifficulty(smartDefaults.difficulty);
-			setNumQuestions(smartDefaults.num_questions);
-
-			// Only set subject if high confidence
-			if (hasHighConfidence()) {
-				setSelectedSubject({
-					key: smartDefaults.subject.value,
-					name: smartDefaults.subject.name,
-					type: "smart_default",
-					confidence: smartDefaults.subject.confidence,
-				});
-			}
-		}
-
-		// User will now manually review and modify settings
-		logger.info("Quiz configuration pre-filled with smart defaults, user can now customize");
-	}, [smartDefaults, hasHighConfidence]);
+	}, [files.length]);
 
 	// ✅ ENHANCED: Upload with dual purpose (Study or Quiz) - supports both sync and async modes
 	const handleUploadAndGenerateQuiz = async () => {
+		// Scroll to progress section
+		scrollToProgress();
+
 		// For study uploads, always use sync mode (no async backend yet)
 		if (uploadPurpose === "study") {
 			setUiState((prev) => ({ ...prev, uploading: true, isTransitioning: true }));
@@ -1142,13 +1143,6 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
         themeColors={themeColors}
         styles={styles}
         t={safeT}
-        onClear={() => {
-          files.forEach(cleanupBlobUrl);
-          setFiles([]);
-          resetAnalysis();
-          setShowQuickQuiz(false);
-          clearSelectedSubject();
-        }}
       />
 
       <UploadConfigurationForm
@@ -1211,40 +1205,16 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
             resetAnalysis();
           }
         }}
-        showQuickQuiz={showQuickQuiz}
+
+        // Smart quiz card (replaces wizard + course selection)
         smartDefaults={smartDefaults}
         analyzingFile={analyzingFile}
-        onQuickQuiz={handleQuickQuiz}
-        onCustomize={handleCustomize}
-
-        // Course selection
-        courseSelectionMode={courseSelectionMode}
-        setCourseSelectionMode={setCourseSelectionMode}
-        userCourses={userCourses}
-        hasProfileCourses={hasProfileCourses}
-
-        // Profile course
+        customizationExpanded={customizationExpanded}
         selectedSubject={selectedSubject}
-        setSelectedSubject={setSelectedSubject}
         selectedCourse={selectedCourse}
-        setSelectedCourse={setSelectedCourse}
-        courseModalVisible={courseModalVisible}
-        setCourseModalVisible={setCourseModalVisible}
-
-        // Hierarchical
-        availableSubjects={availableSubjects}
-        availableCourses={availableCourses}
-        selectedHierarchicalSubject={selectedHierarchicalSubject}
         selectedHierarchicalCourse={selectedHierarchicalCourse}
-        handleHierarchicalSubjectSelect={handleHierarchicalSubjectSelect}
-        handleHierarchicalCourseSelect={handleHierarchicalCourseSelect}
-        hierarchicalCourseModalVisible={hierarchicalCourseModalVisible}
-        setHierarchicalCourseModalVisible={setHierarchicalCourseModalVisible}
-
-        // Subject selector
-        predefinedSubjects={predefinedSubjects}
-        subjectSelectorVisible={subjectSelectorVisible}
-        setSubjectSelectorVisible={setSubjectSelectorVisible}
+        fileName={files[0]?.name || null}
+        onEditFileName={handleEditFileName}
 
         // Quiz/Study config
         quizTypes={quizTypes}
@@ -1260,29 +1230,31 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
         enableStudyMode={enableStudyMode}
         setEnableStudyMode={setEnableStudyMode}
 
-        // Modal control
-        onOpenConfigModal={() => setConfigModalVisible(true)}
+        // Actions
+        dispatch={dispatch}
+        handleUploadAndGenerateQuiz={handleUploadAndGenerateQuiz}
 
-        HierarchicalSubjectService={HierarchicalSubjectService}
+        // UI
         isDisabled={uiState.isTransitioning}
         isAsyncGenerating={isAsyncGenerating}
         themeColors={themeColors}
         styles={styles}
         t={safeT}
+
+        // Async Quiz Progress (for card swap animation)
+        asyncProgress={asyncProgress}
+        asyncStage={asyncStage}
+        asyncMessage={asyncMessage}
+        onCancelAsync={cancelGeneration}
+        useAsyncMode={useAsyncMode}
       />
     </View>
   );
 
-	// Enhanced footer with progress indicators only
+	// Footer with upload progress and messages only
+  // Note: Async quiz progress now handled in header (UploadConfigurationForm)
   const ListFooter = () => (
     <UploadProgressSection
-      // Async progress
-      isAsyncGenerating={isAsyncGenerating}
-      asyncProgress={asyncProgress}
-      asyncStage={asyncStage}
-      asyncMessage={asyncMessage}
-      onCancelAsync={cancelGeneration}
-
       // Sync progress
       isUploading={uiState.uploading}
       progressWidth={progressWidth}
@@ -1295,7 +1267,12 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
       responseText={responseText}
 
       containerAnim={containerAnim}
-      themeColors={themeColors}
+      themeColors={{
+        text: themeColors.text,
+        gold: themeColors.alexandriaGold,
+        bg: themeColors.background,
+        card: themeColors.surface,
+      }}
       styles={styles}
     />
   );
@@ -1318,6 +1295,7 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				style={styles.innerContainer}
 			>
 				<FlatList
+					ref={flatListRef}
 					data={files}
 					keyExtractor={(item) => item.uri}
 					renderItem={({ item, index }) => (
@@ -1381,8 +1359,6 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				userId={auth.currentUser?.uid}
 				theme={uiState.isDarkMode ? "dark" : "light"}
 				currentSubject={selectedSubject}
-				userCourses={userCourses}
-				prioritizeUserCourses={true}
 				onValidationRequest={async (subjectName) => {
 					// Pass validation request to our validation function
 					try {
@@ -1405,27 +1381,113 @@ export default function UploadScreen({ navigation, route }: UploadScreenComponen
 				}}
 			/>
 
-			{/* ✅ Quiz Configuration Bottom Sheet Modal */}
-			<QuizConfigModal
-				visible={configModalVisible}
-				onClose={() => setConfigModalVisible(false)}
-				onGenerate={async () => {
-					setConfigModalVisible(false);
-					await handleUploadAndGenerateQuiz();
-				}}
-				quizTypes={quizTypes}
-				setQuizTypes={setQuizTypes}
-				difficulty={difficulty}
-				setDifficulty={setDifficulty}
-				numQuestions={numQuestions}
-				setNumQuestions={setNumQuestions}
-				quizTypeModalVisible={quizTypeModalVisible}
-				setQuizTypeModalVisible={setQuizTypeModalVisible}
-				difficultyModalVisible={difficultyModalVisible}
-				setDifficultyModalVisible={setDifficultyModalVisible}
-				styles={styles}
+			{/* ✅ NEW: Course/Subject Selector Modal with Toggle */}
+			<CourseSubjectSelectorModal
+				visible={courseModalVisible}
+				onClose={() => setCourseModalVisible(false)}
+				courseSelectionMode={courseSelectionMode}
+				onModeChange={setCourseSelectionMode}
+				userCourses={userCourses}
+				hasProfileCourses={hasProfileCourses}
+				selectedCourse={selectedCourse}
+				setSelectedCourse={setSelectedCourse}
+				courseModalVisible={courseModalVisible}
+				setCourseModalVisible={setCourseModalVisible}
+				availableSubjects={availableSubjects}
+				availableCourses={availableCourses}
+				selectedHierarchicalSubject={selectedHierarchicalSubject}
+				selectedHierarchicalCourse={selectedHierarchicalCourse}
+				handleHierarchicalSubjectSelect={handleHierarchicalSubjectSelect}
+				handleHierarchicalCourseSelect={handleHierarchicalCourseSelect}
+				hierarchicalCourseModalVisible={hierarchicalCourseModalVisible}
+				setHierarchicalCourseModalVisible={setHierarchicalCourseModalVisible}
+				HierarchicalSubjectService={HierarchicalSubjectService}
 				themeColors={themeColors}
+				styles={styles}
 			/>
+
+			{/* ✅ NEW: Rename File Modal (Android/Web) */}
+			<Modal
+				visible={renameModalVisible}
+				transparent={true}
+				animationType="fade"
+				onRequestClose={() => setRenameModalVisible(false)}
+			>
+				<View style={styles.modalOverlay}>
+					<View style={[styles.textPreviewModal, { maxHeight: 300 }]}>
+						<View style={styles.modalHeader}>
+							<Text style={styles.modalTitle}>Rename File</Text>
+							<TouchableOpacity
+								onPress={() => setRenameModalVisible(false)}
+								style={styles.modalCloseButton}
+							>
+								<FontAwesome5
+									name="times"
+									size={20}
+									color="#F8F4E3"
+								/>
+							</TouchableOpacity>
+						</View>
+
+						<View style={{ padding: 20 }}>
+							<Text style={{ color: themeColors.textSecondary, marginBottom: 12, fontSize: 14 }}>
+								Enter a new name for the file:
+							</Text>
+							<TextInput
+								style={{
+									backgroundColor: themeColors.surface,
+									borderWidth: 1,
+									borderColor: themeColors.border,
+									borderRadius: 8,
+									padding: 12,
+									color: themeColors.text,
+									fontSize: 16,
+									marginBottom: 20,
+								}}
+								value={newFileName}
+								onChangeText={setNewFileName}
+								placeholder="File name"
+								placeholderTextColor={themeColors.textSecondary}
+								autoFocus={true}
+								onSubmitEditing={handleSaveRenamedFile}
+							/>
+
+							<View style={{ flexDirection: 'row', gap: 12 }}>
+								<TouchableOpacity
+									onPress={() => setRenameModalVisible(false)}
+									style={{
+										flex: 1,
+										padding: 14,
+										borderRadius: 8,
+										borderWidth: 1,
+										borderColor: themeColors.border,
+										alignItems: 'center',
+									}}
+								>
+									<Text style={{ color: themeColors.text, fontSize: 16, fontWeight: '600' }}>
+										Cancel
+									</Text>
+								</TouchableOpacity>
+
+								<TouchableOpacity
+									onPress={handleSaveRenamedFile}
+									style={{
+										flex: 1,
+										padding: 14,
+										borderRadius: 8,
+										backgroundColor: themeColors.alexandriaGold,
+										alignItems: 'center',
+									}}
+								>
+									<Text style={{ color: '#1A2C5B', fontSize: 16, fontWeight: '700' }}>
+										Save
+									</Text>
+								</TouchableOpacity>
+							</View>
+						</View>
+					</View>
+				</View>
+			</Modal>
 
 			{/* ✅ NEW: Text Extraction Preview Modal - Foundation for Study Reformatter */}
 			<Modal
