@@ -462,7 +462,7 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-                timeout: 30000, // 30 second timeout for upload
+                timeout: 120000, // 2 minute timeout for file upload (increased from 30s for large files)
             });
 
             const { job_id, progress_url } = response.data;
