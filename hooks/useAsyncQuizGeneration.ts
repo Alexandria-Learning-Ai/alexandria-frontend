@@ -455,8 +455,18 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
             }
 
             // Upload file and get job_id
-            const uploadUrl = `${API_BASE_URL}/api/v1/async/quiz/quiz/generate`;
+            const uploadUrl = `${API_BASE_URL}/api/v1/async/quiz/generate`;
             logger.info('📤 Uploading to:', uploadUrl);
+            logger.info('📤 API_BASE_URL:', API_BASE_URL);
+            logger.info('📤 FormData contents:', {
+                fileName: file.name || file.fileName || 'unknown',
+                fileType: file.mimeType || file.type || 'unknown',
+                quizTypes: sanitizedQuiz.quizTypes,
+                numQuestions: sanitizedQuiz.numQuestions,
+                difficulty: sanitizedQuiz.difficulty,
+                userId: sanitizedUserId,
+                hasSubjectContext: !!options.subjectContext,
+            });
 
             const response = await axios.post(uploadUrl, formData, {
                 headers: {
@@ -485,14 +495,42 @@ export const useAsyncQuizGeneration = (options?: UseAsyncQuizGenerationOptions):
         } catch (error: any) {
             logger.error('❌ Failed to start quiz generation:', error);
 
+            // ✅ ENHANCED: Log detailed error information for debugging
+            if (error.response) {
+                logger.error('📡 Server Response Error:', {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    data: error.response.data,
+                    headers: error.response.headers,
+                });
+            } else if (error.request) {
+                logger.error('📡 Network Error (no response):', {
+                    request: error.request,
+                    message: error.message,
+                });
+            } else {
+                logger.error('📡 Error Details:', {
+                    message: error.message,
+                    stack: error.stack,
+                });
+            }
+
             let errorMessage = 'Failed to start quiz generation';
 
             if (error.response) {
                 // Server responded with error
-                errorMessage = error.response.data?.detail || error.response.data?.message || errorMessage;
+                const detail = error.response.data?.detail || error.response.data?.message;
+                if (detail) {
+                    errorMessage = `${errorMessage}: ${detail}`;
+                }
+                errorMessage = `${errorMessage} (Status: ${error.response.status})`;
+            } else if (error.request) {
+                errorMessage = 'Failed to start quiz generation: Network error (no response from server)';
             } else if (error.message) {
-                errorMessage = error.message;
+                errorMessage = `Failed to start quiz generation: ${error.message}`;
             }
+
+            logger.error('🚨 Final error message:', errorMessage);
 
             handleErrorAndPropagate(errorMessage, {
                 operation: 'upload_failed',
